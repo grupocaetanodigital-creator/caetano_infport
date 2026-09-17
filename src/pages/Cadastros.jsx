@@ -1,9 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Building2, Users, UserPlus, Home, Plus, Search, CheckCircle, AlertCircle, Pencil, X } from 'lucide-react';
+import { 
+  Building2, 
+  Users, 
+  UserPlus, 
+  Home, 
+  Plus, 
+  Search, 
+  CheckCircle, 
+  AlertCircle, 
+  Pencil, 
+  X, 
+  Lock, 
+  ShieldAlert 
+} from 'lucide-react';
 
 export default function Cadastros({ usuarioLogado }) {
-  const [abaAtiva, setAbaAtiva] = useState('condominios');
+  // Identificação dos Níveis de Acesso
+  const eAdmin = usuarioLogado?.perfil === 'admin' || usuarioLogado?.nivel_acesso === 0;
+  const eMaster = usuarioLogado?.perfil === 'master' || usuarioLogado?.nivel_acesso === 1;
+  const eSupervisor = usuarioLogado?.perfil === 'supervisor' || usuarioLogado?.nivel_acesso === 2;
+  const eOperador = usuarioLogado?.perfil === 'operador' || usuarioLogado?.nivel_acesso === 3;
+
+  // Aba padrão inicial conforme permissão
+  const [abaAtiva, setAbaAtiva] = useState(eAdmin ? 'condominios' : 'moradores');
+
+  // Listas de Dados
   const [condominios, setCondominios] = useState([]);
   const [operadores, setOperadores] = useState([]);
   const [moradores, setMoradores] = useState([]);
@@ -47,12 +69,12 @@ export default function Cadastros({ usuarioLogado }) {
     setLoginOperador('');
     setSenhaOperador('');
     setNivelAcesso('3');
-    setCondominioIdOperador('');
+    setCondominioIdOperador(eAdmin ? '' : (usuarioLogado?.condominio_id || ''));
     setNomeMorador('');
     setBlocoMorador('');
     setUnidadeMorador('');
     setTelefoneMorador('');
-    setCondominioIdMorador('');
+    setCondominioIdMorador(eAdmin ? '' : (usuarioLogado?.condominio_id || ''));
   };
 
   const carregarDados = async () => {
@@ -60,28 +82,43 @@ export default function Cadastros({ usuarioLogado }) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      if (abaAtiva === 'condominios') {
-        const { data, error } = await supabase.from('condominios').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-        setCondominios(data || []);
-      } else if (abaAtiva === 'operadores') {
-        const { data: conds } = await supabase.from('condominios').select('*');
-        setCondominios(conds || []);
+      // 1. Carregar Condomínios
+      let queryCond = supabase.from('condominios').select('*').order('created_at', { ascending: false });
+      if (!eAdmin && usuarioLogado?.condominio_id) {
+        queryCond = queryCond.eq('id', usuarioLogado.condominio_id);
+      }
+      const { data: conds, error: errCond } = await queryCond;
+      if (errCond) throw errCond;
+      setCondominios(conds || []);
 
-        const { data, error } = await supabase.from('operadores').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-        setOperadores(data || []);
-      } else if (abaAtiva === 'moradores') {
-        const { data: conds } = await supabase.from('condominios').select('*');
-        setCondominios(conds || []);
-
-        let query = supabase.from('moradores').select('*').order('nome', { ascending: true });
-        if (termoBuscaMorador) {
-          query = query.ilike('nome', `%${termoBuscaMorador}%`);
+      // 2. Carregar Operadores (Apenas ADM, Master ou Supervisor)
+      if (abaAtiva === 'operadores' && !eOperador) {
+        let queryOp = supabase.from('operadores').select('*').order('created_at', { ascending: false });
+        if (!eAdmin && usuarioLogado?.condominio_id) {
+          queryOp = queryOp.eq('condominio_id', usuarioLogado.condominio_id);
         }
-        const { data, error } = await query;
-        if (error) throw error;
-        setMoradores(data || []);
+        const { data: ops, error: errOp } = await queryOp;
+        if (errOp) throw errOp;
+        setOperadores(ops || []);
+      }
+
+      // 3. Carregar Moradores (Com isolamento por Condomínio)
+      if (abaAtiva === 'moradores') {
+        let queryMor = supabase.from('moradores').select('*').order('nome', { ascending: true });
+        
+        if (!eAdmin && usuarioLogado?.condominio_id) {
+          queryMor = queryMor.eq('condominio_id', usuarioLogado.condominio_id);
+        } else if (eAdmin && condominioIdMorador) {
+          queryMor = queryMor.eq('condominio_id', condominioIdMorador);
+        }
+
+        if (termoBuscaMorador.trim()) {
+          queryMor = queryMor.ilike('nome', `%${termoBuscaMorador.trim()}%`);
+        }
+
+        const { data: mors, error: errMor } = await queryMor;
+        if (errMor) throw errMor;
+        setMoradores(mors || []);
       }
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: `Erro ao carregar dados: ${err.message}` });
@@ -90,9 +127,13 @@ export default function Cadastros({ usuarioLogado }) {
     }
   };
 
-  // Salvar ou Editar Condomínio
+  // Salvar ou Editar Condomínio (Exclusivo ADM)
   const salvarCondominio = async (e) => {
     e.preventDefault();
+    if (!eAdmin) {
+      setMensagem({ tipo: 'erro', texto: 'Apenas o Administrador Geral pode cadastrar ou alterar condomínios.' });
+      return;
+    }
     if (!nomeCondominio.trim()) return;
     setLoading(true);
 
@@ -122,6 +163,7 @@ export default function Cadastros({ usuarioLogado }) {
   };
 
   const prepararEdicaoCondominio = (c) => {
+    if (!eAdmin) return;
     setIdEdicao(c.id);
     setNomeCondominio(c.nome);
     setEnderecoCondominio(c.endereco || '');
@@ -130,10 +172,18 @@ export default function Cadastros({ usuarioLogado }) {
   // Salvar ou Editar Operador
   const salvarOperador = async (e) => {
     e.preventDefault();
-    if (!nomeOperador.trim() || !loginOperador.trim() || !condominioIdOperador) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha todos os campos obrigatórios do operador.' });
+    if (eOperador) {
+      setMensagem({ tipo: 'erro', texto: 'Operadores de portaria não possuem permissão para criar usuários.' });
       return;
     }
+
+    const targetCondominioId = eAdmin ? condominioIdOperador : usuarioLogado?.condominio_id;
+
+    if (!nomeOperador.trim() || !loginOperador.trim() || !targetCondominioId) {
+      setMensagem({ tipo: 'erro', texto: 'Preencha o nome, login e selecione um condomínio.' });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -142,7 +192,7 @@ export default function Cadastros({ usuarioLogado }) {
           nome: nomeOperador.trim(),
           login: loginOperador.trim(),
           nivel_acesso: parseInt(nivelAcesso),
-          condominio_id: condominioIdOperador
+          condominio_id: targetCondominioId
         };
         if (senhaOperador.trim()) {
           dadosAtualizacao.senha = senhaOperador.trim();
@@ -164,10 +214,10 @@ export default function Cadastros({ usuarioLogado }) {
         const { error } = await supabase.from('operadores').insert([
           {
             nome: nomeOperador.trim(),
-            login: loginOperador.trim(),
+            login: loginOperador.trim().toLowerCase(),
             senha: senhaOperador.trim(),
             nivel_acesso: parseInt(nivelAcesso),
-            condominio_id: condominioIdOperador,
+            condominio_id: targetCondominioId,
             ativo: true
           }
         ]);
@@ -185,6 +235,7 @@ export default function Cadastros({ usuarioLogado }) {
   };
 
   const prepararEdicaoOperador = (op) => {
+    if (eOperador) return;
     setIdEdicao(op.id);
     setNomeOperador(op.nome);
     setLoginOperador(op.login);
@@ -196,7 +247,14 @@ export default function Cadastros({ usuarioLogado }) {
   // Salvar ou Editar Morador
   const salvarMorador = async (e) => {
     e.preventDefault();
-    if (!nomeMorador.trim() || !unidadeMorador.trim() || !condominioIdMorador) {
+    if (eOperador) {
+      setMensagem({ tipo: 'erro', texto: 'Operadores de portaria têm acesso apenas para consulta de moradores.' });
+      return;
+    }
+
+    const targetCondominioId = eAdmin ? condominioIdMorador : usuarioLogado?.condominio_id;
+
+    if (!nomeMorador.trim() || !unidadeMorador.trim() || !targetCondominioId) {
       setMensagem({ tipo: 'erro', texto: 'Nome, Unidade e Condomínio são obrigatórios.' });
       return;
     }
@@ -211,7 +269,7 @@ export default function Cadastros({ usuarioLogado }) {
             bloco: blocoMorador.trim(),
             unidade: unidadeMorador.trim(),
             telefone: telefoneMorador.trim(),
-            condominio_id: condominioIdMorador
+            condominio_id: targetCondominioId
           })
           .eq('id', idEdicao);
         if (error) throw error;
@@ -223,7 +281,7 @@ export default function Cadastros({ usuarioLogado }) {
             bloco: blocoMorador.trim(),
             unidade: unidadeMorador.trim(),
             telefone: telefoneMorador.trim(),
-            condominio_id: condominioIdMorador
+            condominio_id: targetCondominioId
           }
         ]);
         if (error) throw error;
@@ -240,6 +298,7 @@ export default function Cadastros({ usuarioLogado }) {
   };
 
   const prepararEdicaoMorador = (m) => {
+    if (eOperador) return;
     setIdEdicao(m.id);
     setNomeMorador(m.nome);
     setBlocoMorador(m.bloco || '');
@@ -250,31 +309,52 @@ export default function Cadastros({ usuarioLogado }) {
 
   return (
     <div className="space-y-6">
+      {/* Banner Informativo de Perfil */}
+      <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between shadow-md">
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded">
+            Nível de Acesso: {eAdmin ? 'ADMINISTRADOR GERAL' : eMaster ? 'MASTER (SÍNDICO)' : eSupervisor ? 'SUPERVISOR' : 'OPERADOR (PORTARIA)'}
+          </span>
+          <h3 className="font-bold text-base mt-1">
+            {usuarioLogado?.nome || 'Usuário Conectado'}
+          </h3>
+          <p className="text-xs text-slate-300">
+            {eAdmin 
+              ? 'Acesso Multi-Tenant Global Liberado.' 
+              : `Condomínio Vinculado ID: ${usuarioLogado?.condominio_id || 'Geral'}`}
+          </p>
+        </div>
+      </div>
+
       {/* Abas de Navegação */}
       <div className="flex border-b border-slate-200 bg-white rounded-t-xl overflow-hidden shadow-sm">
-        <button
-          onClick={() => setAbaAtiva('condominios')}
-          className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
-            abaAtiva === 'condominios'
-              ? 'border-slate-900 text-slate-900 bg-slate-50'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Building2 className="w-5 h-5" />
-          Condomínios
-        </button>
+        {eAdmin && (
+          <button
+            onClick={() => setAbaAtiva('condominios')}
+            className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
+              abaAtiva === 'condominios'
+                ? 'border-slate-900 text-slate-900 bg-slate-50'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Building2 className="w-5 h-5" />
+            Condomínios (ADM)
+          </button>
+        )}
 
-        <button
-          onClick={() => setAbaAtiva('operadores')}
-          className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
-            abaAtiva === 'operadores'
-              ? 'border-slate-900 text-slate-900 bg-slate-50'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Users className="w-5 h-5" />
-          Operadores / Guarita
-        </button>
+        {!eOperador && (
+          <button
+            onClick={() => setAbaAtiva('operadores')}
+            className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
+              abaAtiva === 'operadores'
+                ? 'border-slate-900 text-slate-900 bg-slate-50'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            Operadores / Guarita
+          </button>
+        )}
 
         <button
           onClick={() => setAbaAtiva('moradores')}
@@ -303,8 +383,8 @@ export default function Cadastros({ usuarioLogado }) {
         </div>
       )}
 
-      {/* ABA CONDOMÍNIOS */}
-      {abaAtiva === 'condominios' && (
+      {/* ABA CONDOMÍNIOS (EXCLUSIVO ADM) */}
+      {abaAtiva === 'condominios' && eAdmin && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <form onSubmit={salvarCondominio} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h3 className="font-bold text-slate-800 flex items-center justify-between">
@@ -380,8 +460,8 @@ export default function Cadastros({ usuarioLogado }) {
         </div>
       )}
 
-      {/* ABA OPERADORES */}
-      {abaAtiva === 'operadores' && (
+      {/* ABA OPERADORES (ADM, MASTER E SUPERVISOR) */}
+      {abaAtiva === 'operadores' && !eOperador && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <form onSubmit={salvarOperador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h3 className="font-bold text-slate-800 flex items-center justify-between">
@@ -399,22 +479,30 @@ export default function Cadastros({ usuarioLogado }) {
                 </button>
               )}
             </h3>
+
+            {eAdmin ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio *</label>
+                <select
+                  value={condominioIdOperador}
+                  onChange={(e) => setCondominioIdOperador(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  required
+                >
+                  <option value="">Selecione o Condomínio...</option>
+                  {condominios.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+                Condomínio: {condominios.find(c => c.id === usuarioLogado?.condominio_id)?.nome || 'Meu Condomínio'}
+              </div>
+            )}
+
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio</label>
-              <select
-                value={condominioIdOperador}
-                onChange={(e) => setCondominioIdOperador(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                required
-              >
-                <option value="">Selecione...</option>
-                {condominios.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome Completo</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome Completo *</label>
               <input
                 type="text"
                 required
@@ -425,7 +513,7 @@ export default function Cadastros({ usuarioLogado }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Login de Acesso</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Login de Acesso *</label>
               <input
                 type="text"
                 required
@@ -437,7 +525,7 @@ export default function Cadastros({ usuarioLogado }) {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                {idEdicao ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}
+                {idEdicao ? 'Nova Senha (deixe em branco para manter)' : 'Senha *'}
               </label>
               <input
                 type="password"
@@ -449,15 +537,15 @@ export default function Cadastros({ usuarioLogado }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nível de Acesso</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nível de Acesso *</label>
               <select
                 value={nivelAcesso}
                 onChange={(e) => setNivelAcesso(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-bold"
               >
-                <option value="1">Nível 1 - Master (Síndico)</option>
-                <option value="2">Nível 2 - Supervisor</option>
                 <option value="3">Nível 3 - Operador (Portaria)</option>
+                <option value="2">Nível 2 - Supervisor</option>
+                {eAdmin && <option value="1">Nível 1 - Master (Síndico)</option>}
               </select>
             </div>
             <button
@@ -470,13 +558,13 @@ export default function Cadastros({ usuarioLogado }) {
           </form>
 
           <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-4">Operadores do Sistema</h3>
+            <h3 className="font-bold text-slate-800 mb-4">Operadores do Sistema ({operadores.length})</h3>
             <div className="space-y-3">
               {operadores.map((op) => (
                 <div key={op.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
                   <div>
                     <h4 className="font-bold text-slate-900">{op.nome}</h4>
-                    <p className="text-xs text-slate-500">Login: {op.login} | Nível: {op.nivel_acesso}</p>
+                    <p className="text-xs text-slate-500">Login: <strong>{op.login}</strong></p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -486,8 +574,10 @@ export default function Cadastros({ usuarioLogado }) {
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
-                      {op.nivel_acesso === 0 ? 'Dev Admin' : `Nível ${op.nivel_acesso}`}
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      op.nivel_acesso === 2 ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {op.nivel_acesso === 0 ? 'Dev Admin' : op.nivel_acesso === 1 ? 'Master' : op.nivel_acesso === 2 ? 'Supervisor' : 'Operador'}
                     </span>
                   </div>
                 </div>
@@ -500,99 +590,117 @@ export default function Cadastros({ usuarioLogado }) {
       {/* ABA MORADORES */}
       {abaAtiva === 'moradores' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={salvarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-emerald-600" />
-                {idEdicao ? 'Editar Morador' : 'Cadastrar Morador'}
-              </span>
-              {idEdicao && (
-                <button
-                  type="button"
-                  onClick={limparFormularios}
-                  className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
-                >
-                  <X className="w-4 h-4" /> Cancelar
-                </button>
+          {!eOperador ? (
+            <form onSubmit={salvarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+              <h3 className="font-bold text-slate-800 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-emerald-600" />
+                  {idEdicao ? 'Editar Morador' : 'Cadastrar Morador'}
+                </span>
+                {idEdicao && (
+                  <button
+                    type="button"
+                    onClick={limparFormularios}
+                    className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
+                  >
+                    <X className="w-4 h-4" /> Cancelar
+                  </button>
+                )}
+              </h3>
+
+              {eAdmin ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio *</label>
+                  <select
+                    value={condominioIdMorador}
+                    onChange={(e) => setCondominioIdMorador(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                    required
+                  >
+                    <option value="">Selecione o Condomínio...</option>
+                    {condominios.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+                  Condomínio: {condominios.find(c => c.id === usuarioLogado?.condominio_id)?.nome || 'Meu Condomínio'}
+                </div>
               )}
-            </h3>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio</label>
-              <select
-                value={condominioIdMorador}
-                onChange={(e) => setCondominioIdMorador(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                required
-              >
-                <option value="">Selecione...</option>
-                {condominios.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Morador</label>
-              <input
-                type="text"
-                required
-                value={nomeMorador}
-                onChange={(e) => setNomeMorador(e.target.value)}
-                placeholder="Ex: Carlos Eduardo"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
-                <input
-                  type="text"
-                  value={blocoMorador}
-                  onChange={(e) => setBlocoMorador(e.target.value)}
-                  placeholder="Bloco A"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Ap</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Morador *</label>
                 <input
                   type="text"
                   required
-                  value={unidadeMorador}
-                  onChange={(e) => setUnidadeMorador(e.target.value)}
-                  placeholder="101"
+                  value={nomeMorador}
+                  onChange={(e) => setNomeMorador(e.target.value)}
+                  placeholder="Ex: Carlos Eduardo"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
+                  <input
+                    type="text"
+                    value={blocoMorador}
+                    onChange={(e) => setBlocoMorador(e.target.value)}
+                    placeholder="Bloco A"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Ap *</label>
+                  <input
+                    type="text"
+                    required
+                    value={unidadeMorador}
+                    onChange={(e) => setUnidadeMorador(e.target.value)}
+                    placeholder="101"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Telefone / WhatsApp</label>
+                <input
+                  type="text"
+                  value={telefoneMorador}
+                  onChange={(e) => setTelefoneMorador(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
+              >
+                {idEdicao ? 'Atualizar Morador' : 'Salvar Morador'}
+              </button>
+            </form>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl text-amber-900 text-xs space-y-2">
+              <ShieldAlert className="w-6 h-6 text-amber-600" />
+              <strong className="block font-bold text-sm">Modo de Consulta (Portaria)</strong>
+              <p>Operadores de portaria utilizam esta tela para consultar e auto-preencher cadastros. A inclusão de moradores é realizada pela Supervisão ou Administração.</p>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Telefone / WhatsApp</label>
-              <input
-                type="text"
-                value={telefoneMorador}
-                onChange={(e) => setTelefoneMorador(e.target.value)}
-                placeholder="(11) 99999-9999"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
-            >
-              {idEdicao ? 'Atualizar Morador' : 'Salvar Morador'}
-            </button>
-          </form>
+          )}
 
-          <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className={`${!eOperador ? 'md:col-span-2' : 'md:col-span-3'} bg-white p-6 rounded-xl shadow-sm border border-slate-200`}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-slate-800">Moradores Cadastrados</h3>
+              <h3 className="font-bold text-slate-800">Moradores Cadastrados ({moradores.length})</h3>
               <div className="relative w-64">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
                   value={termoBuscaMorador}
-                  onChange={(e) => setTermoBuscaMorador(e.target.value)}
-                  onKeyUp={carregarDados}
+                  onChange={(e) => {
+                    setTermoBuscaMorador(e.target.value);
+                    carregarDados();
+                  }}
                   placeholder="Buscar por nome..."
                   className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                 />
@@ -611,13 +719,15 @@ export default function Cadastros({ usuarioLogado }) {
                         {m.bloco ? `Bloco ${m.bloco} - ` : ''}Unidade {m.unidade} | Tel: {m.telefone || 'Não informado'}
                       </p>
                     </div>
-                    <button
-                      onClick={() => prepararEdicaoMorador(m)}
-                      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
-                      title="Editar"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                    {!eOperador && (
+                      <button
+                        onClick={() => prepararEdicaoMorador(m)}
+                        className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                        title="Editar"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))
               )}
