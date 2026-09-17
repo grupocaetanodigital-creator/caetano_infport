@@ -1,210 +1,388 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Package, Truck, CheckCircle2, AlertCircle, Search, Plus, UserCheck, Camera, X } from 'lucide-react';
+import { Package, Truck, CheckCircle2, AlertCircle, Search, Plus, UserCheck, AlertTriangle, MessageCircle, ExternalLink, X, ShieldAlert } from 'lucide-react';
 
 export default function Encomendas({ usuarioLogado }) {
-  const [abaAtiva, setAbaAtiva] = useState('receber'); // 'receber', 'painel', 'entregadores'
-  const [entregadores, setEntregadores] = useState([]);
-  const [encomendas, setEncomendas] = useState([]);
+  const [etapa, setEtapa] = useState('1'); // '1' = Recebimento Lote RE, '2' = Triagem, '3' = Baixa/Saída
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Formulário Recebimento
-  const [loteRe, setLoteRe] = useState('');
-  const [entregadorId, setEntregadorId] = useState('');
-  const [transportadora, setTransportadora] = useState('');
-  const [destinatarioNome, setDestinatarioNome] = useState('');
-  const [bloco, setBloco] = useState('');
-  const [unidade, setUnidade] = useState('');
-  const [codigoRastreio, setCodigoRastreio] = useState('');
+  // Listas do Banco
+  const [entregadores, setEntregadores] = useState([]);
+  const [lotesPendentes, setLotesPendentes] = useState([]);
+  const [moradores, setMoradores] = useState([]);
+  const [pacotesRetidos, setPacotesRetidos] = useState([]);
+
+  // Estados 1ª ETAPA: Recebimento de Lote RE
+  const [buscaEntregador, setBuscaEntregador] = useState('');
+  const [entregadorSelecionado, setEntregadorSelecionado] = useState(null);
+  const [qtdDeclarada, setQtdDeclarada] = useState(1);
+  const [modalNovoEntregador, setModalNovoEntregador] = useState(false);
+  const [novoEntNome, setNovoEntNome] = useState('');
+  const [novoEntDoc, setNovoEntDoc] = useState('');
+  const [novoEntEmpresa, setNovoEntEmpresa] = useState('');
+  const [loteCriadoWhats, setLoteCriadoWhats] = useState(null);
+
+  // Estados 2ª ETAPA: Triagem Individual
+  const [loteAtivo, setLoteAtivo] = useState(null);
+  const [unidadeTriagem, setUnidadeTriagem] = useState('');
+  const [blocoTriagem, setBlocoTriagem] = useState('');
+  const [moradorSelecionado, setMoradorSelecionado] = useState(null);
+  const [codigoBarras, setCodigoBarras] = useState('');
   const [fotoEtiquetaUrl, setFotoEtiquetaUrl] = useState('');
+  const [observacoes, setObservacoes] = useState('');
+  const [alertaAgrupamento, setAlertaAgrupamento] = useState(null);
+  const [itemTriadoWhats, setItemTriadoWhats] = useState(null);
 
-  // Formulário Baixa
-  const [encomendaBaixa, setEncomendaBaixa] = useState(null);
-  const [retiradoPor, setRetiradoPor] = useState('');
-  const [fotoRetiradaUrl, setFotoRetiradaUrl] = useState('');
-
-  // Formulário Entregador
-  const [nomeEntregador, setNomeEntregador] = useState('');
-  const [documentoEntregador, setDocumentoEntregador] = useState('');
-  const [empresaEntregador, setEmpresaEntregador] = useState('');
-
-  // Busca
-  const [termoBusca, setTermoBusca] = useState('');
+  // Estados 3ª ETAPA: Saída / Baixa
+  const [buscaBaixaUnidade, setBuscaBaixaUnidade] = useState('');
+  const [itensParaBaixa, setItensParaBaixa] = useState([]);
+  const [itensSelecionadosIds, setItensSelecionadosIds] = useState([]);
+  const [nomeRetirante, setNomeRetirante] = useState('');
+  const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
+  const [baixaConcluidaWhats, setBaixaConcluidaWhats] = useState(null);
 
   useEffect(() => {
-    carregarDados();
-  }, [abaAtiva]);
+    carregarDadosBase();
+  }, [etapa]);
 
-  const carregarDados = async () => {
+  const carregarDadosBase = async () => {
     if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
     try {
-      if (abaAtiva === 'entregadores') {
-        const { data } = await supabase
-          .from('entregadores')
-          .select('*')
-          .eq('condominio_id', usuarioLogado.condominio_id)
-          .order('created_at', { ascending: false });
-        setEntregadores(data || []);
-      } else {
-        const { data: entData } = await supabase
-          .from('entregadores')
-          .select('*')
-          .eq('condominio_id', usuarioLogado.condominio_id);
-        setEntregadores(entData || []);
+      // Carregar Entregadores
+      const { data: entData } = await supabase
+        .from('entregadores')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .order('nome');
+      setEntregadores(entData || []);
 
-        let query = supabase
-          .from('encomendas')
-          .select('*')
-          .eq('condominio_id', usuarioLogado.condominio_id)
-          .order('created_at', { ascending: false });
+      // Carregar Lotes Pendentes
+      const { data: lotesData } = await supabase
+        .from('lotes_re')
+        .select('*, entregadores(nome, empresa)')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .in('status', ['aguardando_triagem', 'em_triagem'])
+        .order('created_at', { ascending: false });
+      setLotesPendentes(lotesData || []);
 
-        if (termoBusca.trim()) {
-          query = query.or(`unidade.ilike.%${termoBusca}%,destinatario_nome.ilike.%${termoBusca}%,lote_re.ilike.%${termoBusca}%`);
-        }
-
-        const { data } = await query;
-        setEncomendas(data || []);
-      }
+      // Carregar Moradores
+      const { data: moradData } = await supabase
+        .from('moradores')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id);
+      setMoradores(moradData || []);
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao carregar dados: ${err.message}` });
+      setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const salvarEncomenda = async (e) => {
+  // Tocar alerta sonoro nativo via Web Audio API
+  const tocarAlertaSonoro = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {
+      console.log('Audio API indisponível', e);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // 1ª ETAPA: RECEBIMENTO DO LOTE RE
+  // -------------------------------------------------------------
+  const cadastrarEntregadorRapido = async (e) => {
     e.preventDefault();
-    if (!unidade.trim() || !destinatarioNome.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Informe a unidade e o nome do destinatário.' });
+    if (!novoEntNome.trim()) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('entregadores')
+        .insert([{
+          condominio_id: usuarioLogado.condominio_id,
+          nome: novoEntNome.trim(),
+          documento: novoEntDoc.trim(),
+          empresa: novoEntEmpresa.trim()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setEntregadores([...entregadores, data]);
+      setEntregadorSelecionado(data);
+      setModalNovoEntregador(false);
+      setNovoEntNome(''); setNovoEntDoc(''); setNovoEntEmpresa('');
+      setMensagem({ tipo: 'sucesso', texto: 'Entregador cadastrado com sucesso!' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const criarLoteRE = async (e) => {
+    e.preventDefault();
+    if (!entregadorSelecionado) {
+      setMensagem({ tipo: 'erro', texto: 'Selecione ou cadastre um entregador.' });
       return;
     }
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('encomendas').insert([
-        {
+      const hoje = new Date();
+      const dataStr = `${String(hoje.getDate()).padStart(2, '0')}${String(hoje.getMonth() + 1).padStart(2, '0')}${String(hoje.getFullYear()).slice(-2)}`;
+      const operSigla = usuarioLogado?.login?.toUpperCase() || 'OPER001';
+      const seq = Math.floor(100 + Math.random() * 900);
+      const codigoRE = `RE:${dataStr}${operSigla}${seq}`;
+
+      const { data, error } = await supabase
+        .from('lotes_re')
+        .insert([{
+          codigo_re: codigoRE,
           condominio_id: usuarioLogado.condominio_id,
-          entregador_id: entregadorId || null,
-          lote_re: loteRe.trim() || `RE-${Math.floor(1000 + Math.random() * 9000)}`,
-          transportadora: transportadora.trim(),
-          destinatario_nome: destinatarioNome.trim(),
-          bloco: bloco.trim(),
-          unidade: unidade.trim(),
-          codigo_rastreio: codigoRastreio.trim(),
-          foto_etiqueta_url: fotoEtiquetaUrl.trim(),
-          status: 'recebido'
-        }
-      ]);
+          entregador_id: entregadorSelecionado.id,
+          qtd_declarada: parseInt(qtdDeclarada),
+          qtd_triada: 0,
+          status: 'aguardando_triagem',
+          operador_id: usuarioLogado.login
+        }])
+        .select('*, entregadores(nome, empresa, documento)')
+        .single();
 
       if (error) throw error;
-      setMensagem({ tipo: 'sucesso', texto: 'Encomenda registrada com sucesso!' });
+
+      // Gerar link de WhatsApp para Grupo da Administração
+      const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${data.codigo_re}\nTransportadora: ${data.entregadores?.empresa || 'N/A'}\nEntregador: ${data.entregadores?.nome} (Doc: ${data.entregadores?.documento || 'N/A'})\nTotal de Volumes Declarados: ${data.qtd_declarada} pacotes\nOperador: ${usuarioLogado.login}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
       
-      // Limpar formulário de encomenda mantendo o Lote RE para entrada sequencial
-      setDestinatarioNome('');
-      setBloco('');
-      setUnidade('');
-      setCodigoRastreio('');
-      setFotoEtiquetaUrl('');
-      carregarDados();
+      setLoteCriadoWhats({ codigo: data.codigo_re, link: `https://wa.me/?text=${encodeURIComponent(textoWhats)}` });
+      setEntregadorSelecionado(null);
+      setQtdDeclarada(1);
+      carregarDadosBase();
+      setMensagem({ tipo: 'sucesso', texto: `Lote ${codigoRE} gerado com sucesso!` });
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao registrar: ${err.message}` });
+      setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const darBaixaEncomenda = async (e) => {
+  // -------------------------------------------------------------
+  // 2ª ETAPA: TRIAGEM INDIVIDUAL
+  // -------------------------------------------------------------
+  const verificarAgrupamentoEBuscarMorador = async (unid, bloc) => {
+    setUnidadeTriagem(unid);
+    setBlocoTriagem(bloc);
+    if (!unid.trim()) return;
+
+    // Buscar Morador
+    const morad = moradores.find(m => m.unidade.toLowerCase() === unid.toLowerCase());
+    setMoradorSelecionado(morad || null);
+
+    // Checar Agrupamento na tabela encomendas_itens
+    const { data: itensRetidos } = await supabase
+      .from('encomendas_itens')
+      .select('*')
+      .eq('condominio_id', usuarioLogado.condominio_id)
+      .eq('unidade', unid.trim())
+      .eq('status', 'retido');
+
+    if (itensRetidos && itensRetidos.length > 0) {
+      tocarAlertaSonoro();
+      setAlertaAgrupamento({
+        qtd: itensRetidos.length,
+        unidade: unid,
+        bloco: bloc
+      });
+    } else {
+      setAlertaAgrupamento(null);
+    }
+  };
+
+  const salvarItemTriagem = async (e) => {
     e.preventDefault();
-    if (!retiradoPor.trim() || !encomendaBaixa) return;
+    if (!loteAtivo || !unidadeTriagem.trim() || !fotoEtiquetaUrl.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e informe a URL da Foto da Etiqueta.' });
+      return;
+    }
+    setLoading(true);
+
+    try {
+      // 1. Inserir Item
+      const { error: itemErr } = await supabase
+        .from('encomendas_itens')
+        .insert([{
+          lote_re_id: loteAtivo.id,
+          condominio_id: usuarioLogado.condominio_id,
+          bloco: blocoTriagem.trim(),
+          unidade: unidadeTriagem.trim(),
+          morador_id: moradorSelecionado?.id || null,
+          codigo_barras: codigoBarras.trim(),
+          foto_etiqueta_url: fotoEtiquetaUrl.trim(),
+          observacoes: observacoes.trim(),
+          status: 'retido'
+        }]);
+
+      if (itemErr) throw itemErr;
+
+      // 2. Atualizar Lote RE
+      const novaQtdTriada = (loteAtivo.qtd_triada || 0) + 1;
+      const novoStatusLote = novaQtdTriada >= loteAtivo.qtd_declarada ? 'concluido' : 'em_triagem';
+
+      await supabase
+        .from('lotes_re')
+        .update({ qtd_triada: novaQtdTriada, status: novoStatusLote })
+        .eq('id', loteAtivo.id);
+
+      // 3. Gerar link WhatsApp Morador
+      const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
+      const textoWhatsMorador = `Olá, Apt ${unidadeTriagem} ${blocoTriagem ? 'Bloco ' + blocoTriagem : ''} - ${moradorSelecionado?.nome || 'Morador'}! 📦\nSua encomenda chegou na Portaria.\n\n• Lote/RE: ${loteAtivo.codigo_re}\n• Observação: ${observacoes || 'Nenhuma'}\n• Porteiro: ${usuarioLogado.login}\n• Data/Hora: ${new Date().toLocaleString('pt-BR')}\n• Foto da Etiqueta: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria assim que possível.`;
+
+      setItemTriadoWhats({
+        link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoWhatsMorador)}` : `https://wa.me/?text=${encodeURIComponent(textoWhatsMorador)}`
+      });
+
+      // Limpar form do item mantendo o lote ativo
+      setUnidadeTriagem(''); setBlocoTriagem(''); setMoradorSelecionado(null);
+      setCodigoBarras(''); setFotoEtiquetaUrl(''); setObservacoes('');
+      setAlertaAgrupamento(null);
+      carregarDadosBase();
+      setMensagem({ tipo: 'sucesso', texto: 'Pacote triado e registrado com sucesso!' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // 3ª ETAPA: SAÍDA / BAIXA DE ENCOMENDAS
+  // -------------------------------------------------------------
+  const buscarItensParaBaixa = async () => {
+    if (!buscaBaixaUnidade.trim()) return;
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('encomendas_itens')
+        .select('*, moradores(nome, telefone)')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('unidade', buscaBaixaUnidade.trim())
+        .eq('status', 'retido');
+
+      setItensParaBaixa(data || []);
+      setItensSelecionadosIds((data || []).map(i => i.id));
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const efetivarBaixaSaida = async (e) => {
+    e.preventDefault();
+    if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Selecione os pacotes, informe quem retirou e a URL da Foto do Retirante.' });
+      return;
+    }
     setLoading(true);
 
     try {
       const { error } = await supabase
-        .from('encomendas')
+        .from('encomendas_itens')
         .update({
           status: 'entregue',
-          retirado_por: retiradoPor.trim(),
-          foto_retirada_url: fotoRetiradaUrl.trim(),
-          data_retirada: new Date().toISOString()
+          retirado_por: nomeRetirante.trim(),
+          foto_retirada_url: fotoRetiranteUrl.trim(),
+          data_retirada: new Date().toISOString(),
+          operador_baixa_id: usuarioLogado.login
         })
-        .eq('id', encomendaBaixa.id);
+        .in('id', itensSelecionadosIds);
 
       if (error) throw error;
-      setMensagem({ tipo: 'sucesso', texto: 'Baixa efetuada com sucesso!' });
-      setEncomendaBaixa(null);
-      setRetiradoPor('');
-      setFotoRetiradaUrl('');
-      carregarDados();
+
+      // WhatsApp Notificação Cruzada de Segurança
+      const primeiroItem = itensParaBaixa[0];
+      const telMorador = primeiroItem?.moradores?.telefone?.replace(/\D/g, '') || '';
+      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${buscaBaixaUnidade}\n\nInformamos que o(s) pacote(s) foram RETIRADOS da portaria:\n• Qtd de Volumes Retirados: ${itensSelecionadosIds.length}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado.login}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+
+      setBaixaConcluidaWhats({
+        link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
+      });
+
+      setItensParaBaixa([]);
+      setItensSelecionadosIds([]);
+      setNomeRetirante(''); setFotoRetiranteUrl('');
+      setMensagem({ tipo: 'sucesso', texto: 'Baixa de saída realizada com sucesso!' });
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao dar baixa: ${err.message}` });
+      setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const salvarEntregador = async (e) => {
-    e.preventDefault();
-    if (!nomeEntregador.trim()) return;
-    setLoading(true);
-
-    try {
-      const { error } = await supabase.from('entregadores').insert([
-        {
-          condominio_id: usuarioLogado.condominio_id,
-          nome: nomeEntregador.trim(),
-          documento: documentoEntregador.trim(),
-          empresa: empresaEntregador.trim()
-        }
-      ]);
-
-      if (error) throw error;
-      setMensagem({ tipo: 'sucesso', texto: 'Entregador cadastrado!' });
-      setNomeEntregador('');
-      setDocumentoEntregador('');
-      setEmpresaEntregador('');
-      carregarDados();
-    } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao salvar entregador: ${err.message}` });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Card de alerta superior de lotes em triagem
+  const totalPacotesPendentes = lotesPendentes.reduce((acc, l) => acc + (l.qtd_declarada - l.qtd_triada), 0);
 
   return (
     <div className="space-y-6">
-      {/* Abas */}
-      <div className="flex border-b border-slate-200 bg-white rounded-t-xl overflow-hidden shadow-sm">
+      {/* Alerta Superior de Status dos Lotes */}
+      <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AlertCircle className="w-6 h-6 text-amber-600" />
+          <div>
+            <h4 className="font-bold text-amber-900 text-sm">Lotes em Triagem Pendentes</h4>
+            <p className="text-xs text-amber-700">
+              {lotesPendentes.length} lote(s) ativo(s) com um total de <strong>{totalPacotesPendentes} pacote(s) pendente(s)</strong> para individualizar.
+            </p>
+          </div>
+        </div>
         <button
-          onClick={() => setAbaAtiva('receber')}
-          className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
-            abaAtiva === 'receber' ? 'border-slate-900 text-slate-900 bg-slate-50' : 'border-transparent text-slate-500'
-          }`}
+          onClick={() => setEtapa('2')}
+          className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition"
         >
-          <Package className="w-5 h-5" /> Recebimento (Lote RE)
-        </button>
-
-        <button
-          onClick={() => setAbaAtiva('painel')}
-          className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
-            abaAtiva === 'painel' ? 'border-slate-900 text-slate-900 bg-slate-50' : 'border-transparent text-slate-500'
-          }`}
-        >
-          <Search className="w-5 h-5" /> Painel de Encomendas
-        </button>
-
-        <button
-          onClick={() => setAbaAtiva('entregadores')}
-          className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition ${
-            abaAtiva === 'entregadores' ? 'border-slate-900 text-slate-900 bg-slate-50' : 'border-transparent text-slate-500'
-          }`}
-        >
-          <Truck className="w-5 h-5" /> Entregadores
+          Ir para Triagem
         </button>
       </div>
 
-      {/* Alerta */}
+      {/* Navegação Sequencial de 3 Etapas */}
+      <div className="grid grid-cols-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <button
+          onClick={() => setEtapa('1')}
+          className={`p-4 text-left border-b-4 transition ${etapa === '1' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+        >
+          <span className="text-xs font-bold uppercase text-slate-400 block">1ª Etapa</span>
+          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><Truck className="w-4 h-4" /> Recebimento (RE)</strong>
+        </button>
+
+        <button
+          onClick={() => setEtapa('2')}
+          className={`p-4 text-left border-b-4 transition ${etapa === '2' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+        >
+          <span className="text-xs font-bold uppercase text-slate-400 block">2ª Etapa</span>
+          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><Package className="w-4 h-4" /> Triagem do Lote</strong>
+        </button>
+
+        <button
+          onClick={() => setEtapa('3')}
+          className={`p-4 text-left border-b-4 transition ${etapa === '3' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+        >
+          <span className="text-xs font-bold uppercase text-slate-400 block">3ª Etapa</span>
+          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><UserCheck className="w-4 h-4" /> Saída / Baixa</strong>
+        </button>
+      </div>
+
+      {/* Mensagens Globais */}
       {mensagem.texto && (
         <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -214,278 +392,384 @@ export default function Encomendas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* ABA 1: RECEBIMENTO */}
-      {abaAtiva === 'receber' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={salvarEncomenda} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" /> Nova Encomenda
+      {/* ========================================================================= */}
+      {/* 1ª ETAPA — RECEBIMENTO DO LOTE (RE) */}
+      {/* ========================================================================= */}
+      {etapa === '1' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+          <div className="flex justify-between items-center border-b pb-4">
+            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+              <Truck className="w-6 h-6 text-slate-800" /> Novo Recebimento de Entrega (RE)
             </h3>
+            <button
+              onClick={() => setModalNovoEntregador(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1 transition"
+            >
+              <Plus className="w-4 h-4" /> + Cadastro Rápido de Entregador
+            </button>
+          </div>
 
+          <form onSubmit={criarLoteRE} className="space-y-4 max-w-2xl">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Lote / Código RE</label>
-              <input
-                type="text"
-                value={loteRe}
-                onChange={(e) => setLoteRe(e.target.value)}
-                placeholder="Ex: RE-1042 (Gerado auto se vazio)"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Entregador / Empresa</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Buscar / Selecionar Entregador *</label>
               <select
-                value={entregadorId}
+                required
+                value={entregadorSelecionado?.id || ''}
                 onChange={(e) => {
-                  setEntregadorId(e.target.value);
                   const ent = entregadores.find(x => x.id === e.target.value);
-                  if (ent) setTransportadora(ent.empresa || '');
+                  setEntregadorSelecionado(ent || null);
                 }}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-medium"
               >
-                <option value="">Selecione ou deixe em branco...</option>
-                {entregadores.map((ent) => (
-                  <option key={ent.id} value={ent.id}>{ent.nome} ({ent.empresa || 'Avulso'})</option>
+                <option value="">Selecione o entregador na lista...</option>
+                {entregadores.map(ent => (
+                  <option key={ent.id} value={ent.id}>
+                    {ent.nome} — {ent.empresa || 'Avulso'} (Doc: {ent.documento || 'Sem doc'})
+                  </option>
                 ))}
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
-                <input
-                  type="text"
-                  value={bloco}
-                  onChange={(e) => setBloco(e.target.value)}
-                  placeholder="Bloco A"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                />
+            {entregadorSelecionado && (
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs space-y-1">
+                <p><strong>Nome:</strong> {entregadorSelecionado.nome}</p>
+                <p><strong>Empresa / Transportadora:</strong> {entregadorSelecionado.empresa || 'Não informada'}</p>
+                <p><strong>Documento:</strong> {entregadorSelecionado.documento || 'Não informado'}</p>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade *</label>
-                <input
-                  type="text"
-                  required
-                  value={unidade}
-                  onChange={(e) => setUnidade(e.target.value)}
-                  placeholder="101"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                />
-              </div>
-            </div>
+            )}
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Destinatário *</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Quantidade Total de Volumes Declarados *</label>
               <input
-                type="text"
+                type="number"
+                min="1"
                 required
-                value={destinatarioNome}
-                onChange={(e) => setDestinatarioNome(e.target.value)}
-                placeholder="Nome do morador"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cód. Rastreio / Nota</label>
-              <input
-                type="text"
-                value={codigoRastreio}
-                onChange={(e) => setCodigoRastreio(e.target.value)}
-                placeholder="Ex: BR123456789"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                value={qtdDeclarada}
+                onChange={(e) => setQtdDeclarada(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-lg font-bold"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition shadow-md text-base"
             >
-              Registrar Recebimento
+              Criar Lote RE e Gerar Código
             </button>
           </form>
 
-          {/* Lista de Recebimentos Recentes */}
-          <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-4">Últimas Encomendas Recebidas</h3>
-            <div className="space-y-3">
-              {encomendas.filter(e => e.status === 'recebido').map((enc) => (
-                <div key={enc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
-                  <div>
-                    <span className="text-xs bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded mr-2">
-                      {enc.lote_re}
-                    </span>
-                    <strong className="text-slate-900">{enc.destinatario_nome}</strong>
-                    <p className="text-xs text-slate-500">
-                      {enc.bloco ? `Bloco ${enc.bloco} - ` : ''}Unid: {enc.unidade} | Transp: {enc.transportadora || 'N/A'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setEncomendaBaixa(enc)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg flex items-center gap-1 transition"
-                  >
-                    <UserCheck className="w-4 h-4" /> Dar Baixa
-                  </button>
-                </div>
-              ))}
+          {/* Botão de WhatsApp do Lote Criado */}
+          {loteCriadoWhats && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+              <p className="text-xs font-bold text-emerald-900">
+                Lote {loteCriadoWhats.codigo} gerado! Dispare o aviso para a gestão:
+              </p>
+              <a
+                href={loteCriadoWhats.link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
+              >
+                <MessageCircle className="w-4 h-4" /> Enviar Aviso no WhatsApp da Gestão <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ABA 2: PAINEL / BUSCA */}
-      {abaAtiva === 'painel' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h3 className="font-bold text-slate-800">Todas as Encomendas</h3>
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="text"
-                value={termoBusca}
-                onChange={(e) => setTermoBusca(e.target.value)}
-                onKeyUp={carregarDados}
-                placeholder="Buscar por unidade, nome ou RE..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {encomendas.map((enc) => (
-              <div key={enc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs bg-slate-900 text-white font-bold px-2 py-0.5 rounded">
-                      {enc.lote_re}
-                    </span>
-                    <h4 className="font-bold text-slate-900">{enc.destinatario_nome}</h4>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {enc.bloco ? `Bloco ${enc.bloco} - ` : ''}Unidade {enc.unidade} | Recebido em: {new Date(enc.data_recebimento).toLocaleString('pt-BR')}
-                  </p>
-                  {enc.status === 'entregue' && (
-                    <p className="text-xs text-emerald-700 font-medium mt-0.5">
-                      Retirado por: {enc.retirado_por} em {new Date(enc.data_retirada).toLocaleString('pt-BR')}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  {enc.status === 'recebido' ? (
-                    <button
-                      onClick={() => setEncomendaBaixa(enc)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg flex items-center gap-1 transition"
-                    >
-                      <UserCheck className="w-4 h-4" /> Dar Baixa
-                    </button>
-                  ) : (
-                    <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-full">
-                      Entregue
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ABA 3: ENTREGADORES */}
-      {abaAtiva === 'entregadores' && (
+      {/* ========================================================================= */}
+      {/* 2ª ETAPA — TRIAGEM DO LOTE (INDIVIDUALIZAÇÃO) */}
+      {/* ========================================================================= */}
+      {etapa === '2' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={salvarEntregador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <Truck className="w-5 h-5 text-emerald-600" /> Novo Entregador
-            </h3>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Entregador</label>
-              <input
-                type="text"
-                required
-                value={nomeEntregador}
-                onChange={(e) => setNomeEntregador(e.target.value)}
-                placeholder="Ex: Carlos Entregas"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Empresa / App</label>
-              <input
-                type="text"
-                value={empresaEntregador}
-                onChange={(e) => setEmpresaEntregador(e.target.value)}
-                placeholder="Ex: Mercado Livre, Amazon, Loggi"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Documento / RG</label>
-              <input
-                type="text"
-                value={documentoEntregador}
-                onChange={(e) => setDocumentoEntregador(e.target.value)}
-                placeholder="00.000.000-0"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
-            >
-              Salvar Entregador
-            </button>
-          </form>
-
-          <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-4">Entregadores Cadastrados</h3>
-            <div className="space-y-3">
-              {entregadores.map((ent) => (
-                <div key={ent.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-slate-900">{ent.nome}</h4>
-                    <p className="text-xs text-slate-500">
-                      Empresa: {ent.empresa || 'Não informada'} | RG: {ent.documento || 'Não informado'}
-                    </p>
-                  </div>
-                  <span className="text-xs bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-full">
-                    Cadastrado
+          {/* Seleção do Lote */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 text-sm">1. Selecione o Lote em Triagem</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {lotesPendentes.map(lote => (
+                <div
+                  key={lote.id}
+                  onClick={() => setLoteAtivo(lote)}
+                  className={`p-3 rounded-lg border cursor-pointer transition ${
+                    loteAtivo?.id === lote.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50 text-slate-900'
+                  }`}
+                >
+                  <strong className="text-xs block font-mono">{lote.codigo_re}</strong>
+                  <p className="text-xs opacity-80">{lote.entregadores?.nome} ({lote.entregadores?.empresa})</p>
+                  <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded mt-1 inline-block font-bold">
+                    Triados: {lote.qtd_triada} / {lote.qtd_declarada}
                   </span>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Formulário de Pacote Individual */}
+          <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 text-sm border-b pb-2">
+              2. Individualizar Pacote {loteAtivo ? `— Lote ${loteAtivo.codigo_re}` : '(Selecione um lote)'}
+            </h3>
+
+            {/* CARD ALERTA DE AGRUPAMENTO (SE HOUVER PACOTES ANTERIORES) */}
+            {alertaAgrupamento && (
+              <div className="p-4 bg-red-600 text-white rounded-xl shadow-lg animate-pulse space-y-1">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <ShieldAlert className="w-6 h-6" /> ⚠️ ATENÇÃO — AGRUPAMENTO DE PACOTES!
+                </div>
+                <p className="text-xs leading-relaxed">
+                  A Unidade <strong>Apt {alertaAgrupamento.unidade} {alertaAgrupamento.bloco ? 'Bloco ' + alertaAgrupamento.bloco : ''}</strong> já possui <strong>{alertaAgrupamento.qtd} pacote(s) retido(s)</strong> na portaria.
+                  Por favor, junte este novo pacote aos anteriores no mesmo local físico!
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={salvarItemTriagem} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Ap *</label>
+                  <input
+                    type="text"
+                    required
+                    value={unidadeTriagem}
+                    onChange={(e) => verificarAgrupamentoEBuscarMorador(e.target.value, blocoTriagem)}
+                    placeholder="Ex: 102"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
+                  <input
+                    type="text"
+                    value={blocoTriagem}
+                    onChange={(e) => { setBlocoTriagem(e.target.value); verificarAgrupamentoEBuscarMorador(unidadeTriagem, e.target.value); }}
+                    placeholder="Ex: B"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {moradorSelecionado && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900">
+                  Morador Vinculado: <strong>{moradorSelecionado.nome}</strong> | Tel: {moradorSelecionado.telefone || 'Sem tel'}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">URL da Foto da Etiqueta *</label>
+                <input
+                  type="url"
+                  required
+                  value={fotoEtiquetaUrl}
+                  onChange={(e) => setFotoEtiquetaUrl(e.target.value)}
+                  placeholder="https://supabase.co/.../foto.jpg"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cód. Barras / NF (Opcional)</label>
+                <input
+                  type="text"
+                  value={codigoBarras}
+                  onChange={(e) => setCodigoBarras(e.target.value)}
+                  placeholder="Leitura de código..."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações / Avarias</label>
+                <input
+                  type="text"
+                  value={observacoes}
+                  onChange={(e) => setObservacoes(e.target.value)}
+                  placeholder="Ex: Caixa amassada no canto superior"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !loteAtivo}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl transition"
+              >
+                Salvar Pacote na Portaria
+              </button>
+            </form>
+
+            {/* Link WhatsApp Morador */}
+            {itemTriadoWhats && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                <p className="text-xs font-bold text-emerald-900">
+                  Notificação do Morador pronta para envio:
+                </p>
+                <a
+                  href={itemTriadoWhats.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
+                >
+                  <MessageCircle className="w-4 h-4" /> Notificar Morador no WhatsApp <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* MODAL DE BAIXA */}
-      {encomendaBaixa && (
+      {/* ========================================================================= */}
+      {/* 3ª ETAPA — SAÍDA / BAIXA DE ENCOMENDAS */}
+      {/* ========================================================================= */}
+      {etapa === '3' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
+            <div>
+              <h3 className="font-bold text-slate-900 text-lg">3ª Etapa — Saída e Baixa de Encomendas</h3>
+              <p className="text-xs text-slate-500">Localize pacotes retidos e confirme a entrega ao morador.</p>
+            </div>
+
+            <div className="flex gap-2 w-full sm:w-auto">
+              <input
+                type="text"
+                value={buscaBaixaUnidade}
+                onChange={(e) => setBuscaBaixaUnidade(e.target.value)}
+                placeholder="Digite a Unidade (Ex: 102)"
+                className="p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
+              />
+              <button
+                onClick={buscarItensParaBaixa}
+                className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-bold text-xs hover:bg-slate-800 transition"
+              >
+                Buscar
+              </button>
+            </div>
+          </div>
+
+          {itensParaBaixa.length > 0 && (
+            <form onSubmit={efetivarBaixaSaida} className="space-y-6">
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-800 text-sm">Pacotes Retidos para a Unidade {buscaBaixaUnidade}:</h4>
+                {itensParaBaixa.map(item => (
+                  <div key={item.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={itensSelecionadosIds.includes(item.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setItensSelecionadosIds([...itensSelecionadosIds, item.id]);
+                          else setItensSelecionadosIds(itensSelecionadosIds.filter(id => id !== item.id));
+                        }}
+                        className="w-5 h-5 accent-slate-900"
+                      />
+                      <div>
+                        <strong className="text-sm text-slate-900">Unidade {item.unidade} {item.bloco ? `- Bloco ${item.bloco}` : ''}</strong>
+                        <p className="text-xs text-slate-500">Obs: {item.observacoes || 'Sem observação'}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full">
+                      Retido na Portaria
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Retirante *</label>
+                  <input
+                    type="text"
+                    required
+                    value={nomeRetirante}
+                    onChange={(e) => setNomeRetirante(e.target.value)}
+                    placeholder="Ex: Pedro (Filho), Próprio Morador"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">URL Foto Retirante com Pacote *</label>
+                  <input
+                    type="url"
+                    required
+                    value={fotoRetiranteUrl}
+                    onChange={(e) => setFotoRetiranteUrl(e.target.value)}
+                    placeholder="https://supabase.co/.../baixa.jpg"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition shadow-md"
+              >
+                Efetivar Baixa de Saída e Gravar
+              </button>
+            </form>
+          )}
+
+          {/* Link WhatsApp Notificação Cruzada */}
+          {baixaConcluidaWhats && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+              <p className="text-xs font-bold text-emerald-900">
+                Notificação Cruzada de Confirmação de Retirada pronta:
+              </p>
+              <a
+                href={baixaConcluidaWhats.link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
+              >
+                <MessageCircle className="w-4 h-4" /> Enviar Confirmação de Retirada no WhatsApp <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL NOVO ENTREGADOR RÁPIDO */}
+      {modalNovoEntregador && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
-          <form onSubmit={darBaixaEncomenda} className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+          <form onSubmit={cadastrarEntregadorRapido} className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-900">Dar Baixa na Encomenda</h3>
-              <button type="button" onClick={() => setEncomendaBaixa(null)} className="text-slate-400 hover:text-slate-600">
+              <h3 className="font-bold text-slate-900">Cadastro Rápido de Entregador</h3>
+              <button type="button" onClick={() => setModalNovoEntregador(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
-              <p><strong>Lote RE:</strong> {encomendaBaixa.lote_re}</p>
-              <p><strong>Destinatário:</strong> {encomendaBaixa.destinatario_nome}</p>
-              <p><strong>Unidade:</strong> {encomendaBaixa.unidade}</p>
-            </div>
-
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Retirante *</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome Completo *</label>
               <input
                 type="text"
                 required
-                value={retiradoPor}
-                onChange={(e) => setRetiradoPor(e.target.value)}
-                placeholder="Ex: O próprio morador, Filho, Esposa"
+                value={novoEntNome}
+                onChange={(e) => setNovoEntNome(e.target.value)}
+                placeholder="Ex: Marcos Antônio"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Empresa / Transportadora</label>
+              <input
+                type="text"
+                value={novoEntEmpresa}
+                onChange={(e) => setNovoEntEmpresa(e.target.value)}
+                placeholder="Ex: Mercado Livre, Shopee, Amazon"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">CPF ou RG</label>
+              <input
+                type="text"
+                value={novoEntDoc}
+                onChange={(e) => setNovoEntDoc(e.target.value)}
+                placeholder="Ex: 783.871.847-76"
                 className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
               />
             </div>
@@ -493,7 +777,7 @@ export default function Encomendas({ usuarioLogado }) {
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setEncomendaBaixa(null)}
+                onClick={() => setModalNovoEntregador(false)}
                 className="flex-1 py-3 border border-slate-300 font-bold text-slate-700 rounded-lg hover:bg-slate-50"
               >
                 Cancelar
@@ -501,9 +785,9 @@ export default function Encomendas({ usuarioLogado }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
+                className="flex-1 py-3 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800"
               >
-                Confirmar Baixa
+                Salvar
               </button>
             </div>
           </form>
