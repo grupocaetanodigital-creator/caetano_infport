@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { supabase } from './services/supabase';
 import Cadastros from './pages/Cadastros';
 import Encomendas from './pages/Encomendas';
-import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package } from 'lucide-react';
+import Custodia from './pages/Custodia';
+import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package, Shield } from 'lucide-react';
 
 export default function App() {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'cadastros' ou 'encomendas'
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia' ou 'cadastros'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -37,11 +38,15 @@ export default function App() {
         return;
       }
 
-      const { data: condData } = await supabase
-        .from('condominios')
-        .select('*')
-        .eq('id', opData.condominio_id)
-        .maybeSingle();
+      let condData = null;
+      if (opData.condominio_id) {
+        const { data: cData } = await supabase
+          .from('condominios')
+          .select('*')
+          .eq('id', opData.condominio_id)
+          .maybeSingle();
+        condData = cData;
+      }
 
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
@@ -61,15 +66,17 @@ export default function App() {
 
   if (operador) {
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col">
+      <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
         {/* Cabeçalho */}
         <header className="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-8 h-8 text-emerald-400" />
             <div>
-              <h1 className="font-bold text-lg leading-tight">INFPORT 1.0</h1>
+              <h1 className="font-bold text-lg leading-tight flex items-center gap-2">
+                INFPORT 1.0 <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-2 py-0.5 rounded">PWA</span>
+              </h1>
               <p className="text-xs text-slate-400 flex items-center gap-1">
-                <Building2 className="w-3 h-3" /> {condominio?.nome}
+                <Building2 className="w-3 h-3 text-slate-400" /> {condominio?.nome || 'Condomínio Geral'}
               </p>
             </div>
           </div>
@@ -79,7 +86,7 @@ export default function App() {
             </span>
             <button
               onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition"
+              className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition shadow-sm"
             >
               <LogOut className="w-4 h-4" />
               Trocar Turno
@@ -87,9 +94,9 @@ export default function App() {
           </div>
         </header>
 
-        {/* Menu de Módulos */}
-        <div className="bg-white border-b border-slate-200 shadow-sm">
-          <div className="max-w-6xl mx-auto flex gap-2 p-2">
+        {/* Menu de Módulos / Navegação */}
+        <div className="bg-white border-b border-slate-200 shadow-sm overflow-x-auto">
+          <div className="max-w-7xl mx-auto flex gap-2 p-2 min-w-max">
             <button
               onClick={() => setModuloAtual('encomendas')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
@@ -100,6 +107,18 @@ export default function App() {
             >
               <Package className="w-4 h-4" />
               Encomendas & Entregadores
+            </button>
+
+            <button
+              onClick={() => setModuloAtual('custodia')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'custodia'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              Custódia de Itens
             </button>
 
             <button
@@ -117,10 +136,16 @@ export default function App() {
         </div>
 
         {/* Conteúdo do Módulo Ativo */}
-        <main className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full">
+        <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
           {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operador} />}
+          {moduloAtual === 'custodia' && <Custodia usuarioLogado={operador} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
         </main>
+
+        {/* Rodapé */}
+        <footer className="bg-slate-900 text-slate-500 text-[11px] py-3 text-center border-t border-slate-800">
+          INFPORT 1.0 — Gestão de Portaria Inteligente
+        </footer>
       </div>
     );
   }
