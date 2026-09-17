@@ -16,30 +16,39 @@ export default function App() {
     setErro('');
 
     try {
-      // Busca o operador pelo login e senha
+      const loginLimpo = login.trim();
+      const senhaLimpa = senha.trim();
+
+      // Busca o operador no banco de dados sem disparar exceção em caso de valor não encontrado
       const { data: opData, error: opError } = await supabase
         .from('operadores')
         .select('*')
-        .eq('login', login)
-        .eq('senha', senha)
+        .eq('login', loginLimpo)
+        .eq('senha', senhaLimpa)
         .eq('ativo', true)
-        .single();
+        .maybeSingle();
 
-      if (opError || !opData) {
-        setErro('Login ou senha inválidos.');
+      if (opError) {
+        setErro(`Erro de permissão/banco: ${opError.message}`);
         setLoading(false);
         return;
       }
 
-      // Busca os dados do condomínio associado
+      if (!opData) {
+        setErro('Usuário ou senha incorretos.');
+        setLoading(false);
+        return;
+      }
+
+      // Busca dados do condomínio vinculado
       const { data: condData, error: condError } = await supabase
         .from('condominios')
         .select('*')
         .eq('id', opData.condominio_id)
-        .single();
+        .maybeSingle();
 
       if (condError && opData.nivel_acesso !== 0) {
-        setErro('Erro ao carregar dados do condomínio.');
+        setErro(`Erro ao carregar condomínio: ${condError.message}`);
         setLoading(false);
         return;
       }
@@ -47,7 +56,7 @@ export default function App() {
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
     } catch (err) {
-      setErro('Falha ao conectar com o servidor.');
+      setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }
@@ -119,7 +128,7 @@ export default function App() {
         </div>
 
         {erro && (
-          <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4 border border-red-200">
+          <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4 border border-red-200 break-words">
             {erro}
           </div>
         )}
