@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Package, Truck, CheckCircle2, AlertCircle, Search, Plus, UserCheck, AlertTriangle, MessageCircle, ExternalLink, X, ShieldAlert, Camera, Upload } from 'lucide-react';
+import { 
+  Package, 
+  Truck, 
+  CheckCircle2, 
+  AlertCircle, 
+  Search, 
+  Plus, 
+  UserCheck, 
+  AlertTriangle, 
+  MessageCircle, 
+  ExternalLink, 
+  X, 
+  ShieldAlert, 
+  Camera, 
+  Upload 
+} from 'lucide-react';
 
 export default function Encomendas({ usuarioLogado }) {
   const [etapa, setEtapa] = useState('1'); // '1' = Recebimento Lote RE, '2' = Triagem, '3' = Baixa/Saída
@@ -36,6 +51,7 @@ export default function Encomendas({ usuarioLogado }) {
 
   // Estados 3ª ETAPA: Saída / Baixa
   const [buscaBaixaUnidade, setBuscaBaixaUnidade] = useState('');
+  const [buscaBaixaBloco, setBuscaBaixaBloco] = useState('');
   const [itensParaBaixa, setItensParaBaixa] = useState([]);
   const [itensSelecionadosIds, setItensSelecionadosIds] = useState([]);
   const [nomeRetirante, setNomeRetirante] = useState('');
@@ -186,7 +202,7 @@ export default function Encomendas({ usuarioLogado }) {
           qtd_declarada: parseInt(qtdDeclarada),
           qtd_triada: 0,
           status: 'aguardando_triagem',
-          operador_id: usuarioLogado.login
+          operador_id: usuarioLogado?.login || usuarioLogado?.id || 'Operador'
         }])
         .select('*, entregadores(nome, empresa, documento)')
         .single();
@@ -194,7 +210,7 @@ export default function Encomendas({ usuarioLogado }) {
       if (error) throw error;
 
       // Gerar link de WhatsApp para Grupo da Administração
-      const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${data.codigo_re}\nTransportadora: ${data.entregadores?.empresa || 'N/A'}\nEntregador: ${data.entregadores?.nome} (Doc: ${data.entregadores?.documento || 'N/A'})\nTotal de Volumes Declarados: ${data.qtd_declarada} pacotes\nOperador: ${usuarioLogado.login}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${data.codigo_re}\nTransportadora: ${data.entregadores?.empresa || 'N/A'}\nEntregador: ${data.entregadores?.nome} (Doc: ${data.entregadores?.documento || 'N/A'})\nTotal de Volumes Declarados: ${data.qtd_declarada} pacotes\nOperador: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
       
       setLoteCriadoWhats({ codigo: data.codigo_re, link: `https://wa.me/?text=${encodeURIComponent(textoWhats)}` });
       setEntregadorSelecionado(null);
@@ -222,13 +238,14 @@ export default function Encomendas({ usuarioLogado }) {
       return;
     }
 
-    // 1. Filtrar TODOS os moradores pertencentes a essa unidade
-    const moradoresEncontrados = moradores.filter(
-      m => m.unidade.toString().toLowerCase() === unid.trim().toLowerCase()
-    );
+    // 1. Filtrar moradores pertencentes a essa unidade com tratamento seguro
+    const moradoresEncontrados = moradores.filter(m => {
+      const uMatch = m.unidade?.toString().toLowerCase() === unid.trim().toLowerCase();
+      const bMatch = bloc.trim() ? m.bloco?.toString().toLowerCase() === bloc.trim().toLowerCase() : true;
+      return uMatch && bMatch;
+    });
     setMoradoresDaUnidade(moradoresEncontrados);
 
-    // Seleciona o primeiro da lista como padrão caso exista
     if (moradoresEncontrados.length > 0) {
       setMoradorSelecionado(moradoresEncontrados[0]);
     } else {
@@ -236,12 +253,18 @@ export default function Encomendas({ usuarioLogado }) {
     }
 
     // 2. Checar Agrupamento de pacotes na portaria
-    const { data: itensRetidos } = await supabase
+    let query = supabase
       .from('encomendas_itens')
       .select('*')
       .eq('condominio_id', usuarioLogado.condominio_id)
       .eq('unidade', unid.trim())
       .eq('status', 'retido');
+
+    if (bloc.trim()) {
+      query = query.eq('bloco', bloc.trim());
+    }
+
+    const { data: itensRetidos } = await query;
 
     if (itensRetidos && itensRetidos.length > 0) {
       tocarAlertaSonoro();
@@ -258,7 +281,7 @@ export default function Encomendas({ usuarioLogado }) {
   const salvarItemTriagem = async (e) => {
     e.preventDefault();
     if (!loteAtivo || !unidadeTriagem.trim() || !fotoEtiquetaUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e tire/informe a foto da etiqueta.' });
+      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e tire a foto da etiqueta.' });
       return;
     }
     setLoading(true);
@@ -317,23 +340,49 @@ export default function Encomendas({ usuarioLogado }) {
   // -------------------------------------------------------------
   // 3ª ETAPA: SAÍDA / BAIXA DE ENCOMENDAS
   // -------------------------------------------------------------
-  const buscarItensParaBaixa = async () => {
-    if (!buscaBaixaUnidade.trim()) return;
+  const buscarItensParaBaixa = async (e) => {
+    if (e) e.preventDefault();
+    if (!buscaBaixaUnidade.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Digite o número da unidade para buscar.' });
+      return;
+    }
     setLoading(true);
+    setMensagem({ tipo: '', texto: '' });
+    setBaixaConcluidaWhats(null);
+
     try {
-      const { data } = await supabase
+      let query = supabase
         .from('encomendas_itens')
         .select('*, moradores(nome, telefone)')
         .eq('condominio_id', usuarioLogado.condominio_id)
         .eq('unidade', buscaBaixaUnidade.trim())
         .eq('status', 'retido');
 
+      if (buscaBaixaBloco.trim()) {
+        query = query.eq('bloco', buscaBaixaBloco.trim());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
       setItensParaBaixa(data || []);
       setItensSelecionadosIds((data || []).map(i => i.id));
+
+      if (!data || data.length === 0) {
+        setMensagem({ tipo: 'erro', texto: 'Nenhuma encomenda pendente encontrada para esta unidade.' });
+      }
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleItemSelecao = (id) => {
+    if (itensSelecionadosIds.includes(id)) {
+      setItensSelecionadosIds(itensSelecionadosIds.filter(item => item !== id));
+    } else {
+      setItensSelecionadosIds([...itensSelecionadosIds, id]);
     }
   };
 
@@ -353,7 +402,7 @@ export default function Encomendas({ usuarioLogado }) {
           retirado_por: nomeRetirante.trim(),
           foto_retirada_url: fotoRetiranteUrl.trim(),
           data_retirada: new Date().toISOString(),
-          operador_baixa_id: usuarioLogado.login
+          operador_baixa_id: usuarioLogado?.login || usuarioLogado?.id || 'Operador'
         })
         .in('id', itensSelecionadosIds);
 
@@ -362,7 +411,7 @@ export default function Encomendas({ usuarioLogado }) {
       // WhatsApp Notificação Cruzada de Segurança
       const primeiroItem = itensParaBaixa[0];
       const telMorador = primeiroItem?.moradores?.telefone?.replace(/\D/g, '') || '';
-      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${buscaBaixaUnidade}\n\nInformamos que o(s) pacote(s) foram RETIRADOS da portaria:\n• Qtd de Volumes Retirados: ${itensSelecionadosIds.length}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado.login}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${buscaBaixaUnidade}${buscaBaixaBloco ? ' - Bloco ' + buscaBaixaBloco : ''}\n\nInformamos que o(s) pacote(s) foram RETIRADOS da portaria:\n• Qtd de Volumes Retirados: ${itensSelecionadosIds.length}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
 
       setBaixaConcluidaWhats({
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
@@ -386,7 +435,7 @@ export default function Encomendas({ usuarioLogado }) {
       {/* Alerta Superior de Status dos Lotes */}
       <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-amber-600" />
+          <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0" />
           <div>
             <h4 className="font-bold text-amber-900 text-sm">Lotes em Triagem Pendentes</h4>
             <p className="text-xs text-amber-700">
@@ -396,7 +445,7 @@ export default function Encomendas({ usuarioLogado }) {
         </div>
         <button
           onClick={() => setEtapa('2')}
-          className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition"
+          className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition flex-shrink-0"
         >
           Ir para Triagem
         </button>
@@ -434,7 +483,7 @@ export default function Encomendas({ usuarioLogado }) {
         <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
           {mensagem.texto}
         </div>
       )}
@@ -508,7 +557,7 @@ export default function Encomendas({ usuarioLogado }) {
 
           {/* Botão de WhatsApp do Lote Criado */}
           {loteCriadoWhats && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 max-w-2xl">
               <p className="text-xs font-bold text-emerald-900">
                 Lote {loteCriadoWhats.codigo} gerado! Dispare o aviso para a gestão:
               </p>
@@ -549,6 +598,11 @@ export default function Encomendas({ usuarioLogado }) {
                   </span>
                 </div>
               ))}
+              {lotesPendentes.length === 0 && (
+                <p className="text-xs text-slate-500 italic text-center py-4">
+                  Nenhum lote pendente de triagem no momento.
+                </p>
+              )}
             </div>
           </div>
 
@@ -713,110 +767,167 @@ export default function Encomendas({ usuarioLogado }) {
       {/* ========================================================================= */}
       {etapa === '3' && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-lg">3ª Etapa — Saída e Baixa de Encomendas</h3>
-              <p className="text-xs text-slate-500">Localize pacotes retidos e confirme a entrega ao morador.</p>
-            </div>
-
-            <div className="flex gap-2 w-full sm:w-auto">
-              <input
-                type="text"
-                value={buscaBaixaUnidade}
-                onChange={(e) => setBuscaBaixaUnidade(e.target.value)}
-                placeholder="Unidade (Ex: 24)"
-                className="p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-bold"
-              />
-              <button
-                onClick={buscarItensParaBaixa}
-                className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-bold text-xs hover:bg-slate-800 transition"
-              >
-                Buscar
-              </button>
-            </div>
+          <div className="border-b pb-4">
+            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+              <UserCheck className="w-6 h-6 text-slate-800" /> Baixa e Entrega de Encomendas Retidas
+            </h3>
+            <p className="text-xs text-slate-500">
+              Busque a unidade do morador para listar os pacotes pendentes e registrar a entrega com comprovante.
+            </p>
           </div>
 
+          {/* Formulário de Busca por Unidade */}
+          <form onSubmit={buscarItensParaBaixa} className="flex flex-col sm:flex-row gap-3 items-end max-w-2xl">
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / AP *</label>
+              <input
+                type="text"
+                required
+                value={buscaBaixaUnidade}
+                onChange={(e) => setBuscaBaixaUnidade(e.target.value)}
+                placeholder="Ex: 24"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-bold"
+              />
+            </div>
+            <div className="w-full sm:w-32">
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
+              <input
+                type="text"
+                value={buscaBaixaBloco}
+                onChange={(e) => setBuscaBaixaBloco(e.target.value)}
+                placeholder="Ex: A"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold px-6 py-3.5 rounded-lg transition flex items-center justify-center gap-2 text-xs uppercase shadow-sm"
+            >
+              <Search className="w-4 h-4" /> Buscar Pacotes
+            </button>
+          </form>
+
+          {/* Listagem de Pacotes Encontrados */}
           {itensParaBaixa.length > 0 && (
-            <form onSubmit={efetivarBaixaSaida} className="space-y-6">
-              <div className="space-y-3">
-                <h4 className="font-bold text-slate-800 text-sm">Pacotes Retidos para a Unidade {buscaBaixaUnidade}:</h4>
-                {itensParaBaixa.map(item => (
-                  <div key={item.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={itensSelecionadosIds.includes(item.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setItensSelecionadosIds([...itensSelecionadosIds, item.id]);
-                          else setItensSelecionadosIds(itensSelecionadosIds.filter(id => id !== item.id));
-                        }}
-                        className="w-5 h-5 accent-slate-900"
-                      />
-                      <div>
-                        <strong className="text-sm text-slate-900">Unidade {item.unidade} {item.bloco ? `- Bloco ${item.bloco}` : ''}</strong>
-                        <p className="text-xs text-slate-500">Obs: {item.observacoes || 'Sem observação'}</p>
+            <div className="space-y-6 max-w-3xl pt-2">
+              <div className="border-t border-slate-200 pt-4">
+                <h4 className="font-bold text-slate-800 text-sm mb-3">
+                  Pacotes Encontrados ({itensParaBaixa.length} volume(s) pendente(s)):
+                </h4>
+
+                <div className="space-y-3">
+                  {itensParaBaixa.map((item) => (
+                    <label
+                      key={item.id}
+                      className={`p-4 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                        itensSelecionadosIds.includes(item.id)
+                          ? 'border-emerald-500 bg-emerald-50/50'
+                          : 'border-slate-200 bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={itensSelecionadosIds.includes(item.id)}
+                          onChange={() => toggleItemSelecao(item.id)}
+                          className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Destinatário: {item.moradores?.nome || 'Não especificado'}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Cód. Barras: {item.codigo_barras || 'Sem código'} | Obs: {item.observacoes || 'Nenhuma'}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Recebido em: {new Date(item.created_at).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full">
-                      Retido na Portaria
-                    </span>
-                  </div>
-                ))}
+
+                      {item.foto_etiqueta_url && (
+                        <img
+                          src={item.foto_etiqueta_url}
+                          alt="Foto do Pacote"
+                          className="w-12 h-12 rounded-lg object-cover border border-slate-200"
+                        />
+                      )}
+                    </label>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Formulário de Efetivação da Entrega */}
+              <form onSubmit={efetivarBaixaSaida} className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                <h4 className="font-bold text-slate-900 text-sm border-b pb-2">
+                  Dados da Retirada ({itensSelecionadosIds.length} pacote(s) selecionado(s))
+                </h4>
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Retirante *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Nome Completo do Retirante *
+                  </label>
                   <input
                     type="text"
                     required
                     value={nomeRetirante}
                     onChange={(e) => setNomeRetirante(e.target.value)}
-                    placeholder="Ex: Maria Caetano (Própria Moradora)"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                    placeholder="Ex: Carlos (Próprio Morador / Filho / Prestador)"
+                    className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium"
                   />
                 </div>
 
+                {/* Captura da Foto do Retirante */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">Foto do Retirante / Comprovante *</label>
-                  <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Foto do Retirante com os Pacotes (Comprovante) *
+                  </label>
+                  <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
                     <Camera className="w-5 h-5 text-emerald-400" />
-                    {uploadingFoto ? 'Salvando Foto...' : '📷 Tirar Foto do Retirante'}
+                    {uploadingFoto ? 'Salvando foto...' : '📷 Tirar Foto do Retirante / Entrega'}
                     <input
                       type="file"
                       accept="image/*"
                       capture="environment"
-                      onChange={(e) => uploadFotoStorage(e.target.files[0], 'baixas', setFotoRetiranteUrl)}
+                      onChange={(e) => uploadFotoStorage(e.target.files[0], 'comprovantes_baixa', setFotoRetiranteUrl)}
                       className="hidden"
                       disabled={uploadingFoto}
                     />
                   </label>
+
                   <input
                     type="url"
                     required
                     value={fotoRetiranteUrl}
                     onChange={(e) => setFotoRetiranteUrl(e.target.value)}
-                    placeholder="URL gerada automaticamente..."
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-mono"
+                    placeholder="URL do comprovante..."
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono"
                   />
-                </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={loading || uploadingFoto}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition shadow-md"
-              >
-                Efetivar Baixa de Saída e Gravar
-              </button>
-            </form>
+                  {fotoRetiranteUrl && (
+                    <div className="mt-2 relative w-28 h-28 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-sm">
+                      <img src={fotoRetiranteUrl} alt="Foto Retirante" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || itensSelecionadosIds.length === 0 || uploadingFoto}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition shadow-md text-sm uppercase"
+                >
+                  Efetivar Baixa de Saída e Registrar
+                </button>
+              </form>
+            </div>
           )}
 
-          {/* Link WhatsApp Notificação Cruzada */}
+          {/* Notificação Cruzada de Segurança no WhatsApp */}
           {baixaConcluidaWhats && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 max-w-2xl">
               <p className="text-xs font-bold text-emerald-900">
-                Notificação Cruzada de Confirmação de Retirada pronta:
+                Baixa concluída com sucesso! Envie o comprovante de segurança para o morador:
               </p>
               <a
                 href={baixaConcluidaWhats.link}
@@ -824,75 +935,83 @@ export default function Encomendas({ usuarioLogado }) {
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
               >
-                <MessageCircle className="w-4 h-4" /> Enviar Confirmação de Retirada no WhatsApp <ExternalLink className="w-3 h-3" />
+                <MessageCircle className="w-4 h-4" /> Enviar Comprovante Cruzado no WhatsApp <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           )}
         </div>
       )}
 
-      {/* MODAL NOVO ENTREGADOR RÁPIDO */}
+      {/* ========================================================================= */}
+      {/* MODAL DE CADASTRO RÁPIDO DE ENTREGADOR */}
+      {/* ========================================================================= */}
       {modalNovoEntregador && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
-          <form onSubmit={cadastrarEntregadorRapido} className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-900">Cadastro Rápido de Entregador</h3>
-              <button type="button" onClick={() => setModalNovoEntregador(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button
+              onClick={() => setModalNovoEntregador(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome Completo *</label>
-              <input
-                type="text"
-                required
-                value={novoEntNome}
-                onChange={(e) => setNovoEntNome(e.target.value)}
-                placeholder="Ex: Marcos Antônio"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2 border-b pb-3">
+              <Plus className="w-5 h-5 text-emerald-600" /> Cadastrar Entregador Rápido
+            </h3>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Empresa / Transportadora</label>
-              <input
-                type="text"
-                value={novoEntEmpresa}
-                onChange={(e) => setNovoEntEmpresa(e.target.value)}
-                placeholder="Ex: Mercado Livre, Shopee, Amazon"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
+            <form onSubmit={cadastrarEntregadorRapido} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Entregador *</label>
+                <input
+                  type="text"
+                  required
+                  value={novoEntNome}
+                  onChange={(e) => setNovoEntNome(e.target.value)}
+                  placeholder="Ex: Roberto Silva"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">CPF ou RG</label>
-              <input
-                type="text"
-                value={novoEntDoc}
-                onChange={(e) => setNovoEntDoc(e.target.value)}
-                placeholder="Ex: 783.871.847-76"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">RG ou CPF</label>
+                <input
+                  type="text"
+                  value={novoEntDoc}
+                  onChange={(e) => setNovoEntDoc(e.target.value)}
+                  placeholder="Ex: 12.345.678-9"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
 
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setModalNovoEntregador(false)}
-                className="flex-1 py-3 border border-slate-300 font-bold text-slate-700 rounded-lg hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-3 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800"
-              >
-                Salvar
-              </button>
-            </div>
-          </form>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Empresa / Transportadora</label>
+                <input
+                  type="text"
+                  value={novoEntEmpresa}
+                  onChange={(e) => setNovoEntEmpresa(e.target.value)}
+                  placeholder="Ex: Mercado Livre, Amazon, Shopee..."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalNovoEntregador(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-lg text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-xs transition"
+                >
+                  Salvar Entregador
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
