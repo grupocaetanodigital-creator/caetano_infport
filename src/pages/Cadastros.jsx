@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Building2, Users, UserPlus, Home, Plus, Search, CheckCircle, AlertCircle } from 'lucide-react';
+import { Building2, Users, UserPlus, Home, Plus, Search, CheckCircle, AlertCircle, Pencil, X } from 'lucide-react';
 
 export default function Cadastros({ usuarioLogado }) {
   const [abaAtiva, setAbaAtiva] = useState('condominios');
@@ -9,6 +9,9 @@ export default function Cadastros({ usuarioLogado }) {
   const [moradores, setMoradores] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
+
+  // Controle de edição
+  const [idEdicao, setIdEdicao] = useState(null);
 
   // Formulário Condomínio
   const [nomeCondominio, setNomeCondominio] = useState('');
@@ -32,8 +35,25 @@ export default function Cadastros({ usuarioLogado }) {
   const [termoBuscaMorador, setTermoBuscaMorador] = useState('');
 
   useEffect(() => {
+    limparFormularios();
     carregarDados();
   }, [abaAtiva]);
+
+  const limparFormularios = () => {
+    setIdEdicao(null);
+    setNomeCondominio('');
+    setEnderecoCondominio('');
+    setNomeOperador('');
+    setLoginOperador('');
+    setSenhaOperador('');
+    setNivelAcesso('3');
+    setCondominioIdOperador('');
+    setNomeMorador('');
+    setBlocoMorador('');
+    setUnidadeMorador('');
+    setTelefoneMorador('');
+    setCondominioIdMorador('');
+  };
 
   const carregarDados = async () => {
     setLoading(true);
@@ -70,62 +90,111 @@ export default function Cadastros({ usuarioLogado }) {
     }
   };
 
-  const cadastrarCondominio = async (e) => {
+  // Salvar ou Editar Condomínio
+  const salvarCondominio = async (e) => {
     e.preventDefault();
     if (!nomeCondominio.trim()) return;
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('condominios').insert([
-        { nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() }
-      ]);
-      if (error) throw error;
+      if (idEdicao) {
+        const { error } = await supabase
+          .from('condominios')
+          .update({ nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() })
+          .eq('id', idEdicao);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Condomínio atualizado com sucesso!' });
+      } else {
+        const { error } = await supabase.from('condominios').insert([
+          { nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() }
+        ]);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Condomínio cadastrado com sucesso!' });
+      }
 
-      setMensagem({ tipo: 'sucesso', texto: 'Condomínio cadastrado com sucesso!' });
-      setNomeCondominio('');
-      setEnderecoCondominio('');
+      limparFormularios();
       carregarDados();
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao cadastrar: ${err.message}` });
+      setMensagem({ tipo: 'erro', texto: `Erro ao salvar: ${err.message}` });
     } finally {
       setLoading(false);
     }
   };
 
-  const cadastrarOperador = async (e) => {
+  const prepararEdicaoCondominio = (c) => {
+    setIdEdicao(c.id);
+    setNomeCondominio(c.nome);
+    setEnderecoCondominio(c.endereco || '');
+  };
+
+  // Salvar ou Editar Operador
+  const salvarOperador = async (e) => {
     e.preventDefault();
-    if (!nomeOperador.trim() || !loginOperador.trim() || !senhaOperador.trim() || !condominioIdOperador) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha todos os campos do operador.' });
+    if (!nomeOperador.trim() || !loginOperador.trim() || !condominioIdOperador) {
+      setMensagem({ tipo: 'erro', texto: 'Preencha todos os campos obrigatórios do operador.' });
       return;
     }
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('operadores').insert([
-        {
+      if (idEdicao) {
+        const dadosAtualizacao = {
           nome: nomeOperador.trim(),
           login: loginOperador.trim(),
-          senha: senhaOperador.trim(),
           nivel_acesso: parseInt(nivelAcesso),
-          condominio_id: condominioIdOperador,
-          ativo: true
+          condominio_id: condominioIdOperador
+        };
+        if (senhaOperador.trim()) {
+          dadosAtualizacao.senha = senhaOperador.trim();
         }
-      ]);
-      if (error) throw error;
 
-      setMensagem({ tipo: 'sucesso', texto: 'Operador cadastrado com sucesso!' });
-      setNomeOperador('');
-      setLoginOperador('');
-      setSenhaOperador('');
+        const { error } = await supabase
+          .from('operadores')
+          .update(dadosAtualizacao)
+          .eq('id', idEdicao);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Operador atualizado com sucesso!' });
+      } else {
+        if (!senhaOperador.trim()) {
+          setMensagem({ tipo: 'erro', texto: 'Informe a senha para o novo operador.' });
+          setLoading(false);
+          return;
+        }
+
+        const { error } = await supabase.from('operadores').insert([
+          {
+            nome: nomeOperador.trim(),
+            login: loginOperador.trim(),
+            senha: senhaOperador.trim(),
+            nivel_acesso: parseInt(nivelAcesso),
+            condominio_id: condominioIdOperador,
+            ativo: true
+          }
+        ]);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Operador cadastrado com sucesso!' });
+      }
+
+      limparFormularios();
       carregarDados();
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao cadastrar operador: ${err.message}` });
+      setMensagem({ tipo: 'erro', texto: `Erro ao salvar operador: ${err.message}` });
     } finally {
       setLoading(false);
     }
   };
 
-  const cadastrarMorador = async (e) => {
+  const prepararEdicaoOperador = (op) => {
+    setIdEdicao(op.id);
+    setNomeOperador(op.nome);
+    setLoginOperador(op.login);
+    setSenhaOperador('');
+    setNivelAcesso(String(op.nivel_acesso));
+    setCondominioIdOperador(op.condominio_id || '');
+  };
+
+  // Salvar ou Editar Morador
+  const salvarMorador = async (e) => {
     e.preventDefault();
     if (!nomeMorador.trim() || !unidadeMorador.trim() || !condominioIdMorador) {
       setMensagem({ tipo: 'erro', texto: 'Nome, Unidade e Condomínio são obrigatórios.' });
@@ -134,28 +203,49 @@ export default function Cadastros({ usuarioLogado }) {
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('moradores').insert([
-        {
-          nome: nomeMorador.trim(),
-          bloco: blocoMorador.trim(),
-          unidade: unidadeMorador.trim(),
-          telefone: telefoneMorador.trim(),
-          condominio_id: condominioIdMorador
-        }
-      ]);
-      if (error) throw error;
+      if (idEdicao) {
+        const { error } = await supabase
+          .from('moradores')
+          .update({
+            nome: nomeMorador.trim(),
+            bloco: blocoMorador.trim(),
+            unidade: unidadeMorador.trim(),
+            telefone: telefoneMorador.trim(),
+            condominio_id: condominioIdMorador
+          })
+          .eq('id', idEdicao);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Morador atualizado com sucesso!' });
+      } else {
+        const { error } = await supabase.from('moradores').insert([
+          {
+            nome: nomeMorador.trim(),
+            bloco: blocoMorador.trim(),
+            unidade: unidadeMorador.trim(),
+            telefone: telefoneMorador.trim(),
+            condominio_id: condominioIdMorador
+          }
+        ]);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Morador cadastrado com sucesso!' });
+      }
 
-      setMensagem({ tipo: 'sucesso', texto: 'Morador cadastrado com sucesso!' });
-      setNomeMorador('');
-      setBlocoMorador('');
-      setUnidadeMorador('');
-      setTelefoneMorador('');
+      limparFormularios();
       carregarDados();
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao cadastrar morador: ${err.message}` });
+      setMensagem({ tipo: 'erro', texto: `Erro ao salvar morador: ${err.message}` });
     } finally {
       setLoading(false);
     }
+  };
+
+  const prepararEdicaoMorador = (m) => {
+    setIdEdicao(m.id);
+    setNomeMorador(m.nome);
+    setBlocoMorador(m.bloco || '');
+    setUnidadeMorador(m.unidade || '');
+    setTelefoneMorador(m.telefone || '');
+    setCondominioIdMorador(m.condominio_id || '');
   };
 
   return (
@@ -216,9 +306,21 @@ export default function Cadastros({ usuarioLogado }) {
       {/* ABA CONDOMÍNIOS */}
       {abaAtiva === 'condominios' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={cadastrarCondominio} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" /> Cadastrar Condomínio
+          <form onSubmit={salvarCondominio} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-600" />
+                {idEdicao ? 'Editar Condomínio' : 'Cadastrar Condomínio'}
+              </span>
+              {idEdicao && (
+                <button
+                  type="button"
+                  onClick={limparFormularios}
+                  className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" /> Cancelar
+                </button>
+              )}
             </h3>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Condomínio</label>
@@ -246,7 +348,7 @@ export default function Cadastros({ usuarioLogado }) {
               disabled={loading}
               className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
             >
-              Salvar Condomínio
+              {idEdicao ? 'Atualizar Condomínio' : 'Salvar Condomínio'}
             </button>
           </form>
 
@@ -259,7 +361,18 @@ export default function Cadastros({ usuarioLogado }) {
                     <h4 className="font-bold text-slate-900">{c.nome}</h4>
                     <p className="text-xs text-slate-500">{c.endereco || 'Sem endereço informado'}</p>
                   </div>
-                  <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">Ativo</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => prepararEdicaoCondominio(c)}
+                      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                      title="Editar"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
+                      Ativo
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -270,9 +383,21 @@ export default function Cadastros({ usuarioLogado }) {
       {/* ABA OPERADORES */}
       {abaAtiva === 'operadores' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={cadastrarOperador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-emerald-600" /> Novo Operador
+          <form onSubmit={salvarOperador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-600" />
+                {idEdicao ? 'Editar Operador' : 'Novo Operador'}
+              </span>
+              {idEdicao && (
+                <button
+                  type="button"
+                  onClick={limparFormularios}
+                  className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" /> Cancelar
+                </button>
+              )}
             </h3>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio</label>
@@ -311,13 +436,15 @@ export default function Cadastros({ usuarioLogado }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Senha</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                {idEdicao ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}
+              </label>
               <input
                 type="password"
-                required
+                required={!idEdicao}
                 value={senhaOperador}
                 onChange={(e) => setSenhaOperador(e.target.value)}
-                placeholder="Sua senha"
+                placeholder={idEdicao ? '******' : 'Sua senha'}
                 className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
               />
             </div>
@@ -338,7 +465,7 @@ export default function Cadastros({ usuarioLogado }) {
               disabled={loading}
               className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
             >
-              Salvar Operador
+              {idEdicao ? 'Atualizar Operador' : 'Salvar Operador'}
             </button>
           </form>
 
@@ -351,9 +478,18 @@ export default function Cadastros({ usuarioLogado }) {
                     <h4 className="font-bold text-slate-900">{op.nome}</h4>
                     <p className="text-xs text-slate-500">Login: {op.login} | Nível: {op.nivel_acesso}</p>
                   </div>
-                  <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
-                    {op.nivel_acesso === 0 ? 'Dev Admin' : `Nível ${op.nivel_acesso}`}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => prepararEdicaoOperador(op)}
+                      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                      title="Editar"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
+                      {op.nivel_acesso === 0 ? 'Dev Admin' : `Nível ${op.nivel_acesso}`}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -364,9 +500,21 @@ export default function Cadastros({ usuarioLogado }) {
       {/* ABA MORADORES */}
       {abaAtiva === 'moradores' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={cadastrarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-emerald-600" /> Cadastrar Morador
+          <form onSubmit={salvarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-600" />
+                {idEdicao ? 'Editar Morador' : 'Cadastrar Morador'}
+              </span>
+              {idEdicao && (
+                <button
+                  type="button"
+                  onClick={limparFormularios}
+                  className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" /> Cancelar
+                </button>
+              )}
             </h3>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio</label>
@@ -431,7 +579,7 @@ export default function Cadastros({ usuarioLogado }) {
               disabled={loading}
               className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
             >
-              Salvar Morador
+              {idEdicao ? 'Atualizar Morador' : 'Salvar Morador'}
             </button>
           </form>
 
@@ -463,6 +611,13 @@ export default function Cadastros({ usuarioLogado }) {
                         {m.bloco ? `Bloco ${m.bloco} - ` : ''}Unidade {m.unidade} | Tel: {m.telefone || 'Não informado'}
                       </p>
                     </div>
+                    <button
+                      onClick={() => prepararEdicaoMorador(m)}
+                      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                      title="Editar"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   </div>
                 ))
               )}
