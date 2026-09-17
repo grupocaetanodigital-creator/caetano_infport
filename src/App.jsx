@@ -6,14 +6,15 @@ import Custodia from './pages/Custodia';
 import Materiais from './pages/Materiais';
 import Chaves from './pages/Chaves';
 import Manutencao from './pages/Manutencao';
-import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package, Shield, Radio, Key, Wrench } from 'lucide-react';
+import Rondas from './pages/Rondas';
+import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package, Shield, Radio, Key, Wrench, QrCode } from 'lucide-react';
 
 export default function App() {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'cadastros'
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'cadastros'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -161,6 +162,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setModuloAtual('rondas')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'rondas'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <QrCode className="w-4 h-4" />
+              Rondas Patrimoniais
+            </button>
+
+            <button
               onClick={() => setModuloAtual('cadastros')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
                 moduloAtual === 'cadastros'
@@ -181,6 +194,7 @@ export default function App() {
           {moduloAtual === 'materiais' && <Materiais usuarioLogado={operador} />}
           {moduloAtual === 'chaves' && <Chaves usuarioLogado={operador} />}
           {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operador} />}
+          {moduloAtual === 'rondas' && <Rondas usuarioLogado={operador} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
         </main>
 
