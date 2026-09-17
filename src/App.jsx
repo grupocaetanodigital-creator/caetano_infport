@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from './services/supabase';
-import { ShieldCheck, Lock, User, LogOut, Building2 } from 'lucide-react';
+import Cadastros from './pages/Cadastros';
+import { ShieldCheck, Lock, User, LogOut, Building2, Database } from 'lucide-react';
 
 export default function App() {
   const [login, setLogin] = useState('');
@@ -19,7 +20,6 @@ export default function App() {
       const loginLimpo = login.trim();
       const senhaLimpa = senha.trim();
 
-      // Busca o operador no banco de dados sem disparar exceção em caso de valor não encontrado
       const { data: opData, error: opError } = await supabase
         .from('operadores')
         .select('*')
@@ -40,18 +40,11 @@ export default function App() {
         return;
       }
 
-      // Busca dados do condomínio vinculado
-      const { data: condData, error: condError } = await supabase
+      const { data: condData } = await supabase
         .from('condominios')
         .select('*')
         .eq('id', opData.condominio_id)
         .maybeSingle();
-
-      if (condError && opData.nivel_acesso !== 0) {
-        setErro(`Erro ao carregar condomínio: ${condError.message}`);
-        setLoading(false);
-        return;
-      }
 
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
@@ -83,34 +76,31 @@ export default function App() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition"
-          >
-            <LogOut className="w-4 h-4" />
-            Trocar Turno
-          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-300 hidden sm:inline">
+              Operador: <strong>{operador.nome}</strong>
+            </span>
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition"
+            >
+              <LogOut className="w-4 h-4" />
+              Trocar Turno
+            </button>
+          </div>
         </header>
 
-        {/* Painel Principal */}
-        <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 mb-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-1">
-              Bem-vindo, {operador.nome}!
-            </h2>
-            <p className="text-sm text-slate-600">
-              Nível de Acesso: <span className="font-semibold text-slate-900">
-                {operador.nivel_acesso === 0 ? 'Administrador Geral (Dev)' : `Nível ${operador.nivel_acesso}`}
-              </span>
-            </p>
+        {/* Conteúdo Principal (Módulo 01) */}
+        <main className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+            <Database className="w-6 h-6 text-slate-700" />
+            <div>
+              <h2 className="font-bold text-slate-800">Módulo 01: Cadastros Base</h2>
+              <p className="text-xs text-slate-500">Gerenciamento de Condomínios, Operadores e Moradores.</p>
+            </div>
           </div>
 
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-center">
-            <p className="font-medium">Sessão iniciada com sucesso!</p>
-            <p className="text-sm text-emerald-600 mt-1">
-              Pronto para a integração dos Módulos operacionais.
-            </p>
-          </div>
+          <Cadastros usuarioLogado={operador} />
         </main>
       </div>
     );
@@ -163,7 +153,7 @@ export default function App() {
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 placeholder="Digite sua senha"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-900 text-base"
+                className="w-full p-3 pl-10 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-base"
               />
             </div>
           </div>
