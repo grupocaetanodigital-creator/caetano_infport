@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { Package, Truck, CheckCircle2, AlertCircle, Search, Plus, UserCheck, AlertTriangle, MessageCircle, ExternalLink, X, ShieldAlert } from 'lucide-react';
+import { Package, Truck, CheckCircle2, AlertCircle, Search, Plus, UserCheck, AlertTriangle, MessageCircle, ExternalLink, X, ShieldAlert, Camera, Upload } from 'lucide-react';
 
 export default function Encomendas({ usuarioLogado }) {
   const [etapa, setEtapa] = useState('1'); // '1' = Recebimento Lote RE, '2' = Triagem, '3' = Baixa/Saída
   const [loading, setLoading] = useState(false);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
   // Listas do Banco
   const [entregadores, setEntregadores] = useState([]);
   const [lotesPendentes, setLotesPendentes] = useState([]);
   const [moradores, setMoradores] = useState([]);
-  const [pacotesRetidos, setPacotesRetidos] = useState([]);
 
   // Estados 1ª ETAPA: Recebimento de Lote RE
-  const [buscaEntregador, setBuscaEntregador] = useState('');
   const [entregadorSelecionado, setEntregadorSelecionado] = useState(null);
   const [qtdDeclarada, setQtdDeclarada] = useState(1);
   const [modalNovoEntregador, setModalNovoEntregador] = useState(false);
@@ -27,6 +26,7 @@ export default function Encomendas({ usuarioLogado }) {
   const [loteAtivo, setLoteAtivo] = useState(null);
   const [unidadeTriagem, setUnidadeTriagem] = useState('');
   const [blocoTriagem, setBlocoTriagem] = useState('');
+  const [moradoresDaUnidade, setMoradoresDaUnidade] = useState([]);
   const [moradorSelecionado, setMoradorSelecionado] = useState(null);
   const [codigoBarras, setCodigoBarras] = useState('');
   const [fotoEtiquetaUrl, setFotoEtiquetaUrl] = useState('');
@@ -67,11 +67,12 @@ export default function Encomendas({ usuarioLogado }) {
         .order('created_at', { ascending: false });
       setLotesPendentes(lotesData || []);
 
-      // Carregar Moradores
+      // Carregar Todos os Moradores do Condomínio
       const { data: moradData } = await supabase
         .from('moradores')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id);
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .order('nome');
       setMoradores(moradData || []);
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
@@ -80,7 +81,7 @@ export default function Encomendas({ usuarioLogado }) {
     }
   };
 
-  // Tocar alerta sonoro nativo via Web Audio API
+  // Alerta sonoro nativo via Web Audio API
   const tocarAlertaSonoro = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -97,6 +98,35 @@ export default function Encomendas({ usuarioLogado }) {
       osc.stop(ctx.currentTime + 0.6);
     } catch (e) {
       console.log('Audio API indisponível', e);
+    }
+  };
+
+  // Função para Captura de Foto e Upload no Supabase Storage
+  const uploadFotoStorage = async (file, pastaDestino, setUrlCallback) => {
+    if (!file) return;
+    setUploadingFoto(true);
+    setMensagem({ tipo: '', texto: '' });
+
+    try {
+      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
+      const fileName = `${pastaDestino}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('encomendas')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('encomendas')
+        .getPublicUrl(fileName);
+
+      setUrlCallback(urlData.publicUrl);
+      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada e salva com sucesso!' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: 'Falha ao salvar foto: ' + err.message });
+    } finally {
+      setUploadingFoto(false);
     }
   };
 
@@ -181,16 +211,31 @@ export default function Encomendas({ usuarioLogado }) {
   // -------------------------------------------------------------
   // 2ª ETAPA: TRIAGEM INDIVIDUAL
   // -------------------------------------------------------------
-  const verificarAgrupamentoEBuscarMorador = async (unid, bloc) => {
+  const buscarMoradoresEChecarAgrupamento = async (unid, bloc) => {
     setUnidadeTriagem(unid);
     setBlocoTriagem(bloc);
-    if (!unid.trim()) return;
 
-    // Buscar Morador
-    const morad = moradores.find(m => m.unidade.toLowerCase() === unid.toLowerCase());
-    setMoradorSelecionado(morad || null);
+    if (!unid.trim()) {
+      setMoradoresDaUnidade([]);
+      setMoradorSelecionado(null);
+      setAlertaAgrupamento(null);
+      return;
+    }
 
-    // Checar Agrupamento na tabela encomendas_itens
+    // 1. Filtrar TODOS os moradores pertencentes a essa unidade
+    const moradoresEncontrados = moradores.filter(
+      m => m.unidade.toString().toLowerCase() === unid.trim().toLowerCase()
+    );
+    setMoradoresDaUnidade(moradoresEncontrados);
+
+    // Seleciona o primeiro da lista como padrão caso exista
+    if (moradoresEncontrados.length > 0) {
+      setMoradorSelecionado(moradoresEncontrados[0]);
+    } else {
+      setMoradorSelecionado(null);
+    }
+
+    // 2. Checar Agrupamento de pacotes na portaria
     const { data: itensRetidos } = await supabase
       .from('encomendas_itens')
       .select('*')
@@ -213,7 +258,7 @@ export default function Encomendas({ usuarioLogado }) {
   const salvarItemTriagem = async (e) => {
     e.preventDefault();
     if (!loteAtivo || !unidadeTriagem.trim() || !fotoEtiquetaUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e informe a URL da Foto da Etiqueta.' });
+      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e tire/informe a foto da etiqueta.' });
       return;
     }
     setLoading(true);
@@ -245,16 +290,19 @@ export default function Encomendas({ usuarioLogado }) {
         .update({ qtd_triada: novaQtdTriada, status: novoStatusLote })
         .eq('id', loteAtivo.id);
 
-      // 3. Gerar link WhatsApp Morador
+      // 3. Gerar link WhatsApp Morador Destinatário
       const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
-      const textoWhatsMorador = `Olá, Apt ${unidadeTriagem} ${blocoTriagem ? 'Bloco ' + blocoTriagem : ''} - ${moradorSelecionado?.nome || 'Morador'}! 📦\nSua encomenda chegou na Portaria.\n\n• Lote/RE: ${loteAtivo.codigo_re}\n• Observação: ${observacoes || 'Nenhuma'}\n• Porteiro: ${usuarioLogado.login}\n• Data/Hora: ${new Date().toLocaleString('pt-BR')}\n• Foto da Etiqueta: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria assim que possível.`;
+      const nomeDestinatario = moradorSelecionado ? moradorSelecionado.nome : 'Morador';
+      
+      const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria assim que possível!`;
 
       setItemTriadoWhats({
+        destinatario: nomeDestinatario,
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoWhatsMorador)}` : `https://wa.me/?text=${encodeURIComponent(textoWhatsMorador)}`
       });
 
-      // Limpar form do item mantendo o lote ativo
-      setUnidadeTriagem(''); setBlocoTriagem(''); setMoradorSelecionado(null);
+      // Resetar formulário mantendo o lote ativo
+      setUnidadeTriagem(''); setBlocoTriagem(''); setMoradorSelecionado(null); setMoradoresDaUnidade([]);
       setCodigoBarras(''); setFotoEtiquetaUrl(''); setObservacoes('');
       setAlertaAgrupamento(null);
       carregarDadosBase();
@@ -292,7 +340,7 @@ export default function Encomendas({ usuarioLogado }) {
   const efetivarBaixaSaida = async (e) => {
     e.preventDefault();
     if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione os pacotes, informe quem retirou e a URL da Foto do Retirante.' });
+      setMensagem({ tipo: 'erro', texto: 'Selecione os pacotes, informe o nome do retirante e tire a foto da entrega.' });
       return;
     }
     setLoading(true);
@@ -331,7 +379,6 @@ export default function Encomendas({ usuarioLogado }) {
     }
   };
 
-  // Card de alerta superior de lotes em triagem
   const totalPacotesPendentes = lotesPendentes.reduce((acc, l) => acc + (l.qtd_declarada - l.qtd_triada), 0);
 
   return (
@@ -511,7 +558,7 @@ export default function Encomendas({ usuarioLogado }) {
               2. Individualizar Pacote {loteAtivo ? `— Lote ${loteAtivo.codigo_re}` : '(Selecione um lote)'}
             </h3>
 
-            {/* CARD ALERTA DE AGRUPAMENTO (SE HOUVER PACOTES ANTERIORES) */}
+            {/* CARD ALERTA DE AGRUPAMENTO */}
             {alertaAgrupamento && (
               <div className="p-4 bg-red-600 text-white rounded-xl shadow-lg animate-pulse space-y-1">
                 <div className="flex items-center gap-2 font-bold text-sm">
@@ -527,14 +574,14 @@ export default function Encomendas({ usuarioLogado }) {
             <form onSubmit={salvarItemTriagem} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Ap *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / AP *</label>
                   <input
                     type="text"
                     required
                     value={unidadeTriagem}
-                    onChange={(e) => verificarAgrupamentoEBuscarMorador(e.target.value, blocoTriagem)}
-                    placeholder="Ex: 102"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                    onChange={(e) => buscarMoradoresEChecarAgrupamento(e.target.value, blocoTriagem)}
+                    placeholder="Ex: 24"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-bold"
                   />
                 </div>
                 <div>
@@ -542,29 +589,72 @@ export default function Encomendas({ usuarioLogado }) {
                   <input
                     type="text"
                     value={blocoTriagem}
-                    onChange={(e) => { setBlocoTriagem(e.target.value); verificarAgrupamentoEBuscarMorador(unidadeTriagem, e.target.value); }}
-                    placeholder="Ex: B"
+                    onChange={(e) => { setBlocoTriagem(e.target.value); buscarMoradoresEChecarAgrupamento(unidadeTriagem, e.target.value); }}
+                    placeholder="Ex: A"
                     className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                   />
                 </div>
               </div>
 
-              {moradorSelecionado && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900">
-                  Morador Vinculado: <strong>{moradorSelecionado.nome}</strong> | Tel: {moradorSelecionado.telefone || 'Sem tel'}
+              {/* LISTAGEM E SELEÇÃO DO DESTINATÁRIO EXATO */}
+              {moradoresDaUnidade.length > 0 ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Selecione o Morador / Destinatário ({moradoresDaUnidade.length} morador(es) na unidade) *
+                  </label>
+                  <select
+                    value={moradorSelecionado?.id || ''}
+                    onChange={(e) => {
+                      const m = moradoresDaUnidade.find(x => x.id === e.target.value);
+                      setMoradorSelecionado(m || null);
+                    }}
+                    className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm"
+                  >
+                    {moradoresDaUnidade.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.nome} — Tel: {m.telefone || 'Sem telefone'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : unidadeTriagem.trim() !== '' && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                  Nenhum morador cadastrado nesta unidade. O registro será feito genérico.
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">URL da Foto da Etiqueta *</label>
+              {/* BOTÃO E CAMPO DE CAPTURA DE FOTO */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Etiqueta / Pacote *</label>
+                <div className="flex gap-2 items-center">
+                  <label className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
+                    <Camera className="w-5 h-5 text-emerald-400" />
+                    {uploadingFoto ? 'Processando Imagem...' : '📷 Tirar Foto da Encomenda'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => uploadFotoStorage(e.target.files[0], 'etiquetas', setFotoEtiquetaUrl)}
+                      className="hidden"
+                      disabled={uploadingFoto}
+                    />
+                  </label>
+                </div>
+
                 <input
                   type="url"
                   required
                   value={fotoEtiquetaUrl}
                   onChange={(e) => setFotoEtiquetaUrl(e.target.value)}
-                  placeholder="https://supabase.co/.../foto.jpg"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                  placeholder="URL gerada automaticamente ao tirar a foto..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-mono"
                 />
+
+                {fotoEtiquetaUrl && (
+                  <div className="mt-2 relative w-28 h-28 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-sm">
+                    <img src={fotoEtiquetaUrl} alt="Etiqueta Capturada" className="w-full h-full object-cover" />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -573,7 +663,7 @@ export default function Encomendas({ usuarioLogado }) {
                   type="text"
                   value={codigoBarras}
                   onChange={(e) => setCodigoBarras(e.target.value)}
-                  placeholder="Leitura de código..."
+                  placeholder="Leitura do código..."
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                 />
               </div>
@@ -584,15 +674,15 @@ export default function Encomendas({ usuarioLogado }) {
                   type="text"
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
-                  placeholder="Ex: Caixa amassada no canto superior"
+                  placeholder="Ex: Caixa levemente amassada"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={loading || !loteAtivo}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl transition"
+                disabled={loading || !loteAtivo || uploadingFoto}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition shadow-md"
               >
                 Salvar Pacote na Portaria
               </button>
@@ -602,7 +692,7 @@ export default function Encomendas({ usuarioLogado }) {
             {itemTriadoWhats && (
               <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
                 <p className="text-xs font-bold text-emerald-900">
-                  Notificação do Morador pronta para envio:
+                  Notificação gerada para <strong>{itemTriadoWhats.destinatario}</strong>:
                 </p>
                 <a
                   href={itemTriadoWhats.link}
@@ -610,7 +700,7 @@ export default function Encomendas({ usuarioLogado }) {
                   rel="noreferrer"
                   className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
                 >
-                  <MessageCircle className="w-4 h-4" /> Notificar Morador no WhatsApp <ExternalLink className="w-3 h-3" />
+                  <MessageCircle className="w-4 h-4" /> Notificar Destinatário via WhatsApp <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
             )}
@@ -634,8 +724,8 @@ export default function Encomendas({ usuarioLogado }) {
                 type="text"
                 value={buscaBaixaUnidade}
                 onChange={(e) => setBuscaBaixaUnidade(e.target.value)}
-                placeholder="Digite a Unidade (Ex: 102)"
-                className="p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
+                placeholder="Unidade (Ex: 24)"
+                className="p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-bold"
               />
               <button
                 onClick={buscarItensParaBaixa}
@@ -682,27 +772,39 @@ export default function Encomendas({ usuarioLogado }) {
                     required
                     value={nomeRetirante}
                     onChange={(e) => setNomeRetirante(e.target.value)}
-                    placeholder="Ex: Pedro (Filho), Próprio Morador"
+                    placeholder="Ex: Maria Caetano (Própria Moradora)"
                     className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">URL Foto Retirante com Pacote *</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">Foto do Retirante / Comprovante *</label>
+                  <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
+                    <Camera className="w-5 h-5 text-emerald-400" />
+                    {uploadingFoto ? 'Salvando Foto...' : '📷 Tirar Foto do Retirante'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => uploadFotoStorage(e.target.files[0], 'baixas', setFotoRetiranteUrl)}
+                      className="hidden"
+                      disabled={uploadingFoto}
+                    />
+                  </label>
                   <input
                     type="url"
                     required
                     value={fotoRetiranteUrl}
                     onChange={(e) => setFotoRetiranteUrl(e.target.value)}
-                    placeholder="https://supabase.co/.../baixa.jpg"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                    placeholder="URL gerada automaticamente..."
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-mono"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || uploadingFoto}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition shadow-md"
               >
                 Efetivar Baixa de Saída e Gravar
