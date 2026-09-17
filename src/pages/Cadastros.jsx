@@ -10,9 +10,7 @@ import {
   CheckCircle, 
   AlertCircle, 
   Pencil, 
-  X, 
-  Lock, 
-  ShieldAlert 
+  X 
 } from 'lucide-react';
 
 export default function Cadastros({ usuarioLogado }) {
@@ -244,13 +242,9 @@ export default function Cadastros({ usuarioLogado }) {
     setCondominioIdOperador(op.condominio_id || '');
   };
 
-  // Salvar ou Editar Morador
+  // Salvar ou Editar Morador (LIBERADO PARA OPERADORES E PORTEIROS)
   const salvarMorador = async (e) => {
     e.preventDefault();
-    if (eOperador) {
-      setMensagem({ tipo: 'erro', texto: 'Operadores de portaria têm acesso apenas para consulta de moradores.' });
-      return;
-    }
 
     const targetCondominioId = eAdmin ? condominioIdMorador : usuarioLogado?.condominio_id;
 
@@ -298,7 +292,6 @@ export default function Cadastros({ usuarioLogado }) {
   };
 
   const prepararEdicaoMorador = (m) => {
-    if (eOperador) return;
     setIdEdicao(m.id);
     setNomeMorador(m.nome);
     setBlocoMorador(m.bloco || '');
@@ -587,109 +580,101 @@ export default function Cadastros({ usuarioLogado }) {
         </div>
       )}
 
-      {/* ABA MORADORES */}
+      {/* ABA MORADORES (LIBERADA PARA TODOS OS NÍVEIS) */}
       {abaAtiva === 'moradores' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {!eOperador ? (
-            <form onSubmit={salvarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-              <h3 className="font-bold text-slate-800 flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <UserPlus className="w-5 h-5 text-emerald-600" />
-                  {idEdicao ? 'Editar Morador' : 'Cadastrar Morador'}
-                </span>
-                {idEdicao && (
-                  <button
-                    type="button"
-                    onClick={limparFormularios}
-                    className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
-                  >
-                    <X className="w-4 h-4" /> Cancelar
-                  </button>
-                )}
-              </h3>
-
-              {eAdmin ? (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio *</label>
-                  <select
-                    value={condominioIdMorador}
-                    onChange={(e) => setCondominioIdMorador(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                    required
-                  >
-                    <option value="">Selecione o Condomínio...</option>
-                    {condominios.map((c) => (
-                      <option key={c.id} value={c.id}>{c.nome}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
-                  Condomínio: {condominios.find(c => c.id === usuarioLogado?.condominio_id)?.nome || 'Meu Condomínio'}
-                </div>
+          <form onSubmit={salvarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-600" />
+                {idEdicao ? 'Editar Morador' : 'Cadastrar Morador'}
+              </span>
+              {idEdicao && (
+                <button
+                  type="button"
+                  onClick={limparFormularios}
+                  className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" /> Cancelar
+                </button>
               )}
+            </h3>
 
+            {eAdmin ? (
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Morador *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Condomínio *</label>
+                <select
+                  value={condominioIdMorador}
+                  onChange={(e) => setCondominioIdMorador(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  required
+                >
+                  <option value="">Selecione o Condomínio...</option>
+                  {condominios.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+                Condomínio: {condominios.find(c => c.id === usuarioLogado?.condominio_id)?.nome || 'Meu Condomínio'}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Morador *</label>
+              <input
+                type="text"
+                required
+                value={nomeMorador}
+                onChange={(e) => setNomeMorador(e.target.value)}
+                placeholder="Ex: Carlos Eduardo"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
+                <input
+                  type="text"
+                  value={blocoMorador}
+                  onChange={(e) => setBlocoMorador(e.target.value)}
+                  placeholder="Bloco A"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Ap *</label>
                 <input
                   type="text"
                   required
-                  value={nomeMorador}
-                  onChange={(e) => setNomeMorador(e.target.value)}
-                  placeholder="Ex: Carlos Eduardo"
+                  value={unidadeMorador}
+                  onChange={(e) => setUnidadeMorador(e.target.value)}
+                  placeholder="101"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
-                  <input
-                    type="text"
-                    value={blocoMorador}
-                    onChange={(e) => setBlocoMorador(e.target.value)}
-                    placeholder="Bloco A"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Ap *</label>
-                  <input
-                    type="text"
-                    required
-                    value={unidadeMorador}
-                    onChange={(e) => setUnidadeMorador(e.target.value)}
-                    placeholder="101"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Telefone / WhatsApp</label>
-                <input
-                  type="text"
-                  value={telefoneMorador}
-                  onChange={(e) => setTelefoneMorador(e.target.value)}
-                  placeholder="(11) 99999-9999"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
-              >
-                {idEdicao ? 'Atualizar Morador' : 'Salvar Morador'}
-              </button>
-            </form>
-          ) : (
-            <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl text-amber-900 text-xs space-y-2">
-              <ShieldAlert className="w-6 h-6 text-amber-600" />
-              <strong className="block font-bold text-sm">Modo de Consulta (Portaria)</strong>
-              <p>Operadores de portaria utilizam esta tela para consultar e auto-preencher cadastros. A inclusão de moradores é realizada pela Supervisão ou Administração.</p>
             </div>
-          )}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Telefone / WhatsApp</label>
+              <input
+                type="text"
+                value={telefoneMorador}
+                onChange={(e) => setTelefoneMorador(e.target.value)}
+                placeholder="(11) 99999-9999"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
+            >
+              {idEdicao ? 'Atualizar Morador' : 'Salvar Morador'}
+            </button>
+          </form>
 
-          <div className={`${!eOperador ? 'md:col-span-2' : 'md:col-span-3'} bg-white p-6 rounded-xl shadow-sm border border-slate-200`}>
+          <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800">Moradores Cadastrados ({moradores.length})</h3>
               <div className="relative w-64">
@@ -719,15 +704,13 @@ export default function Cadastros({ usuarioLogado }) {
                         {m.bloco ? `Bloco ${m.bloco} - ` : ''}Unidade {m.unidade} | Tel: {m.telefone || 'Não informado'}
                       </p>
                     </div>
-                    {!eOperador && (
-                      <button
-                        onClick={() => prepararEdicaoMorador(m)}
-                        className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
-                        title="Editar"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => prepararEdicaoMorador(m)}
+                      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                      title="Editar"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   </div>
                 ))
               )}
