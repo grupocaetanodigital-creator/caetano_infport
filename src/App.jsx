@@ -5,14 +5,15 @@ import Encomendas from './pages/Encomendas';
 import Custodia from './pages/Custodia';
 import Materiais from './pages/Materiais';
 import Chaves from './pages/Chaves';
-import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package, Shield, Radio, Key } from 'lucide-react';
+import Manutencao from './pages/Manutencao';
+import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package, Shield, Radio, Key, Wrench } from 'lucide-react';
 
 export default function App() {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'cadastros'
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'cadastros'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -148,6 +149,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setModuloAtual('manutencao')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'manutencao'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Wrench className="w-4 h-4" />
+              Manutenção & OS
+            </button>
+
+            <button
               onClick={() => setModuloAtual('cadastros')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
                 moduloAtual === 'cadastros'
@@ -167,6 +180,7 @@ export default function App() {
           {moduloAtual === 'custodia' && <Custodia usuarioLogado={operador} />}
           {moduloAtual === 'materiais' && <Materiais usuarioLogado={operador} />}
           {moduloAtual === 'chaves' && <Chaves usuarioLogado={operador} />}
+          {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operador} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
         </main>
 
