@@ -13,7 +13,8 @@ import {
   MessageCircle, 
   ExternalLink, 
   User, 
-  Check 
+  Check,
+  Pencil
 } from 'lucide-react';
 
 export default function Chaves({ usuarioLogado }) {
@@ -31,7 +32,8 @@ export default function Chaves({ usuarioLogado }) {
   const [modalRetirada, setModalRetirada] = useState(null);
   const [modalDevolucao, setModalDevolucao] = useState(null);
 
-  // Form Nova Chave
+  // Form Cadastro e Edição de Chave
+  const [idEdicao, setIdEdicao] = useState(null);
   const [codigoChave, setCodigoChave] = useState('');
   const [nomeChave, setNomeChave] = useState('');
   const [bloco, setBloco] = useState('');
@@ -122,7 +124,28 @@ export default function Chaves({ usuarioLogado }) {
     }
   };
 
-  const cadastrarChave = async (e) => {
+  const limparFormularioChave = () => {
+    setIdEdicao(null);
+    setCodigoChave('');
+    setNomeChave('');
+    setBloco('');
+    setUnidade('');
+    setTempoLimiteHoras(2);
+    setModalNovaChave(false);
+  };
+
+  const prepararEdicao = (chave, e) => {
+    e.stopPropagation();
+    setIdEdicao(chave.id);
+    setCodigoChave(chave.codigo_chave || '');
+    setNomeChave(chave.nome_chave || '');
+    setBloco(chave.bloco || '');
+    setUnidade(chave.unidade || '');
+    setTempoLimiteHoras(chave.tempo_limite_horas || 2);
+    setModalNovaChave(true);
+  };
+
+  const salvarChave = async (e) => {
     e.preventDefault();
     if (!codigoChave.trim() || !nomeChave.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Código e nome da chave são obrigatórios.' });
@@ -131,24 +154,34 @@ export default function Chaves({ usuarioLogado }) {
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('chaves')
-        .insert([{
-          condominio_id: usuarioLogado.condominio_id,
-          codigo_chave: codigoChave.trim().toUpperCase(),
-          nome_chave: nomeChave.trim(),
-          bloco: bloco.trim().toUpperCase(),
-          unidade: unidade.trim(),
-          tempo_limite_horas: parseInt(tempoLimiteHoras),
-          status: 'Disponível'
-        }]);
+      const payload = {
+        condominio_id: usuarioLogado.condominio_id,
+        codigo_chave: codigoChave.trim().toUpperCase(),
+        nome_chave: nomeChave.trim(),
+        bloco: bloco.trim().toUpperCase(),
+        unidade: unidade.trim(),
+        tempo_limite_horas: parseInt(tempoLimiteHoras) || 2
+      };
 
-      if (error) throw error;
+      if (idEdicao) {
+        const { error } = await supabase
+          .from('chaves')
+          .update(payload)
+          .eq('id', idEdicao);
 
-      setCodigoChave(''); setNomeChave(''); setBloco(''); setUnidade('');
-      setModalNovaChave(false);
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Chave atualizada com sucesso!' });
+      } else {
+        const { error } = await supabase
+          .from('chaves')
+          .insert([{ ...payload, status: 'Disponível' }]);
+
+        if (error) throw error;
+        setMensagem({ tipo: 'sucesso', texto: 'Chave cadastrada no quadro!' });
+      }
+
+      limparFormularioChave();
       carregarQuadroChaves();
-      setMensagem({ tipo: 'sucesso', texto: 'Chave cadastrada no quadro!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
@@ -274,7 +307,7 @@ export default function Chaves({ usuarioLogado }) {
         </div>
 
         <button
-          onClick={() => setModalNovaChave(true)}
+          onClick={() => { limparFormularioChave(); setModalNovaChave(true); }}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm uppercase"
         >
           <Plus className="w-4 h-4" /> Cadastrar Chave
@@ -334,13 +367,23 @@ export default function Chaves({ usuarioLogado }) {
               }`}
             >
               <div>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center gap-1">
                   <span className="text-[11px] font-black font-mono bg-slate-900 text-white px-2 py-0.5 rounded">
                     {chave.codigo_chave}
                   </span>
-                  <Key className={`w-4 h-4 ${
-                    chave.status === 'Disponível' ? 'text-emerald-600' : estaAtrasada ? 'text-red-600' : 'text-amber-600'
-                  }`} />
+                  
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => prepararEdicao(chave, e)}
+                      className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 rounded transition"
+                      title="Editar Chave"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <Key className={`w-4 h-4 ${
+                      chave.status === 'Disponível' ? 'text-emerald-600' : estaAtrasada ? 'text-red-600' : 'text-amber-600'
+                    }`} />
+                  </div>
                 </div>
 
                 <h4 className="font-bold text-slate-900 text-xs mt-2 line-clamp-2">{chave.nome_chave}</h4>
@@ -387,19 +430,20 @@ export default function Chaves({ usuarioLogado }) {
         )}
       </div>
 
-      {/* MODAL CADASTRAR CHAVE */}
+      {/* MODAL CADASTRAR OU EDITAR CHAVE */}
       {modalNovaChave && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalNovaChave(false)} className="absolute top-4 right-4 text-slate-400 p-1">
+            <button onClick={limparFormularioChave} className="absolute top-4 right-4 text-slate-400 p-1">
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" /> Nova Chave no Quadro
+              <Key className="w-5 h-5 text-emerald-600" />
+              {idEdicao ? 'Editar Dados da Chave' : 'Nova Chave no Quadro'}
             </h3>
 
-            <form onSubmit={cadastrarChave} className="space-y-3">
+            <form onSubmit={salvarChave} className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cód. Chave *</label>
@@ -459,13 +503,22 @@ export default function Chaves({ usuarioLogado }) {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
-              >
-                Cadastrar Chave
-              </button>
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={limparFormularioChave}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-xl uppercase text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                >
+                  {idEdicao ? 'Salvar Alterações' : 'Cadastrar Chave'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
