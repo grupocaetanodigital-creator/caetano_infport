@@ -8,13 +8,11 @@ import {
   Search, 
   Plus, 
   UserCheck, 
-  AlertTriangle, 
   MessageCircle, 
   ExternalLink, 
   X, 
   ShieldAlert, 
-  Camera, 
-  Upload 
+  Camera
 } from 'lucide-react';
 
 export default function Encomendas({ usuarioLogado }) {
@@ -29,6 +27,7 @@ export default function Encomendas({ usuarioLogado }) {
   const [moradores, setMoradores] = useState([]);
 
   // Estados 1ª ETAPA: Recebimento de Lote RE
+  const [buscaEntregador, setBuscaEntregador] = useState('');
   const [entregadorSelecionado, setEntregadorSelecionado] = useState(null);
   const [qtdDeclarada, setQtdDeclarada] = useState(1);
   const [modalNovoEntregador, setModalNovoEntregador] = useState(false);
@@ -83,7 +82,7 @@ export default function Encomendas({ usuarioLogado }) {
         .order('created_at', { ascending: false });
       setLotesPendentes(lotesData || []);
 
-      // Carregar Todos os Moradores do Condomínio
+      // Carregar Todos os Moradores
       const { data: moradData } = await supabase
         .from('moradores')
         .select('*')
@@ -117,7 +116,7 @@ export default function Encomendas({ usuarioLogado }) {
     }
   };
 
-  // Função para Captura de Foto e Upload no Supabase Storage
+  // Upload no Supabase Storage
   const uploadFotoStorage = async (file, pastaDestino, setUrlCallback) => {
     if (!file) return;
     setUploadingFoto(true);
@@ -138,7 +137,7 @@ export default function Encomendas({ usuarioLogado }) {
         .getPublicUrl(fileName);
 
       setUrlCallback(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada e salva com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Falha ao salvar foto: ' + err.message });
     } finally {
@@ -149,6 +148,14 @@ export default function Encomendas({ usuarioLogado }) {
   // -------------------------------------------------------------
   // 1ª ETAPA: RECEBIMENTO DO LOTE RE
   // -------------------------------------------------------------
+  const entregadoresFiltrados = entregadores.filter(ent => {
+    const termo = buscaEntregador.toLowerCase();
+    const nome = ent.nome?.toLowerCase() || '';
+    const empresa = ent.empresa?.toLowerCase() || '';
+    const doc = ent.documento?.toLowerCase() || '';
+    return nome.includes(termo) || empresa.includes(termo) || doc.includes(termo);
+  });
+
   const cadastrarEntregadorRapido = async (e) => {
     e.preventDefault();
     if (!novoEntNome.trim()) return;
@@ -181,7 +188,7 @@ export default function Encomendas({ usuarioLogado }) {
   const criarLoteRE = async (e) => {
     e.preventDefault();
     if (!entregadorSelecionado) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione ou cadastre um entregador.' });
+      setMensagem({ tipo: 'erro', texto: 'Selecione um entregador da lista.' });
       return;
     }
     setLoading(true);
@@ -209,11 +216,11 @@ export default function Encomendas({ usuarioLogado }) {
 
       if (error) throw error;
 
-      // Gerar link de WhatsApp para Grupo da Administração
       const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${data.codigo_re}\nTransportadora: ${data.entregadores?.empresa || 'N/A'}\nEntregador: ${data.entregadores?.nome} (Doc: ${data.entregadores?.documento || 'N/A'})\nTotal de Volumes Declarados: ${data.qtd_declarada} pacotes\nOperador: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
       
       setLoteCriadoWhats({ codigo: data.codigo_re, link: `https://wa.me/?text=${encodeURIComponent(textoWhats)}` });
       setEntregadorSelecionado(null);
+      setBuscaEntregador('');
       setQtdDeclarada(1);
       carregarDadosBase();
       setMensagem({ tipo: 'sucesso', texto: `Lote ${codigoRE} gerado com sucesso!` });
@@ -238,7 +245,6 @@ export default function Encomendas({ usuarioLogado }) {
       return;
     }
 
-    // 1. Filtrar moradores pertencentes a essa unidade com tratamento seguro
     const moradoresEncontrados = moradores.filter(m => {
       const uMatch = m.unidade?.toString().toLowerCase() === unid.trim().toLowerCase();
       const bMatch = bloc.trim() ? m.bloco?.toString().toLowerCase() === bloc.trim().toLowerCase() : true;
@@ -252,7 +258,6 @@ export default function Encomendas({ usuarioLogado }) {
       setMoradorSelecionado(null);
     }
 
-    // 2. Checar Agrupamento de pacotes na portaria
     let query = supabase
       .from('encomendas_itens')
       .select('*')
@@ -281,13 +286,12 @@ export default function Encomendas({ usuarioLogado }) {
   const salvarItemTriagem = async (e) => {
     e.preventDefault();
     if (!loteAtivo || !unidadeTriagem.trim() || !fotoEtiquetaUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e tire a foto da etiqueta.' });
+      setMensagem({ tipo: 'erro', texto: 'Preencha a unidade e tire a foto da encomenda.' });
       return;
     }
     setLoading(true);
 
     try {
-      // 1. Inserir Item
       const { error: itemErr } = await supabase
         .from('encomendas_itens')
         .insert([{
@@ -304,7 +308,6 @@ export default function Encomendas({ usuarioLogado }) {
 
       if (itemErr) throw itemErr;
 
-      // 2. Atualizar Lote RE
       const novaQtdTriada = (loteAtivo.qtd_triada || 0) + 1;
       const novoStatusLote = novaQtdTriada >= loteAtivo.qtd_declarada ? 'concluido' : 'em_triagem';
 
@@ -313,7 +316,6 @@ export default function Encomendas({ usuarioLogado }) {
         .update({ qtd_triada: novaQtdTriada, status: novoStatusLote })
         .eq('id', loteAtivo.id);
 
-      // 3. Gerar link WhatsApp Morador Destinatário
       const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
       const nomeDestinatario = moradorSelecionado ? moradorSelecionado.nome : 'Morador';
       
@@ -324,7 +326,6 @@ export default function Encomendas({ usuarioLogado }) {
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoWhatsMorador)}` : `https://wa.me/?text=${encodeURIComponent(textoWhatsMorador)}`
       });
 
-      // Resetar formulário mantendo o lote ativo
       setUnidadeTriagem(''); setBlocoTriagem(''); setMoradorSelecionado(null); setMoradoresDaUnidade([]);
       setCodigoBarras(''); setFotoEtiquetaUrl(''); setObservacoes('');
       setAlertaAgrupamento(null);
@@ -408,7 +409,6 @@ export default function Encomendas({ usuarioLogado }) {
 
       if (error) throw error;
 
-      // WhatsApp Notificação Cruzada de Segurança
       const primeiroItem = itensParaBaixa[0];
       const telMorador = primeiroItem?.moradores?.telefone?.replace(/\D/g, '') || '';
       const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${buscaBaixaUnidade}${buscaBaixaBloco ? ' - Bloco ' + buscaBaixaBloco : ''}\n\nInformamos que o(s) pacote(s) foram RETIRADOS da portaria:\n• Qtd de Volumes Retirados: ${itensSelecionadosIds.length}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
@@ -506,36 +506,79 @@ export default function Encomendas({ usuarioLogado }) {
           </div>
 
           <form onSubmit={criarLoteRE} className="space-y-4 max-w-2xl">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Buscar / Selecionar Entregador *</label>
-              <select
-                required
-                value={entregadorSelecionado?.id || ''}
-                onChange={(e) => {
-                  const ent = entregadores.find(x => x.id === e.target.value);
-                  setEntregadorSelecionado(ent || null);
-                }}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-medium"
-              >
-                <option value="">Selecione o entregador na lista...</option>
-                {entregadores.map(ent => (
-                  <option key={ent.id} value={ent.id}>
-                    {ent.nome} — {ent.empresa || 'Avulso'} (Doc: {ent.documento || 'Sem doc'})
-                  </option>
-                ))}
-              </select>
+            {/* SELETOR INTERATIVO / CAMPO DE BUSCA DE ENTREGADOR */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase">Buscar / Selecionar Entregador *</label>
+              
+              {!entregadorSelecionado ? (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" />
+                    <input
+                      type="text"
+                      value={buscaEntregador}
+                      onChange={(e) => setBuscaEntregador(e.target.value)}
+                      placeholder="Digite o nome, empresa ou documento do entregador..."
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                    />
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-sm divide-y divide-slate-100">
+                    {entregadoresFiltrados.length > 0 ? (
+                      entregadoresFiltrados.map((ent) => (
+                        <div
+                          key={ent.id}
+                          onClick={() => {
+                            setEntregadorSelecionado(ent);
+                            setBuscaEntregador('');
+                          }}
+                          className="p-3 hover:bg-slate-50 cursor-pointer transition flex justify-between items-center"
+                        >
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">{ent.nome}</p>
+                            <p className="text-[11px] text-slate-500">
+                              {ent.empresa ? `Empresa: ${ent.empresa}` : 'Avulso'} | Doc: {ent.documento || 'Sem doc'}
+                            </p>
+                          </div>
+                          <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">
+                            Selecionar
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 text-xs text-slate-500 italic text-center">
+                        Nenhum entregador encontrado com esse termo.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* CARD DE ENTREGADOR SELECIONADO */
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-300 flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">
+                      Entregador Selecionado
+                    </span>
+                    <p className="text-sm font-bold text-slate-900 mt-1">{entregadorSelecionado.nome}</p>
+                    <p className="text-xs text-slate-600">
+                      {entregadorSelecionado.empresa ? `Empresa: ${entregadorSelecionado.empresa}` : 'Avulso'} • Doc: {entregadorSelecionado.documento || 'Sem doc'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEntregadorSelecionado(null)}
+                    className="text-xs bg-white border border-slate-300 text-slate-700 hover:bg-slate-200 font-bold px-3 py-1.5 rounded-lg transition"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              )}
             </div>
 
-            {entregadorSelecionado && (
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs space-y-1">
-                <p><strong>Nome:</strong> {entregadorSelecionado.nome}</p>
-                <p><strong>Empresa / Transportadora:</strong> {entregadorSelecionado.empresa || 'Não informada'}</p>
-                <p><strong>Documento:</strong> {entregadorSelecionado.documento || 'Não informado'}</p>
-              </div>
-            )}
-
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Quantidade Total de Volumes Declarados *</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Quantidade Total de Volumes Declarados *
+              </label>
               <input
                 type="number"
                 min="1"
@@ -548,8 +591,8 @@ export default function Encomendas({ usuarioLogado }) {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition shadow-md text-base"
+              disabled={loading || !entregadorSelecionado}
+              className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold py-4 rounded-xl transition shadow-md text-base"
             >
               Criar Lote RE e Gerar Código
             </button>
@@ -650,7 +693,7 @@ export default function Encomendas({ usuarioLogado }) {
                 </div>
               </div>
 
-              {/* LISTAGEM E SELEÇÃO DO DESTINATÁRIO EXATO */}
+              {/* LISTAGEM DE MORADORES */}
               {moradoresDaUnidade.length > 0 ? (
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
                   <label className="block text-xs font-bold text-slate-700 uppercase">
@@ -677,32 +720,21 @@ export default function Encomendas({ usuarioLogado }) {
                 </div>
               )}
 
-              {/* BOTÃO E CAMPO DE CAPTURA DE FOTO */}
+              {/* CAPTURA DE FOTO */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Etiqueta / Pacote *</label>
-                <div className="flex gap-2 items-center">
-                  <label className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
-                    <Camera className="w-5 h-5 text-emerald-400" />
-                    {uploadingFoto ? 'Processando Imagem...' : '📷 Tirar Foto da Encomenda'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => uploadFotoStorage(e.target.files[0], 'etiquetas', setFotoEtiquetaUrl)}
-                      className="hidden"
-                      disabled={uploadingFoto}
-                    />
-                  </label>
-                </div>
-
-                <input
-                  type="url"
-                  required
-                  value={fotoEtiquetaUrl}
-                  onChange={(e) => setFotoEtiquetaUrl(e.target.value)}
-                  placeholder="URL gerada automaticamente ao tirar a foto..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-mono"
-                />
+                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
+                  <Camera className="w-5 h-5 text-emerald-400" />
+                  {uploadingFoto ? 'Processando Imagem...' : '📷 Tirar Foto da Encomenda'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => uploadFotoStorage(e.target.files[0], 'etiquetas', setFotoEtiquetaUrl)}
+                    className="hidden"
+                    disabled={uploadingFoto}
+                  />
+                </label>
 
                 {fotoEtiquetaUrl && (
                   <div className="mt-2 relative w-28 h-28 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-sm">
@@ -776,7 +808,7 @@ export default function Encomendas({ usuarioLogado }) {
             </p>
           </div>
 
-          {/* Formulário de Busca por Unidade */}
+          {/* Busca por Unidade */}
           <form onSubmit={buscarItensParaBaixa} className="flex flex-col sm:flex-row gap-3 items-end max-w-2xl">
             <div className="flex-1 w-full">
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / AP *</label>
@@ -808,7 +840,7 @@ export default function Encomendas({ usuarioLogado }) {
             </button>
           </form>
 
-          {/* Listagem de Pacotes Encontrados */}
+          {/* Listagem de Pacotes */}
           {itensParaBaixa.length > 0 && (
             <div className="space-y-6 max-w-3xl pt-2">
               <div className="border-t border-slate-200 pt-4">
@@ -895,15 +927,6 @@ export default function Encomendas({ usuarioLogado }) {
                       disabled={uploadingFoto}
                     />
                   </label>
-
-                  <input
-                    type="url"
-                    required
-                    value={fotoRetiranteUrl}
-                    onChange={(e) => setFotoRetiranteUrl(e.target.value)}
-                    placeholder="URL do comprovante..."
-                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-mono"
-                  />
 
                   {fotoRetiranteUrl && (
                     <div className="mt-2 relative w-28 h-28 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-sm">
