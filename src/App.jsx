@@ -50,7 +50,7 @@ export default function App() {
       setCondominio(condData || { nome: 'Administração Geral Dev' });
     } catch (err) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
-    } finally {
+    } flex {
       setLoading(false);
     }
   };
@@ -90,12 +90,12 @@ export default function App() {
           </div>
         </header>
 
-        {/* Conteúdo Principal (Módulo 01) */}
+        {/* Conteúdo Principal */}
         <main className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
             <Database className="w-6 h-6 text-slate-700" />
             <div>
-              <h2 className="font-bold text-slate-800">Módulo 01: Cadastros Base</h2>
+              <h2 className="font-bold text-slate-800">Cadastro Base</h2>
               <p className="text-xs text-slate-500">Gerenciamento de Condomínios, Operadores e Moradores.</p>
             </div>
           </div>
