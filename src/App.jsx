@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { supabase } from './services/supabase';
 import Cadastros from './pages/Cadastros';
-import { ShieldCheck, Lock, User, LogOut, Building2, Database } from 'lucide-react';
+import Encomendas from './pages/Encomendas';
+import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package } from 'lucide-react';
 
 export default function App() {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'cadastros' ou 'encomendas'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -28,12 +30,7 @@ export default function App() {
         .eq('ativo', true)
         .maybeSingle();
 
-      if (opError) {
-        setErro(`Erro de permissão/banco: ${opError.message}`);
-        setLoading(false);
-        return;
-      }
-
+      if (opError) throw opError;
       if (!opData) {
         setErro('Usuário ou senha incorretos.');
         setLoading(false);
@@ -50,7 +47,7 @@ export default function App() {
       setCondominio(condData || { nome: 'Administração Geral Dev' });
     } catch (err) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
-    } flex {
+    } finally {
       setLoading(false);
     }
   };
@@ -65,7 +62,7 @@ export default function App() {
   if (operador) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col">
-        {/* Cabeçalho do App */}
+        {/* Cabeçalho */}
         <header className="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-8 h-8 text-emerald-400" />
@@ -90,17 +87,39 @@ export default function App() {
           </div>
         </header>
 
-        {/* Conteúdo Principal */}
-        <main className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
-            <Database className="w-6 h-6 text-slate-700" />
-            <div>
-              <h2 className="font-bold text-slate-800">Cadastro Base</h2>
-              <p className="text-xs text-slate-500">Gerenciamento de Condomínios, Operadores e Moradores.</p>
-            </div>
-          </div>
+        {/* Menu de Módulos */}
+        <div className="bg-white border-b border-slate-200 shadow-sm">
+          <div className="max-w-6xl mx-auto flex gap-2 p-2">
+            <button
+              onClick={() => setModuloAtual('encomendas')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'encomendas'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              Encomendas & Entregadores
+            </button>
 
-          <Cadastros usuarioLogado={operador} />
+            <button
+              onClick={() => setModuloAtual('cadastros')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'cadastros'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Database className="w-4 h-4" />
+              Cadastro Base
+            </button>
+          </div>
+        </div>
+
+        {/* Conteúdo do Módulo Ativo */}
+        <main className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full">
+          {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operador} />}
+          {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
         </main>
       </div>
     );
