@@ -41,6 +41,7 @@ export default function Chaves({ usuarioLogado }) {
   const [tempoLimiteHoras, setTempoLimiteHoras] = useState(2);
 
   // Form Retirada / Empréstimo
+  const [tipoRetirante, setTipoRetirante] = useState('Morador'); // 'Morador', 'Colaborador', 'Terceiros'
   const [retiranteNome, setRetiranteNome] = useState('');
   const [retiranteDoc, setRetiranteDoc] = useState('');
   const [retiranteTel, setRetiranteTel] = useState('');
@@ -191,8 +192,8 @@ export default function Chaves({ usuarioLogado }) {
 
   const efetivarRetirada = async (e) => {
     e.preventDefault();
-    if (!retiranteNome.trim() || !fotoRetiradaUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha o nome do retirante e tire a foto da retirada.' });
+    if (!retiranteNome.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Informe o nome do retirante.' });
       return;
     }
     setLoading(true);
@@ -200,16 +201,17 @@ export default function Chaves({ usuarioLogado }) {
     try {
       const agora = new Date();
       const previsao = new Date(agora.getTime() + (modalRetirada.tempo_limite_horas || 2) * 60 * 60 * 1000);
+      const nomeCompletoComTipo = `${retiranteNome.trim()} (${tipoRetirante})`;
 
       const { error: errMov } = await supabase
         .from('movimentacao_chaves')
         .insert([{
           chave_id: modalRetirada.id,
           condominio_id: usuarioLogado.condominio_id,
-          retirante_nome: retiranteNome.trim(),
-          retirante_doc: retiranteDoc.trim(),
-          retirante_telefone: retiranteTel.trim(),
-          foto_retirada_url: fotoRetiradaUrl.trim(),
+          retirante_nome: nomeCompletoComTipo,
+          retirante_doc: retiranteDoc.trim() || 'Não informado',
+          retirante_telefone: retiranteTel.trim() || '',
+          foto_retirada_url: fotoRetiradaUrl.trim() || '',
           data_hora_retirada: agora.toISOString(),
           previsao_devolucao: previsao.toISOString(),
           status: 'Em Andamento',
@@ -224,14 +226,14 @@ export default function Chaves({ usuarioLogado }) {
         .eq('id', modalRetirada.id);
 
       const tel = retiranteTel.replace(/\D/g, '');
-      const textoWhats = `🔑 *COMPROVANTE DE RETIRADA DE CHAVE*\nChave: ${modalRetirada.codigo_chave} - ${modalRetirada.nome_chave}\nRetirado por: ${retiranteNome}\nData/Hora: ${agora.toLocaleString('pt-BR')}\nPrazo de Devolução: ${previsao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (${modalRetirada.tempo_limite_horas}h limite)\n\nPor favor, devolva a chave no prazo acordado!`;
+      const textoWhats = `🔑 *COMPROVANTE DE RETIRADA DE CHAVE*\nChave: ${modalRetirada.codigo_chave} - ${modalRetirada.nome_chave}\nRetirado por: ${nomeCompletoComTipo}\nData/Hora: ${agora.toLocaleString('pt-BR')}\nPrazo de Devolução: ${previsao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (${modalRetirada.tempo_limite_horas}h limite)\n\nPor favor, devolva a chave no prazo acordado!`;
 
       setWhatsEmprestimo({
         link: tel ? `https://wa.me/55${tel}?text=${encodeURIComponent(textoWhats)}` : `https://wa.me/?text=${encodeURIComponent(textoWhats)}`
       });
 
       setModalRetirada(null);
-      setRetiranteNome(''); setRetiranteDoc(''); setRetiranteTel(''); setFotoRetiradaUrl('');
+      setRetiranteNome(''); setRetiranteDoc(''); setRetiranteTel(''); setFotoRetiradaUrl(''); setTipoRetirante('Morador');
       carregarQuadroChaves();
       setMensagem({ tipo: 'sucesso', texto: 'Empréstimo registrado com sucesso!' });
     } catch (err) {
@@ -243,10 +245,6 @@ export default function Chaves({ usuarioLogado }) {
 
   const efetivarDevolucao = async (e) => {
     e.preventDefault();
-    if (!fotoDevolucaoUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Tire a foto da chave no quadro para confirmar a devolução.' });
-      return;
-    }
     setLoading(true);
 
     try {
@@ -257,7 +255,7 @@ export default function Chaves({ usuarioLogado }) {
         .update({
           status: 'Devolvida',
           data_hora_devolucao: agora,
-          foto_devolucao_url: fotoDevolucaoUrl.trim(),
+          foto_devolucao_url: fotoDevolucaoUrl.trim() || '',
           operador_devolucao: usuarioLogado?.login || usuarioLogado?.nome || 'Portaria'
         })
         .eq('id', modalDevolucao.id);
@@ -537,6 +535,27 @@ export default function Chaves({ usuarioLogado }) {
             </h3>
 
             <form onSubmit={efetivarRetirada} className="space-y-3">
+              {/* SELEÇÃO DO TIPO DE RETIRANTE */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Tipo de Retirante *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['Morador', 'Colaborador', 'Terceiros'].map((tipo) => (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => setTipoRetirante(tipo)}
+                      className={`py-2 px-3 text-xs font-bold rounded-lg border transition ${
+                        tipoRetirante === tipo
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      {tipo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Retirante *</label>
                 <input
@@ -544,14 +563,14 @@ export default function Chaves({ usuarioLogado }) {
                   required
                   value={retiranteNome}
                   onChange={(e) => setRetiranteNome(e.target.value)}
-                  placeholder="Ex: Carlos (Técnico Enel / Morador)"
+                  placeholder="Ex: Carlos Santos"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">RG ou CPF</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">RG / CPF (Opcional)</label>
                   <input
                     type="text"
                     value={retiranteDoc}
@@ -561,7 +580,7 @@ export default function Chaves({ usuarioLogado }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">WhatsApp</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">WhatsApp (Opcional)</label>
                   <input
                     type="text"
                     value={retiranteTel}
@@ -573,10 +592,10 @@ export default function Chaves({ usuarioLogado }) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto do Retirante com a Chave *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Entrega (Opcional)</label>
                 <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs">
                   <Camera className="w-4 h-4 text-emerald-400" />
-                  {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto da Entrega'}
+                  {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto (Opcional)'}
                   <input
                     type="file"
                     accept="image/*"
@@ -635,10 +654,10 @@ export default function Chaves({ usuarioLogado }) {
 
             <form onSubmit={efetivarDevolucao} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Chave Devolvida no Quadro *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Chave no Quadro (Opcional)</label>
                 <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs">
                   <Camera className="w-4 h-4 text-emerald-400" />
-                  {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto da Chave no Quadro'}
+                  {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto da Devolução (Opcional)'}
                   <input
                     type="file"
                     accept="image/*"
