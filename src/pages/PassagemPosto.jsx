@@ -96,13 +96,13 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     await varrerPendenciasModulos();
   };
 
-  // Varredura Completa e Precisa de Todos os Módulos do Sistema
+  // Varredura de Pendências alinhada com as buscas dos outros módulos
   const varrerPendenciasModulos = async () => {
     const condId = usuarioLogado?.condominio_id;
     if (!condId) return;
 
     try {
-      // 1. Chaves em Uso / Retidas (Módulo 05)
+      // 1. Chaves em Uso / Retidas (Módulo 05 - Filtra status diferente de disponível)
       const { data: chaves } = await supabase
         .from('chaves')
         .select('*')
@@ -112,34 +112,34 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         c.status && c.status.toLowerCase() !== 'disponivel'
       );
 
-      // 2. Inventário do Posto e Avarias (Módulo 04)
+      // 2. Inventário do Posto e Avarias (Módulo 04 - Materiais com avaria ou defeito)
       const { data: materiais } = await supabase
         .from('materiais')
         .select('*')
         .eq('condominio_id', condId);
 
       const materiaisAvariados = (materiais || []).filter(m => 
-        m.status && ['avaria', 'defeito', 'manutencao'].includes(m.status.toLowerCase())
+        m.status && ['avaria', 'defeito', 'manutencao', 'danificado'].includes(m.status.toLowerCase())
       );
 
-      // 3. Ocorrências e OS em Aberto (Módulos 06 e 08)
+      // 3. Ocorrências / Chamados em Aberto (Módulos 06 e 08)
       const { data: ocorrencias } = await supabase
         .from('ocorrencias')
         .select('*')
         .eq('condominio_id', condId);
 
       const ocorrenciasAbertas = (ocorrencias || []).filter(o => 
-        !o.status || !['concluido', 'resolvido', 'fechado'].includes(o.status.toLowerCase())
+        !o.status || !['concluido', 'resolvido', 'fechado', 'concluida'].includes(o.status.toLowerCase())
       );
 
-      // 4. Encomendas e Pacotes Retidos (Módulo 02)
+      // 4. Encomendas Pendentes de Retirada (Módulo 02)
       const { data: encomendas } = await supabase
         .from('encomendas')
         .select('*')
         .eq('condominio_id', condId);
 
       const encomendasPendentes = (encomendas || []).filter(e => 
-        !e.status || !['entregue', 'baixado', 'retirado'].includes(e.status.toLowerCase())
+        !e.status || ['pendente', 'aguardando', 'triagem', 'recebido'].includes(e.status.toLowerCase())
       );
 
       // 5. Custódia de Itens Pendentes (Módulo 03)
@@ -149,10 +149,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         .eq('condominio_id', condId);
 
       const custodiasPendentes = (custodias || []).filter(c => 
-        !c.status || !['devolvido', 'retirado', 'concluido'].includes(c.status.toLowerCase())
+        !c.status || ['retido', 'em_custodia', 'pendente', 'aguardando'].includes(c.status.toLowerCase())
       );
 
-      // 6. Última Ronda Patrimonial (Módulo 07)
+      // 6. Última Ronda Patrimonial Registrada (Módulo 07)
       const { data: rondas } = await supabase
         .from('rondas')
         .select('*')
@@ -191,7 +191,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      // Dupla Assinatura Digital do Operador Entrante
+      // Autenticação do Operador Entrante via Supabase (Igual ao Login do Módulo 01)
       const { data: opEntrante, error: opError } = await supabase
         .from('operadores')
         .select('*')
