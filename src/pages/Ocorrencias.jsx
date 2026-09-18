@@ -5,16 +5,16 @@ import {
   Plus, 
   AlertTriangle, 
   CheckCircle2, 
-  Clock, 
   Camera, 
   X, 
   MessageCircle, 
-  ExternalLink, 
   Building, 
   ShieldAlert, 
   AlertCircle,
   Check,
-  Tag
+  Tag,
+  User,
+  Send
 } from 'lucide-react';
 
 export default function Ocorrencias({ usuarioLogado }) {
@@ -24,8 +24,8 @@ export default function Ocorrencias({ usuarioLogado }) {
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
   // Filtros
-  const [filtroTipo, setFiltroTipo] = useState('Todos'); // 'Todos', 'Interna', 'Morador'
-  const [filtroStatus, setFiltroStatus] = useState('Todos'); // 'Todos', 'Pendente', 'Em Análise', 'Resolvido'
+  const [filtroTipo, setFiltroTipo] = useState('Todos');
+  const [filtroStatus, setFiltroStatus] = useState('Todos');
 
   // Modal e Formulário
   const [modalNova, setModalNova] = useState(false);
@@ -35,6 +35,7 @@ export default function Ocorrencias({ usuarioLogado }) {
   const [prioridade, setPrioridade] = useState('Média');
   const [unidadeBloco, setUnidadeBloco] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
+  const [ocorrenciaRecente, setOcorrenciaRecente] = useState(null);
 
   useEffect(() => {
     carregarOcorrencias();
@@ -107,22 +108,27 @@ export default function Ocorrencias({ usuarioLogado }) {
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      const novaOcorrencia = {
+        condominio_id: usuarioLogado.condominio_id,
+        titulo: titulo.trim(),
+        descricao: descricao.trim(),
+        tipo: tipo,
+        prioridade: prioridade,
+        status: 'Pendente',
+        foto_url: fotoUrl.trim() || null,
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Porteiro no Posto',
+        unidade_bloco: tipo === 'Morador' ? unidadeBloco.trim() : null
+      };
+
+      const { data, error } = await supabase
         .from('ocorrencias')
-        .insert([{
-          condominio_id: usuarioLogado.condominio_id,
-          titulo: titulo.trim(),
-          descricao: descricao.trim(),
-          tipo: tipo,
-          prioridade: prioridade,
-          status: 'Pendente',
-          foto_url: fotoUrl.trim() || null,
-          operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria',
-          unidade_bloco: tipo === 'Morador' ? unidadeBloco.trim() : null
-        }]);
+        .insert([novaOcorrencia])
+        .select()
+        .single();
 
       if (error) throw error;
 
+      setOcorrenciaRecente(data || novaOcorrencia);
       setTitulo('');
       setDescricao('');
       setTipo('Interna');
@@ -157,14 +163,23 @@ export default function Ocorrencias({ usuarioLogado }) {
   };
 
   const gerarLinkWhatsApp = (item) => {
+    const nomeOperador = item.operador_nome || usuarioLogado?.nome || 'Porteiro de Plantão';
+    const dataHora = item.created_at 
+      ? new Date(item.created_at).toLocaleString('pt-BR') 
+      : new Date().toLocaleString('pt-BR');
+
     const texto = `🚨 *REGISTRO DE OCORRÊNCIA - INFPORT*\n` +
+      `----------------------------------------\n` +
+      `👮 *Porteiro no Posto:* ${nomeOperador}\n` +
+      `📅 *Data/Hora:* ${dataHora}\n` +
       `📌 *Título:* ${item.titulo}\n` +
-      `📁 *Tipo:* ${item.tipo === 'Interna' ? 'Interna da Guarita/Posto' : 'Reclamação/Morador (' + (item.unidade_bloco || 'Sem Unidade') + ')'}\n` +
+      `📂 *Tipo:* ${item.tipo === 'Interna' ? '⚙️ Interna (Guarita/Posto)' : '🏠 Reclamação/Morador'}\n` +
+      (item.unidade_bloco ? `🏢 *Unidade/Bloco:* ${item.unidade_bloco}\n` : '') +
       `⚡ *Prioridade:* ${item.prioridade.toUpperCase()}\n` +
-      `👤 *Registrado por:* ${item.operador_nome}\n` +
-      `📅 *Data/Hora:* ${new Date(item.created_at).toLocaleString('pt-BR')}\n\n` +
-      `📝 *Descrição:* ${item.descricao}\n` +
-      (item.foto_url ? `📸 *Foto da Evidência:* ${item.foto_url}\n` : '');
+      `📊 *Status:* ${item.status}\n` +
+      `----------------------------------------\n` +
+      `📝 *Descrição:* \n${item.descricao}\n` +
+      (item.foto_url ? `\n📸 *Foto da Evidência:* ${item.foto_url}` : '');
 
     return `https://wa.me/?text=${encodeURIComponent(texto)}`;
   };
@@ -198,7 +213,7 @@ export default function Ocorrencias({ usuarioLogado }) {
             <ShieldAlert className="w-5 h-5 text-amber-400" /> Ocorrências Internas e de Moradores
           </h3>
           <p className="text-xs text-slate-300">
-            Registro auditado de irregularidades, incidentes operacionais e relatos do condomínio.
+            Registro auditado de irregularidades com envio rápido para grupos de WhatsApp.
           </p>
         </div>
 
@@ -210,7 +225,29 @@ export default function Ocorrencias({ usuarioLogado }) {
         </button>
       </div>
 
-      {/* Alertas */}
+      {/* Alerta de confirmação com atalho para WhatsApp */}
+      {ocorrenciaRecente && (
+        <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <Send className="w-6 h-6 text-amber-600 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-amber-950">Ocorrência registrada recentemente!</p>
+              <p className="text-[11px] text-amber-800">Deseja enviar agora todos os detalhes para o grupo de WhatsApp da gestão?</p>
+            </div>
+          </div>
+          <a
+            href={gerarLinkWhatsApp(ocorrenciaRecente)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setOcorrenciaRecente(null)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 transition shadow-sm w-full sm:w-auto justify-center"
+          >
+            <MessageCircle className="w-4 h-4" /> Enviar para WhatsApp Grupo
+          </a>
+        </div>
+      )}
+
+      {/* Mensagens de Notificação */}
       {mensagem.texto && (
         <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -222,7 +259,6 @@ export default function Ocorrencias({ usuarioLogado }) {
 
       {/* Filtros de Visibilidade e Status */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between gap-4 items-center">
-        {/* Abas por Visibilidade */}
         <div className="flex gap-1.5 bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
           {['Todos', 'Interna', 'Morador'].map((t) => (
             <button
@@ -237,7 +273,6 @@ export default function Ocorrencias({ usuarioLogado }) {
           ))}
         </div>
 
-        {/* Filtro por Status */}
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <span className="text-xs font-bold text-slate-500">Status:</span>
           <select
@@ -279,7 +314,7 @@ export default function Ocorrencias({ usuarioLogado }) {
               <h4 className="font-bold text-slate-900 text-sm mt-1">{item.titulo}</h4>
 
               {item.unidade_bloco && (
-                <div className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 w-fit flex items-center gap-1">
+                <div className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 w-fit flex items-center gap-1">
                   <Building className="w-3.5 h-3.5" /> Unidade/Bloco: {item.unidade_bloco}
                 </div>
               )}
@@ -305,8 +340,8 @@ export default function Ocorrencias({ usuarioLogado }) {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span className="text-[11px] text-slate-500 font-medium">
-                Por: <strong>{item.operador_nome}</strong>
+              <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-slate-400" /> Porteiro no Posto: <strong>{item.operador_nome || 'Portaria'}</strong>
               </span>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -315,9 +350,9 @@ export default function Ocorrencias({ usuarioLogado }) {
                   target="_blank"
                   rel="noreferrer"
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-2 rounded-lg text-xs flex items-center gap-1 transition"
-                  title="Compartilhar no WhatsApp"
+                  title="Compartilhar Detalhes no WhatsApp"
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <MessageCircle className="w-4 h-4" /> Disparar WhatsApp
                 </a>
 
                 {item.status !== 'Resolvido' && (
@@ -343,7 +378,7 @@ export default function Ocorrencias({ usuarioLogado }) {
       {/* MODAL REGISTRAR NOVA OCORRÊNCIA */}
       {modalNova && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setModalNova(false)} className="absolute top-4 right-4 text-slate-400 p-1">
               <X className="w-5 h-5" />
             </button>
@@ -351,6 +386,11 @@ export default function Ocorrencias({ usuarioLogado }) {
             <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" /> Registrar Nova Ocorrência
             </h3>
+
+            <div className="bg-slate-100 p-2.5 rounded-xl text-xs text-slate-700 flex items-center gap-2">
+              <User className="w-4 h-4 text-slate-500" />
+              <span>Porteiro Responsável: <strong>{usuarioLogado?.nome || usuarioLogado?.login}</strong></span>
+            </div>
 
             <form onSubmit={cadastrarOcorrencia} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -383,9 +423,10 @@ export default function Ocorrencias({ usuarioLogado }) {
 
               {tipo === 'Morador' && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Bloco do Morador</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Bloco do Morador *</label>
                   <input
                     type="text"
+                    required
                     value={unidadeBloco}
                     onChange={(e) => setUnidadeBloco(e.target.value)}
                     placeholder="Ex: Bloco A - Apto 302"
@@ -401,7 +442,7 @@ export default function Ocorrencias({ usuarioLogado }) {
                   required
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ex: Barulho excessivo após às 22h / Lâmpada do portão queimada"
+                  placeholder="Ex: Barulho excessivo / Lâmpada queimada no portão"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
@@ -443,9 +484,9 @@ export default function Ocorrencias({ usuarioLogado }) {
               <button
                 type="submit"
                 disabled={loading || uploadingFoto}
-                className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md"
+                className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md flex items-center justify-center gap-2"
               >
-                Registrar no Livro Digital
+                Registrar e Preparar Disparo WhatsApp
               </button>
             </form>
           </div>
