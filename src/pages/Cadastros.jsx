@@ -93,7 +93,7 @@ export default function Cadastros({ usuarioLogado }) {
       if (errCond) throw errCond;
       setCondominios(conds || []);
 
-      // 2. Carregar Operadores (Com filtro dinâmico de condomínio para ADM)
+      // 2. Carregar Operadores (COM FILTRO PARA OCULTAR O LOGIN ADMIN CASO NÃO SEJA O PRÓPRIO ADMIN LOGADO)
       if (abaAtiva === 'operadores' && !eOperador) {
         let queryOp = supabase.from('operadores').select('*').order('created_at', { ascending: false });
         
@@ -105,10 +105,16 @@ export default function Cadastros({ usuarioLogado }) {
 
         const { data: ops, error: errOp } = await queryOp;
         if (errOp) throw errOp;
-        setOperadores(ops || []);
+
+        // REGRA: Se NÃO for o Admin logado, o login/conta admin (nível 0) NUNCA é exibido na lista!
+        const operadoresExibidos = !eAdmin
+          ? (ops || []).filter(op => op.nivel_acesso !== 0 && op.perfil !== 'admin')
+          : (ops || []);
+
+        setOperadores(operadoresExibidos);
       }
 
-      // 3. Carregar Moradores (Com filtro dinâmico de condomínio para ADM)
+      // 3. Carregar Moradores
       if (abaAtiva === 'moradores') {
         let queryMor = supabase.from('moradores').select('*').order('nome', { ascending: true });
         
@@ -133,13 +139,11 @@ export default function Cadastros({ usuarioLogado }) {
     }
   };
 
-  // Helper para obter o nome do condomínio pelo ID
   const getNomeCondominioPorId = (id) => {
     const cond = condominios.find(c => c.id === id);
     return cond ? cond.nome : 'Geral / Não Definido';
   };
 
-  // Salvar ou Editar Condomínio (Exclusivo ADM)
   const salvarCondominio = async (e) => {
     e.preventDefault();
     if (!eAdmin) {
@@ -181,7 +185,6 @@ export default function Cadastros({ usuarioLogado }) {
     setEnderecoCondominio(c.endereco || '');
   };
 
-  // Salvar ou Editar Operador
   const salvarOperador = async (e) => {
     e.preventDefault();
     if (eOperador) {
@@ -256,7 +259,6 @@ export default function Cadastros({ usuarioLogado }) {
     setCondominioIdOperador(op.condominio_id || '');
   };
 
-  // Salvar ou Editar Morador
   const salvarMorador = async (e) => {
     e.preventDefault();
 
@@ -316,7 +318,7 @@ export default function Cadastros({ usuarioLogado }) {
 
   return (
     <div className="space-y-6">
-      {/* Banner Informativo & Seletor Multi-Tenant para Administração */}
+      {/* Banner Informativo */}
       <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-md">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
@@ -358,6 +360,7 @@ export default function Cadastros({ usuarioLogado }) {
 
       {/* Abas de Navegação */}
       <div className="flex border-b border-slate-200 bg-white rounded-t-xl overflow-hidden shadow-sm">
+        {/* TAB CONDOMÍNIOS: EXCLUSIVO PARA CONTA ADMIN */}
         {eAdmin && (
           <button
             onClick={() => setAbaAtiva('condominios')}
@@ -635,7 +638,7 @@ export default function Cadastros({ usuarioLogado }) {
         </div>
       )}
 
-      {/* ABA MORADORES (LIBERADA PARA TODOS OS NÍVEIS) */}
+      {/* ABA MORADORES */}
       {abaAtiva === 'moradores' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <form onSubmit={salvarMorador} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
