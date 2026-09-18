@@ -8,6 +8,7 @@ import Chaves from './pages/Chaves';
 import Manutencao from './pages/Manutencao';
 import Rondas from './pages/Rondas';
 import Ocorrencias from './pages/Ocorrencias';
+import PassagemPosto from './pages/PassagemPosto';
 import { 
   ShieldCheck, 
   Lock, 
@@ -21,7 +22,8 @@ import {
   Key, 
   Wrench, 
   QrCode, 
-  BookOpen 
+  BookOpen,
+  Repeat
 } from 'lucide-react';
 
 export default function App() {
@@ -29,7 +31,7 @@ export default function App() {
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'ocorrencias', 'cadastros'
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'ocorrencias', 'passagem', 'cadastros'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -83,6 +85,11 @@ export default function App() {
     setSenha('');
   };
 
+  const handleTrocarOperador = (novoOperador) => {
+    setOperador(novoOperador);
+    setModuloAtual('encomendas');
+  };
+
   if (operador) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -108,7 +115,7 @@ export default function App() {
               className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition shadow-sm"
             >
               <LogOut className="w-4 h-4" />
-              Trocar Turno
+              Sair
             </button>
           </div>
         </header>
@@ -201,6 +208,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setModuloAtual('passagem')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'passagem'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Repeat className="w-4 h-4" />
+              Passagem de Posto
+            </button>
+
+            <button
               onClick={() => setModuloAtual('cadastros')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
                 moduloAtual === 'cadastros'
@@ -223,6 +242,7 @@ export default function App() {
           {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operador} />}
           {moduloAtual === 'rondas' && <Rondas usuarioLogado={operador} />}
           {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operador} />}
+          {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operador} onTrocarOperador={handleTrocarOperador} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
         </main>
 
