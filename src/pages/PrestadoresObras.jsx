@@ -9,33 +9,34 @@ import {
   Search, 
   LogIn, 
   LogOut, 
-  ShieldAlert, 
+  Camera, 
+  Building2, 
   FileText, 
-  UserCheck, 
-  Calendar,
-  Clock,
-  Camera
+  Scan, 
+  Loader2 
 } from 'lucide-react';
 
 export default function PrestadoresObras({ usuarioLogado }) {
   const [prestadores, setPrestadores] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [processandoOcr, setProcessandoOcr] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
   const [busca, setBusca] = useState('');
 
-  // Estados do Modal de Cadastro
+  // Modais
   const [modalCadastro, setModalCadastro] = useState(false);
+  const [modalAcesso, setModalAcesso] = useState(false);
+  const [prestadorSelecionado, setPrestadorSelecionado] = useState(null);
+
+  // Campos do Formulário
   const [nomeProfissional, setNomeProfissional] = useState('');
   const [empresa, setEmpresa] = useState('');
   const [documento, setDocumento] = useState('');
   const [tipoServico, setTipoServico] = useState('Manutenção / Reforma');
+  const [atendeCondominio, setAtendeCondominio] = useState(false);
   const [unidadeDestino, setUnidadeDestino] = useState('');
   const [blocoDestino, setBlocoDestino] = useState('');
   const [observacoes, setObservacoes] = useState('');
-
-  // Estados do Modal de Entrada/Saída
-  const [modalAcesso, setModalAcesso] = useState(false);
-  const [prestadorSelecionado, setPrestadorSelecionado] = useState(null);
   const [cracha, setCracha] = useState('');
 
   useEffect(() => {
@@ -62,6 +63,57 @@ export default function PrestadoresObras({ usuarioLogado }) {
     }
   };
 
+  // Leitura de Documentos via OCR (Extração de Nome e Documento)
+  const processarDocumentoOCR = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setProcessandoOcr(true);
+    setMensagem({ tipo: '', texto: '' });
+
+    try {
+      // Carregamento dinâmico do Tesseract OCR 100% gratuito no navegador
+      if (!window.Tesseract) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      const worker = await window.Tesseract.createWorker('por');
+      const ret = await worker.recognize(file);
+      await worker.terminate();
+
+      const textoLido = ret.data.text || '';
+
+      // Tenta extrair CPF ou RG via Expressão Regular
+      const cpfMatch = textoLido.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/) || textoLido.match(/\d{11}/);
+      const rgMatch = textoLido.match(/\d{2}\.\d{3}\.\d{3}-[\dX]/i);
+
+      if (cpfMatch) {
+        setDocumento(cpfMatch[0]);
+      } else if (rgMatch) {
+        setDocumento(rgMatch[0]);
+      }
+
+      // Procura por linhas de nome no documento
+      const linhas = textoLido.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+      if (linhas.length > 0) {
+        const linhaNome = linhas.find(l => !l.match(/\d/) && l === l.toUpperCase());
+        if (linhaNome) setNomeProfissional(linhaNome);
+      }
+
+      setMensagem({ tipo: 'sucesso', texto: 'OCR concluído! Verifique os dados extraídos.' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: 'Falha na leitura automática do documento: ' + err.message });
+    } finally {
+      setProcessandoOcr(false);
+    }
+  };
+
   const handleCadastrar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -74,8 +126,9 @@ export default function PrestadoresObras({ usuarioLogado }) {
         empresa: empresa.trim(),
         documento: documento.trim(),
         tipo_servico: tipoServico,
-        unidade: unidadeDestino.trim(),
-        bloco: blocoDestino.trim(),
+        atende_condominio: atendeCondominio,
+        unidade: atendeCondominio ? 'Condomínio' : unidadeDestino.trim(),
+        bloco: atendeCondominio ? 'Área Comum' : blocoDestino.trim(),
         observacoes: observacoes.trim(),
         status_acesso: 'AUTORIZADO'
       };
@@ -92,6 +145,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
       setDocumento('');
       setUnidadeDestino('');
       setBlocoDestino('');
+      setAtendeCondominio(false);
       setObservacoes('');
       carregarPrestadores();
       setMensagem({ tipo: 'sucesso', texto: 'Prestador / Obra cadastrado com sucesso!' });
@@ -113,7 +167,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
         .update({
           status_acesso: 'EM_ANDAMENTO',
           data_hora_entrada: new Date().toISOString(),
-          cracha_atribuido: cracha.trim() || 'Crachá Guarita'
+          cracha_atribuido: cracha.trim() || 'Crachá Portaria'
         })
         .eq('id', prestadorSelecionado.id);
 
@@ -123,7 +177,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
       setPrestadorSelecionado(null);
       setCracha('');
       carregarPrestadores();
-      setMensagem({ tipo: 'sucesso', texto: 'Entrada registrada na portaria com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Entrada registrada com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao registrar entrada: ' + err.message });
     } finally {
@@ -167,7 +221,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
             <Briefcase className="w-3.5 h-3.5" /> Módulo 10 - Obras e Prestadores
           </span>
           <h3 className="font-bold text-lg mt-1">Controle de Prestadores de Serviço e Obras</h3>
-          <p className="text-xs text-slate-300">Gerencie autorizações de entrada, reformas e liberação de crachás.</p>
+          <p className="text-xs text-slate-300">Acesso agilizado com OCR de documentos e registo de visitas ao Condomínio.</p>
         </div>
 
         <button
@@ -195,7 +249,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
           type="text"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Pesquisar por nome do profissional, empresa ou unidade..."
+          placeholder="Pesquisar por nome, empresa, unidade ou condomínio..."
           className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs shadow-sm font-medium"
         />
       </div>
@@ -229,7 +283,13 @@ export default function PrestadoresObras({ usuarioLogado }) {
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase block">Destino:</span>
-                  <strong className="text-emerald-700">Bloco {item.bloco} - Apto {item.unidade}</strong>
+                  {item.atende_condominio ? (
+                    <strong className="text-purple-700 flex items-center gap-1">
+                      <Building2 className="w-3 h-3" /> Condomínio
+                    </strong>
+                  ) : (
+                    <strong className="text-emerald-700">Bloco {item.bloco} - Apto {item.unidade}</strong>
+                  )}
                 </div>
               </div>
 
@@ -273,10 +333,10 @@ export default function PrestadoresObras({ usuarioLogado }) {
         )}
       </div>
 
-      {/* MODAL NOVO CADASTRO */}
+      {/* MODAL NOVO CADASTRO COM OCR */}
       {modalCadastro && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setModalCadastro(false)} className="absolute top-4 right-4 text-slate-400 p-1">
               <X className="w-5 h-5" />
             </button>
@@ -284,6 +344,30 @@ export default function PrestadoresObras({ usuarioLogado }) {
             <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
               <Briefcase className="w-5 h-5 text-emerald-600" /> Cadastrar Prestador / Obra
             </h3>
+
+            {/* Leitor OCR de Documentos */}
+            <div className="bg-slate-900 text-white p-3.5 rounded-xl space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
+                  <Scan className="w-4 h-4" /> Leitura OCR de Documento (RG/CPF)
+                </span>
+                {processandoOcr && <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />}
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Tire foto do documento para preencher o nome e número automaticamente.
+              </p>
+
+              <label className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition w-full">
+                <Camera className="w-4 h-4" /> Carregar Foto do Documento
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={processarDocumentoOCR}
+                  className="hidden"
+                />
+              </label>
+            </div>
 
             <form onSubmit={handleCadastrar} className="space-y-3">
               <div>
@@ -322,51 +406,68 @@ export default function PrestadoresObras({ usuarioLogado }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tipo de Serviço</label>
-                  <select
-                    value={tipoServico}
-                    onChange={(e) => setTipoServico(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                  >
-                    <option value="Manutenção">Manutenção</option>
-                    <option value="Reforma / Obra">Reforma / Obra</option>
-                    <option value="Entrega de Móveis">Entrega de Móveis</option>
-                    <option value="Serviço Técnico">Serviço Técnico</option>
-                  </select>
-                </div>
+              {/* Opção para serviço no próprio condomínio */}
+              <div className="bg-purple-50 p-3 rounded-xl border border-purple-200 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco *</label>
-                  <input
-                    type="text"
-                    required
-                    value={blocoDestino}
-                    onChange={(e) => setBlocoDestino(e.target.value)}
-                    placeholder="Ex: A"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                  />
+                  <span className="text-xs font-bold text-purple-950 block">Serviço Prestado ao Condomínio?</span>
+                  <span className="text-[10px] text-purple-700">Manutenção predial, elevadores, jardinagem, etc.</span>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Apto *</label>
-                  <input
-                    type="text"
-                    required
-                    value={unidadeDestino}
-                    onChange={(e) => setUnidadeDestino(e.target.value)}
-                    placeholder="Ex: 102"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                  />
+                <input
+                  type="checkbox"
+                  checked={atendeCondominio}
+                  onChange={(e) => setAtendeCondominio(e.target.checked)}
+                  className="w-5 h-5 rounded accent-purple-600 cursor-pointer"
+                />
+              </div>
+
+              {!atendeCondominio && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco *</label>
+                    <input
+                      type="text"
+                      required={!atendeCondominio}
+                      value={blocoDestino}
+                      onChange={(e) => setBlocoDestino(e.target.value)}
+                      placeholder="Ex: A"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Apto *</label>
+                    <input
+                      type="text"
+                      required={!atendeCondominio}
+                      value={unidadeDestino}
+                      onChange={(e) => setUnidadeDestino(e.target.value)}
+                      placeholder="Ex: 102"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tipo de Serviço</label>
+                <select
+                  value={tipoServico}
+                  onChange={(e) => setTipoServico(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                >
+                  <option value="Manutenção / Reforma">Manutenção / Reforma</option>
+                  <option value="Serviço Predial Condomínio">Serviço Predial Condomínio</option>
+                  <option value="Entrega de Móveis">Entrega de Móveis</option>
+                  <option value="Assistência Técnica">Assistência Técnica</option>
+                </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações / Horários Permitidos</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações / Horários</label>
                 <textarea
                   rows="2"
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
-                  placeholder="Ex: Autorizado das 08h às 17h, portar EPI..."
+                  placeholder="Instruções específicas para a guarita..."
                   className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
@@ -407,12 +508,12 @@ export default function PrestadoresObras({ usuarioLogado }) {
             <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-1">
               <p><strong>Profissional:</strong> {prestadorSelecionado.nome_profissional}</p>
               <p><strong>Empresa:</strong> {prestadorSelecionado.empresa || 'Autônomo'}</p>
-              <p><strong>Destino:</strong> Bloco {prestadorSelecionado.bloco} - Apto {prestadorSelecionado.unidade}</p>
+              <p><strong>Destino:</strong> {prestadorSelecionado.atende_condominio ? 'Condomínio (Área Comum)' : `Bloco ${prestadorSelecionado.bloco} - Apto ${prestadorSelecionado.unidade}`}</p>
             </div>
 
             <form onSubmit={registrarEntrada} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Crachá de Visitante / Prestador Atribuído</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Crachá Atribuído</label>
                 <input
                   type="text"
                   required
