@@ -95,95 +95,97 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     await varrerPendenciasModulos();
   };
 
-  // Varredura de Pendências com os Filtros Solicitados
+  // Varredura de Pendências com Nomes Exatos das Tabelas do Supabase
   const varrerPendenciasModulos = async () => {
     const condId = usuarioLogado?.condominio_id;
     if (!condId) return;
 
     try {
-      // 1. Encomendas Retidas (Tabela: encomendas | status: retido)
-      const { data: encomendas } = await supabase
-        .from('encomendas')
+      // 1. Encomendas Retidas (Tabela real: encomendas_itens | status: retido)
+      const { data: encomendasItens } = await supabase
+        .from('encomendas_itens')
         .select('*')
         .eq('condominio_id', condId);
 
-      const encomendasRetidas = (encomendas || []).filter(e => 
-        e.status && e.status.toLowerCase() === 'retido'
+      const encomendasRetidas = (encomendasItens || []).filter(e => 
+        e.status && e.status.trim().toLowerCase() === 'retido'
       );
 
-      // 2. Custódias Aguardando Retirada (Tabela: custodias | status: Aguardando Retirada ou 'retido'/'pendente')
-      const { data: custodias } = await supabase
-        .from('custodias')
+      // 2. Custódias Aguardando Retirada (Tabela real: custodia | status: Aguardando Retirada)
+      const { data: custodiasData } = await supabase
+        .from('custodia')
         .select('*')
         .eq('condominio_id', condId);
 
-      const custodiasAguardando = (custodias || []).filter(c => {
-        const st = (c.status || '').toLowerCase();
-        return st === 'aguardando retirada' || st === 'retido' || st === 'pendente' || c.solicitacao_retirada === true;
+      const custodiasAguardando = (custodiasData || []).filter(c => {
+        const st = (c.status || '').trim().toLowerCase();
+        return st === 'aguardando retirada' || st === 'retido' || st === 'pendente';
       });
 
-      // 3. Rondas Realizadas nas Últimas 12 Horas (Tabela: rondas)
+      // 3. Rondas Realizadas nas Últimas 12 Horas (Tabelas: rondas_execucao ou registros_ronda)
       const dozeHorasAtras = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-      const { data: rondas12h } = await supabase
-        .from('rondas')
+      
+      let totalRondas12h = 0;
+      const { data: rondasExec } = await supabase
+        .from('rondas_execucao')
         .select('*')
         .eq('condominio_id', condId)
         .gte('created_at', dozeHorasAtras);
 
-      const totalRondas12h = rondas12h ? rondas12h.length : 0;
+      if (rondasExec && rondasExec.length > 0) {
+        totalRondas12h = rondasExec.length;
+      } else {
+        const { data: regRondas } = await supabase
+          .from('registros_ronda')
+          .select('*')
+          .eq('condominio_id', condId)
+          .gte('created_at', dozeHorasAtras);
+        totalRondas12h = regRondas ? regRondas.length : 0;
+      }
 
-      // Status da última ronda geral
-      const { data: ultimaRondaData } = await supabase
-        .from('rondas')
-        .select('*')
-        .eq('condominio_id', condId)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      const ultimaRonda = ultimaRondaData && ultimaRondaData.length > 0 ? ultimaRondaData[0] : null;
-
-      // 4. Chaves em Uso (Módulo 05)
-      const { data: chaves } = await supabase
+      // 4. Chaves em Uso (Tabela: chaves ou movimentacao_chaves)
+      const { data: chavesData } = await supabase
         .from('chaves')
         .select('*')
         .eq('condominio_id', condId);
 
-      const chavesFora = (chaves || []).filter(c => 
-        c.status && c.status.toLowerCase() !== 'disponivel'
-      );
+      const chavesFora = (chavesData || []).filter(c => {
+        const st = (c.status || '').trim().toLowerCase();
+        return st !== 'disponivel' && st !== 'disponível' && st !== 'no quadro';
+      });
 
-      // 5. Inventário/Materiais com Avaria (Módulo 04)
-      const { data: materiais } = await supabase
+      // 5. Inventário/Materiais com Avaria
+      const { data: materiaisData } = await supabase
         .from('materiais')
         .select('*')
         .eq('condominio_id', condId);
 
-      const materiaisAvariados = (materiais || []).filter(m => 
-        m.status && ['avaria', 'defeito', 'manutencao', 'danificado'].includes(m.status.toLowerCase())
+      const materiaisAvariados = (materiaisData || []).filter(m => 
+        m.status && ['avaria', 'defeito', 'manutencao', 'danificado'].includes(m.status.trim().toLowerCase())
       );
 
-      // 6. Ocorrências / Chamados em Aberto (Módulos 06 e 08)
-      const { data: ocorrencias } = await supabase
+      // 6. Ocorrências / Chamados em Aberto
+      const { data: ocorrenciasData } = await supabase
         .from('ocorrencias')
         .select('*')
         .eq('condominio_id', condId);
 
-      const ocorrenciasAbertas = (ocorrencias || []).filter(o => 
-        !o.status || !['concluido', 'resolvido', 'fechado', 'concluida'].includes(o.status.toLowerCase())
-      );
+      const ocorrenciasAbertas = (ocorrenciasData || []).filter(o => {
+        const st = (o.status || '').trim().toLowerCase();
+        return !st || (!st.includes('conclui') && !st.includes('resolv') && !st.includes('fechad'));
+      });
 
       setResumoPendencias({
         chavesFora: chavesFora.length,
         listaChaves: chavesFora,
         materiaisOk: materiaisAvariados.length === 0,
-        qtdMateriais: materiais?.length || 0,
+        qtdMateriais: materiaisData?.length || 0,
         listaMateriaisAvariados: materiaisAvariados,
         ocorrenciasAbertas: ocorrenciasAbertas.length,
         listaOcorrencias: ocorrenciasAbertas,
         encomendasPendentes: encomendasRetidas.length,
         custodiasPendentes: custodiasAguardando.length,
-        rondasUltimas12h: totalRondas12h,
-        ultimaRondaStatus: ultimaRonda ? (ultimaRonda.status || 'Concluída') : 'Sem registros'
+        rondasUltimas12h: totalRondas12h
       });
     } catch (err) {
       console.error('Erro ao varrer pendências dos módulos:', err);
