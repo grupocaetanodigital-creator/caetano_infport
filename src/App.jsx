@@ -28,7 +28,10 @@ import {
   Repeat,
   Briefcase,
   Settings,
-  Filter
+  Filter,
+  Menu,
+  X,
+  ChevronRight
 } from 'lucide-react';
 
 export default function App() {
@@ -40,6 +43,9 @@ export default function App() {
   // Lista Global de Condomínios e Seleção para Administrador
   const [listaCondominios, setListaCondominios] = useState([]);
   const [condominioAtivoId, setCondominioAtivoId] = useState('');
+
+  // Controle do Menu Lateral Responsivo (Sidebar)
+  const [menuAberto, setMenuAberto] = useState(true);
 
   // Feature Flags / Parametrização Dinâmica de Módulos
   const [featureFlags, setFeatureFlags] = useState({
@@ -198,32 +204,51 @@ export default function App() {
 
   if (operador) {
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-        {/* Cabeçalho do Sistema */}
-        <header className="bg-slate-900 text-white p-4 shadow-md flex flex-wrap justify-between items-center gap-3">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-8 h-8 text-emerald-400" />
-            <div>
-              <h1 className="font-bold text-lg leading-tight flex items-center gap-2">
-                INFPORT 1.0 <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-2 py-0.5 rounded">PWA</span>
-              </h1>
-              <p className="text-xs text-slate-400 flex items-center gap-1">
-                <Building2 className="w-3 h-3 text-slate-400" /> {operadorContextoGlobal.condominio_nome}
-              </p>
-            </div>
-          </div>
+      <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans">
+        
+        {/* BARRA LATERAL / SIDEBAR DE NAVEGAÇÃO VERTICAL */}
+        <aside className={`bg-slate-900 text-white flex flex-col justify-between transition-all duration-300 z-30 ${
+          menuAberto ? 'w-full md:w-72' : 'w-full md:w-20'
+        } shrink-0`}>
+          
+          <div>
+            {/* Logótipo e Botão de Alternar Menu */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <ShieldCheck className="w-8 h-8 text-emerald-400 shrink-0" />
+                {menuAberto && (
+                  <div>
+                    <h1 className="font-bold text-base leading-tight flex items-center gap-2">
+                      INFPORT 1.0 <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-2 py-0.5 rounded">PWA</span>
+                    </h1>
+                    <p className="text-[11px] text-slate-400 truncate max-w-[170px]">
+                      {operadorContextoGlobal.condominio_nome}
+                    </p>
+                  </div>
+                )}
+              </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Seletor Multi-Tenant de Condomínios (Exclusivo para Login Admin) */}
-            {eAdmin && (
-              <div className="bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-2">
-                <Filter className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <button 
+                onClick={() => setMenuAberto(!menuAberto)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                title="Expandir/Recolher Menu"
+              >
+                {menuAberto ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {/* Seletor Multi-Tenant no Menu Lateral para Administrador */}
+            {eAdmin && menuAberto && (
+              <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
+                <label className="block text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
+                  <Filter className="w-3 h-3" /> Condomínio Ativo
+                </label>
                 <select
                   value={condominioAtivoId}
                   onChange={(e) => setCondominioAtivoId(e.target.value)}
-                  className="bg-slate-900 text-white text-xs font-bold py-1 px-2.5 rounded-lg border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer max-w-[200px] sm:max-w-[260px] truncate"
+                  className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
                 >
-                  <option value="">🏢 Todos os Condomínios (Visão Global)</option>
+                  <option value="">🏢 Todos (Visão Global)</option>
                   {listaCondominios.map((c) => (
                     <option key={c.id} value={c.id}>🏢 {c.nome}</option>
                   ))}
@@ -231,182 +256,278 @@ export default function App() {
               </div>
             )}
 
-            <span className="text-xs text-slate-300 hidden md:inline">
-              Operador: <strong>{operador.nome}</strong>
-            </span>
+            {/* Lista Vertical de Módulos Categorizada por Função */}
+            <nav className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-220px)]">
+              
+              {/* GRUPO 1: PORTARIA & ATENDIMENTO */}
+              <div className="space-y-1">
+                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Portaria & Atendimento</span>}
+                
+                {featureFlags.mod03_gestao_encomendas && (
+                  <button
+                    onClick={() => setModuloAtual('encomendas')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'encomendas' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Package className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Encomendas & Entregas</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'encomendas' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {featureFlags.mod03_gestao_encomendas && (
+                  <button
+                    onClick={() => setModuloAtual('custodia')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'custodia' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Shield className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Custódia de Itens</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'custodia' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {featureFlags.mod10_prestadores_servico && (
+                  <button
+                    onClick={() => setModuloAtual('prestadores')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'prestadores' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Briefcase className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Prestadores & Obras</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'prestadores' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+              {/* GRUPO 2: GESTÃO DO POSTO */}
+              <div className="space-y-1 pt-2 border-t border-slate-800/80">
+                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Gestão do Posto</span>}
+
+                {featureFlags.mod04_materiais_posto && (
+                  <button
+                    onClick={() => setModuloAtual('materiais')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'materiais' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Radio className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Materiais do Posto</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'materiais' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {featureFlags.mod05_quadro_chaves && (
+                  <button
+                    onClick={() => setModuloAtual('chaves')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'chaves' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Key className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Quadro de Chaves</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'chaves' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {featureFlags.mod06_gestao_manutencao && (
+                  <button
+                    onClick={() => setModuloAtual('manutencao')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'manutencao' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Wrench className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Manutenção & OS</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'manutencao' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+              {/* GRUPO 3: SEGURANÇA & AUDITORIA */}
+              <div className="space-y-1 pt-2 border-t border-slate-800/80">
+                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Segurança & Auditoria</span>}
+
+                {featureFlags.mod07_gestao_ronda && (
+                  <button
+                    onClick={() => setModuloAtual('rondas')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'rondas' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <QrCode className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Rondas Patrimoniais</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'rondas' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {featureFlags.mod08_livro_ocorrencias && (
+                  <button
+                    onClick={() => setModuloAtual('ocorrencias')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'ocorrencias' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <BookOpen className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Livro de Ocorrências</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'ocorrencias' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {featureFlags.mod09_passagem_posto && (
+                  <button
+                    onClick={() => setModuloAtual('passagem')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'passagem' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Repeat className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Passagem de Posto</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'passagem' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+              {/* GRUPO 4: ADMINISTRAÇÃO */}
+              <div className="space-y-1 pt-2 border-t border-slate-800/80">
+                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Administração</span>}
+
+                {featureFlags.mod02_controle_acesso && (
+                  <button
+                    onClick={() => setModuloAtual('cadastros')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'cadastros' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Database className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Cadastros Base</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'cadastros' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {eAdmin && (
+                  <button
+                    onClick={() => setModuloAtual('configuracoes')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                      moduloAtual === 'configuracoes' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Settings className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>Configurações (ADM)</span>}
+                    </div>
+                    {menuAberto && moduloAtual === 'configuracoes' && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+            </nav>
+          </div>
+
+          {/* Rodapé da Sidebar / Operador Conectado & Logout */}
+          <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+            {menuAberto ? (
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                  {operador.nome?.charAt(0)}
+                </div>
+                <div className="truncate">
+                  <p className="text-xs font-bold text-white truncate">{operador.nome}</p>
+                  <p className="text-[10px] text-slate-400 font-mono uppercase">
+                    {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso}`}
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
             <button
               onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition shadow-sm"
+              className="bg-red-600/90 hover:bg-red-700 text-white p-2.5 rounded-xl transition shadow-sm flex items-center gap-1 text-xs font-bold mx-auto md:mx-0"
+              title="Sair da Conta"
             >
               <LogOut className="w-4 h-4" />
-              Sair
+              {menuAberto && <span>Sair</span>}
             </button>
           </div>
-        </header>
 
-        {/* Menu de Módulos / Navegação Dinâmico */}
-        <div className="bg-white border-b border-slate-200 shadow-sm overflow-x-auto">
-          <div className="max-w-7xl mx-auto flex gap-2 p-2 min-w-max">
-            
-            {/* Módulo 03: Encomendas */}
-            {featureFlags.mod03_gestao_encomendas && (
-              <button
-                onClick={() => setModuloAtual('encomendas')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'encomendas' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Package className="w-4 h-4" /> Encomendas & Entregadores
-              </button>
-            )}
+        </aside>
 
-            {/* Custódia de Itens */}
-            {featureFlags.mod03_gestao_encomendas && (
-              <button
-                onClick={() => setModuloAtual('custodia')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'custodia' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Shield className="w-4 h-4" /> Custódia de Itens
-              </button>
-            )}
+        {/* ÁREA DE CONTEÚDO PRINCIPAL DO APLICATIVO */}
+        <div className="flex-1 flex flex-col min-w-0">
+          
+          {/* Cabeçalho do Conteúdo */}
+          <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Módulo Ativo:</span>
+              <span className="text-xs font-bold uppercase text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                {moduloAtual === 'encomendas' && '📦 Encomendas & Entregadores'}
+                {moduloAtual === 'custodia' && '🛡️ Custódia de Itens'}
+                {moduloAtual === 'materiais' && '📻 Materiais do Posto'}
+                {moduloAtual === 'chaves' && '🔑 Quadro de Chaves'}
+                {moduloAtual === 'manutencao' && '🔧 Manutenção & OS'}
+                {moduloAtual === 'rondas' && '📱 Rondas Patrimoniais'}
+                {moduloAtual === 'ocorrencias' && '📖 Livro de Ocorrências'}
+                {moduloAtual === 'passagem' && '🔄 Passagem de Posto'}
+                {moduloAtual === 'prestadores' && '💼 Prestadores & Obras'}
+                {moduloAtual === 'cadastros' && '🗄️ Cadastros Base'}
+                {moduloAtual === 'configuracoes' && '⚙️ Configurações do Sistema'}
+              </span>
+            </div>
 
-            {/* Módulo 04: Materiais do Posto */}
-            {featureFlags.mod04_materiais_posto && (
-              <button
-                onClick={() => setModuloAtual('materiais')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'materiais' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Radio className="w-4 h-4" /> Materiais do Posto
-              </button>
-            )}
+            <div className="text-xs text-slate-500 font-medium hidden sm:block">
+              Condomínio: <strong className="text-slate-800">{operadorContextoGlobal.condominio_nome}</strong>
+            </div>
+          </header>
 
-            {/* Módulo 05: Quadro de Chaves */}
-            {featureFlags.mod05_quadro_chaves && (
-              <button
-                onClick={() => setModuloAtual('chaves')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'chaves' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Key className="w-4 h-4" /> Quadro de Chaves
-              </button>
+          {/* Renderização da Tela do Módulo Selecionado */}
+          <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+            {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'custodia' && <Custodia usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'materiais' && <Materiais usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'chaves' && <Chaves usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'rondas' && <Rondas usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />}
+            {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operadorContextoGlobal} />}
+            {moduloAtual === 'configuracoes' && eAdmin && (
+              <Configuracoes 
+                usuarioLogado={operadorContextoGlobal} 
+                onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
+              />
             )}
+          </main>
 
-            {/* Módulo 06: Manutenção & OS */}
-            {featureFlags.mod06_gestao_manutencao && (
-              <button
-                onClick={() => setModuloAtual('manutencao')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'manutencao' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Wrench className="w-4 h-4" /> Manutenção & OS
-              </button>
-            )}
-
-            {/* Módulo 07: Rondas Patrimoniais */}
-            {featureFlags.mod07_gestao_ronda && (
-              <button
-                onClick={() => setModuloAtual('rondas')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'rondas' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <QrCode className="w-4 h-4" /> Rondas Patrimoniais
-              </button>
-            )}
-
-            {/* Módulo 08: Livro de Ocorrências */}
-            {featureFlags.mod08_livro_ocorrencias && (
-              <button
-                onClick={() => setModuloAtual('ocorrencias')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'ocorrencias' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <BookOpen className="w-4 h-4" /> Livro de Ocorrências
-              </button>
-            )}
-
-            {/* Módulo 09: Passagem de Posto */}
-            {featureFlags.mod09_passagem_posto && (
-              <button
-                onClick={() => setModuloAtual('passagem')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'passagem' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Repeat className="w-4 h-4" /> Passagem de Posto
-              </button>
-            )}
-
-            {/* Módulo 10: Prestadores & Obras */}
-            {featureFlags.mod10_prestadores_servico && (
-              <button
-                onClick={() => setModuloAtual('prestadores')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'prestadores' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Briefcase className="w-4 h-4" /> Prestadores & Obras
-              </button>
-            )}
-
-            {/* Módulo 01/02: Cadastro Base */}
-            {featureFlags.mod02_controle_acesso && (
-              <button
-                onClick={() => setModuloAtual('cadastros')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'cadastros' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Database className="w-4 h-4" /> Cadastro Base
-              </button>
-            )}
-
-            {/* Módulo 11: Configurações (VISÍVEL APENAS QUANDO LOGADO COM CONTA ADMIN) */}
-            {eAdmin && (
-              <button
-                onClick={() => setModuloAtual('configuracoes')}
-                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                  moduloAtual === 'configuracoes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Settings className="w-4 h-4" /> Configurações
-              </button>
-            )}
-          </div>
+          {/* Rodapé Fixo da Área de Conteúdo */}
+          <footer className="bg-white border-t border-slate-200 text-slate-400 text-[11px] py-2.5 text-center font-medium">
+            INFPORT 1.0 — Gestão de Portaria Inteligente
+          </footer>
         </div>
 
-        {/* Conteúdo Dinâmico */}
-        <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
-          {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'custodia' && <Custodia usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'materiais' && <Materiais usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'chaves' && <Chaves usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'rondas' && <Rondas usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />}
-          {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'configuracoes' && eAdmin && (
-            <Configuracoes 
-              usuarioLogado={operadorContextoGlobal} 
-              onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
-            />
-          )}
-        </main>
-
-        {/* Rodapé */}
-        <footer className="bg-slate-900 text-slate-500 text-[11px] py-3 text-center border-t border-slate-800">
-          INFPORT 1.0 — Gestão de Portaria Inteligente
-        </footer>
       </div>
     );
   }
