@@ -9,6 +9,8 @@ import Manutencao from './pages/Manutencao';
 import Rondas from './pages/Rondas';
 import Ocorrencias from './pages/Ocorrencias';
 import PassagemPosto from './pages/PassagemPosto';
+import PrestadoresObras from './pages/PrestadoresObras';
+import Configuracoes from './pages/Configuracoes';
 import { 
   ShieldCheck, 
   Lock, 
@@ -23,7 +25,9 @@ import {
   Wrench, 
   QrCode, 
   BookOpen,
-  Repeat
+  Repeat,
+  Briefcase,
+  Settings
 } from 'lucide-react';
 
 export default function App() {
@@ -31,7 +35,7 @@ export default function App() {
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'ocorrencias', 'passagem', 'cadastros'
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'ocorrencias', 'passagem', 'prestadores', 'cadastros', 'configuracoes'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -220,6 +224,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setModuloAtual('prestadores')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'prestadores'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Briefcase className="w-4 h-4" />
+              Prestadores & Obras
+            </button>
+
+            <button
               onClick={() => setModuloAtual('cadastros')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
                 moduloAtual === 'cadastros'
@@ -229,6 +245,18 @@ export default function App() {
             >
               <Database className="w-4 h-4" />
               Cadastro Base
+            </button>
+
+            <button
+              onClick={() => setModuloAtual('configuracoes')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'configuracoes'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              Configurações
             </button>
           </div>
         </div>
@@ -243,7 +271,9 @@ export default function App() {
           {moduloAtual === 'rondas' && <Rondas usuarioLogado={operador} />}
           {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operador} />}
           {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operador} onTrocarOperador={handleTrocarOperador} />}
+          {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operador} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
+          {moduloAtual === 'configuracoes' && <Configuracoes usuarioLogado={operador} />}
         </main>
 
         {/* Rodapé */}
