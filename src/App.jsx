@@ -35,7 +35,7 @@ export default function App() {
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'ocorrencias', 'passagem', 'prestadores', 'cadastros', 'configuracoes'
+  const [moduloAtual, setModuloAtual] = useState('encomendas');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
