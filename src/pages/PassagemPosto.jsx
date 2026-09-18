@@ -49,9 +49,8 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     ocorrenciasAbertas: 0,
     listaOcorrencias: [],
     encomendasPendentes: 0,
-    listaEncomendas: [],
     custodiasPendentes: 0,
-    listaCustodias: [],
+    rondasUltimas12h: 0,
     ultimaRondaStatus: 'Não registrada'
   });
 
@@ -96,13 +95,54 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     await varrerPendenciasModulos();
   };
 
-  // Varredura de Pendências alinhada com as buscas dos outros módulos
+  // Varredura de Pendências com os Filtros Solicitados
   const varrerPendenciasModulos = async () => {
     const condId = usuarioLogado?.condominio_id;
     if (!condId) return;
 
     try {
-      // 1. Chaves em Uso / Retidas (Módulo 05 - Filtra status diferente de disponível)
+      // 1. Encomendas Retidas (Tabela: encomendas | status: retido)
+      const { data: encomendas } = await supabase
+        .from('encomendas')
+        .select('*')
+        .eq('condominio_id', condId);
+
+      const encomendasRetidas = (encomendas || []).filter(e => 
+        e.status && e.status.toLowerCase() === 'retido'
+      );
+
+      // 2. Custódias Aguardando Retirada (Tabela: custodias | status: Aguardando Retirada ou 'retido'/'pendente')
+      const { data: custodias } = await supabase
+        .from('custodias')
+        .select('*')
+        .eq('condominio_id', condId);
+
+      const custodiasAguardando = (custodias || []).filter(c => {
+        const st = (c.status || '').toLowerCase();
+        return st === 'aguardando retirada' || st === 'retido' || st === 'pendente' || c.solicitacao_retirada === true;
+      });
+
+      // 3. Rondas Realizadas nas Últimas 12 Horas (Tabela: rondas)
+      const dozeHorasAtras = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+      const { data: rondas12h } = await supabase
+        .from('rondas')
+        .select('*')
+        .eq('condominio_id', condId)
+        .gte('created_at', dozeHorasAtras);
+
+      const totalRondas12h = rondas12h ? rondas12h.length : 0;
+
+      // Status da última ronda geral
+      const { data: ultimaRondaData } = await supabase
+        .from('rondas')
+        .select('*')
+        .eq('condominio_id', condId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const ultimaRonda = ultimaRondaData && ultimaRondaData.length > 0 ? ultimaRondaData[0] : null;
+
+      // 4. Chaves em Uso (Módulo 05)
       const { data: chaves } = await supabase
         .from('chaves')
         .select('*')
@@ -112,7 +152,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         c.status && c.status.toLowerCase() !== 'disponivel'
       );
 
-      // 2. Inventário do Posto e Avarias (Módulo 04 - Materiais com avaria ou defeito)
+      // 5. Inventário/Materiais com Avaria (Módulo 04)
       const { data: materiais } = await supabase
         .from('materiais')
         .select('*')
@@ -122,7 +162,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         m.status && ['avaria', 'defeito', 'manutencao', 'danificado'].includes(m.status.toLowerCase())
       );
 
-      // 3. Ocorrências / Chamados em Aberto (Módulos 06 e 08)
+      // 6. Ocorrências / Chamados em Aberto (Módulos 06 e 08)
       const { data: ocorrencias } = await supabase
         .from('ocorrencias')
         .select('*')
@@ -132,36 +172,6 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         !o.status || !['concluido', 'resolvido', 'fechado', 'concluida'].includes(o.status.toLowerCase())
       );
 
-      // 4. Encomendas Pendentes de Retirada (Módulo 02)
-      const { data: encomendas } = await supabase
-        .from('encomendas')
-        .select('*')
-        .eq('condominio_id', condId);
-
-      const encomendasPendentes = (encomendas || []).filter(e => 
-        !e.status || ['pendente', 'aguardando', 'triagem', 'recebido'].includes(e.status.toLowerCase())
-      );
-
-      // 5. Custódia de Itens Pendentes (Módulo 03)
-      const { data: custodias } = await supabase
-        .from('custodias')
-        .select('*')
-        .eq('condominio_id', condId);
-
-      const custodiasPendentes = (custodias || []).filter(c => 
-        !c.status || ['retido', 'em_custodia', 'pendente', 'aguardando'].includes(c.status.toLowerCase())
-      );
-
-      // 6. Última Ronda Patrimonial Registrada (Módulo 07)
-      const { data: rondas } = await supabase
-        .from('rondas')
-        .select('*')
-        .eq('condominio_id', condId)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      const ultimaRonda = rondas && rondas.length > 0 ? rondas[0] : null;
-
       setResumoPendencias({
         chavesFora: chavesFora.length,
         listaChaves: chavesFora,
@@ -170,10 +180,9 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         listaMateriaisAvariados: materiaisAvariados,
         ocorrenciasAbertas: ocorrenciasAbertas.length,
         listaOcorrencias: ocorrenciasAbertas,
-        encomendasPendentes: encomendasPendentes.length,
-        listaEncomendas: encomendasPendentes,
-        custodiasPendentes: custodiasPendentes.length,
-        listaCustodias: custodiasPendentes,
+        encomendasPendentes: encomendasRetidas.length,
+        custodiasPendentes: custodiasAguardando.length,
+        rondasUltimas12h: totalRondas12h,
         ultimaRondaStatus: ultimaRonda ? (ultimaRonda.status || 'Concluída') : 'Sem registros'
       });
     } catch (err) {
@@ -191,7 +200,6 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      // Autenticação do Operador Entrante via Supabase (Igual ao Login do Módulo 01)
       const { data: opEntrante, error: opError } = await supabase
         .from('operadores')
         .select('*')
@@ -215,7 +223,6 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         return;
       }
 
-      // Código de Identificação Único PAS:DDMMAAOPERNN
       const agora = new Date();
       const dia = String(agora.getDate()).padStart(2, '0');
       const mes = String(agora.getMonth() + 1).padStart(2, '0');
@@ -271,13 +278,13 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
       `👤 *Operador Sainte (Saindo):* ${item.operador_sainte_nome}\n` +
       `👤 *Operador Entrante (Assumindo):* ${item.operador_entrante_nome}\n` +
       `📌 *Status:* ${item.status === 'Divergência Registrada' ? '⚠️ DIVERGÊNCIA APONTADA' : '🟢 CONCLUÍDA E VALIDADA'}\n\n` +
-      `📊 *RESUMO GERAL DO POSTO (MÓDULOS 01 A 08):*\n` +
-      `📦 *Módulo 02 - Encomendas:* ${pend.encomendasPendentes || 0} volume(s) pendente(s)\n` +
-      `🎁 *Módulo 03 - Custódia Itens:* ${pend.custodiasPendentes || 0} item(ns) retido(s)\n` +
+      `📊 *RESUMO GERAL DO POSTO:*\n` +
+      `📦 *Módulo 02 - Encomendas Retidas:* ${pend.encomendasPendentes || 0} volume(s)\n` +
+      `🎁 *Módulo 03 - Custódia (Aguardando Retirada):* ${pend.custodiasPendentes || 0} item(ns)\n` +
       `🔦 *Módulo 04 - Materiais Posto:* ${pend.materiaisOk ? '100% OK' : 'Avarias Mapeadas'}\n` +
       `🔑 *Módulo 05 - Quadro Chaves:* ${pend.chavesFora || 0} chave(s) fora\n` +
       `🛠️ *Módulo 06/08 - Ocorrências/OS:* ${pend.ocorrenciasAbertas || 0} pendente(s)\n` +
-      `🚨 *Módulo 07 - Última Ronda:* ${pend.ultimaRondaStatus || 'N/A'}\n\n` +
+      `🚨 *Módulo 07 - Rondas nas últimas 12h:* ${pend.rondasUltimas12h || 0} ronda(s)\n\n` +
       `💬 *RECADOS E INSTRUÇÕES DO TURNO:*\n` +
       `"${item.observacoes}"\n` +
       (item.divergencia ? `\n⚠️ *DIVERGÊNCIA APONTADA:*\n"${item.divergencia}"` : '');
@@ -356,10 +363,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                   <span className="font-bold text-slate-700 uppercase text-[10px] block border-b pb-1">Relatório dos Módulos:</span>
                   <div className="grid grid-cols-2 gap-1.5 text-slate-600">
                     <span className="flex items-center gap-1">
-                      <Package className="w-3 h-3 text-purple-600" /> Encomendas: <strong>{item.pendencias?.encomendasPendentes || 0}</strong>
+                      <Package className="w-3 h-3 text-purple-600" /> Encomendas Retidas: <strong>{item.pendencias?.encomendasPendentes || 0}</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Box className="w-3 h-3 text-blue-600" /> Custódia: <strong>{item.pendencias?.custodiasPendentes || 0}</strong>
+                      <Box className="w-3 h-3 text-blue-600" /> Custódia Padrão: <strong>{item.pendencias?.custodiasPendentes || 0}</strong>
                     </span>
                     <span className="flex items-center gap-1">
                       <Key className="w-3 h-3 text-amber-600" /> Chaves Fora: <strong>{item.pendencias?.chavesFora || 0}</strong>
@@ -371,7 +378,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                       <Wrench className="w-3 h-3 text-red-500" /> Ocorrências/OS: <strong>{item.pendencias?.ocorrenciasAbertas || 0}</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Footprints className="w-3 h-3 text-indigo-600" /> Última Ronda: <strong>{item.pendencias?.ultimaRondaStatus || 'N/A'}</strong>
+                      <Footprints className="w-3 h-3 text-indigo-600" /> Rondas (12h): <strong>{item.pendencias?.rondasUltimas12h || 0} realizada(s)</strong>
                     </span>
                   </div>
                 </div>
@@ -449,15 +456,15 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                       <Package className="w-4 h-4 text-purple-600 flex-shrink-0" />
                       <div>
                         <span className="block text-[10px] text-purple-700">Encomendas:</span>
-                        <strong className="text-purple-950">{resumoPendencias.encomendasPendentes} vol. pendentes</strong>
+                        <strong className="text-purple-950">{resumoPendencias.encomendasPendentes} retida(s)</strong>
                       </div>
                     </div>
 
                     <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex items-center gap-2">
                       <Box className="w-4 h-4 text-blue-600 flex-shrink-0" />
                       <div>
-                        <span className="block text-[10px] text-blue-700">Custódia Itens:</span>
-                        <strong className="text-blue-950">{resumoPendencias.custodiasPendentes} itens retidos</strong>
+                        <span className="block text-[10px] text-blue-700">Custódia:</span>
+                        <strong className="text-blue-950">{resumoPendencias.custodiasPendentes} aguardando</strong>
                       </div>
                     </div>
 
@@ -488,8 +495,8 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                     <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-2">
                       <Footprints className="w-4 h-4 text-indigo-600 flex-shrink-0" />
                       <div>
-                        <span className="block text-[10px] text-indigo-700">Última Ronda:</span>
-                        <strong className="text-indigo-950">{resumoPendencias.ultimaRondaStatus}</strong>
+                        <span className="block text-[10px] text-indigo-700">Rondas (12h):</span>
+                        <strong className="text-indigo-950">{resumoPendencias.rondasUltimas12h} realizada(s)</strong>
                       </div>
                     </div>
                   </div>
@@ -502,12 +509,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                   <div className="space-y-1 text-xs">
                     <button type="button" onClick={() => toggleChecklist('encomendasOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
                       {checklist.encomendasOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
-                      <span>Encomendas físicas conferidas com o saldo do sistema.</span>
+                      <span>Encomendas físicas conferidas com o saldo retido.</span>
                     </button>
 
                     <button type="button" onClick={() => toggleChecklist('custodiaOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
                       {checklist.custodiaOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
-                      <span>Objetos de custódia na portaria conferidos.</span>
+                      <span>Objetos de custódia aguardando retirada conferidos.</span>
                     </button>
 
                     <button type="button" onClick={() => toggleChecklist('materiaisOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
