@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from './services/supabase';
 import Cadastros from './pages/Cadastros';
 import Encomendas from './pages/Encomendas';
@@ -27,7 +27,8 @@ import {
   BookOpen,
   Repeat,
   Briefcase,
-  Settings
+  Settings,
+  Filter
 } from 'lucide-react';
 
 export default function App() {
@@ -35,9 +36,37 @@ export default function App() {
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
+  
+  // Lista Global de Condomínios e Seleção para Administrador
+  const [listaCondominios, setListaCondominios] = useState([]);
+  const [condominioAtivoId, setCondominioAtivoId] = useState('');
+
   const [moduloAtual, setModuloAtual] = useState('encomendas');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+
+  // Identificação de Perfil de Administrador (Caetano / Nível 0)
+  const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
+
+  useEffect(() => {
+    if (operador) {
+      carregarCondominiosHeader();
+    }
+  }, [operador]);
+
+  // Carrega a lista de condomínios cadastrados no banco para o menu do topo
+  const carregarCondominiosHeader = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('condominios')
+        .select('*')
+        .order('nome', { ascending: true });
+      if (error) throw error;
+      setListaCondominios(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar condomínios no topo:', err);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -75,6 +104,7 @@ export default function App() {
 
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
+      setCondominioAtivoId(opData.condominio_id || '');
     } catch (err) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
     } finally {
@@ -87,6 +117,7 @@ export default function App() {
     setCondominio(null);
     setLogin('');
     setSenha('');
+    setCondominioAtivoId('');
   };
 
   const handleTrocarOperador = (novoOperador) => {
@@ -94,11 +125,23 @@ export default function App() {
     setModuloAtual('encomendas');
   };
 
+  // Identifica o condomínio selecionado atualmente no dropdown
+  const objCondominioSelecionado = listaCondominios.find(c => c.id === condominioAtivoId);
+
+  // Objeto unificado repassado a todas as telas filhas
+  const operadorContextoGlobal = operador ? {
+    ...operador,
+    condominio_id: eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id,
+    condominio_nome: eAdmin 
+      ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos os Condomínios)'))
+      : (condominio?.nome || 'Condomínio Geral')
+  } : null;
+
   if (operador) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-        {/* Cabeçalho */}
-        <header className="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
+        {/* Cabeçalho do Sistema */}
+        <header className="bg-slate-900 text-white p-4 shadow-md flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-8 h-8 text-emerald-400" />
             <div>
@@ -106,14 +149,33 @@ export default function App() {
                 INFPORT 1.0 <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-2 py-0.5 rounded">PWA</span>
               </h1>
               <p className="text-xs text-slate-400 flex items-center gap-1">
-                <Building2 className="w-3 h-3 text-slate-400" /> {condominio?.nome || 'Condomínio Geral'}
+                <Building2 className="w-3 h-3 text-slate-400" /> {operadorContextoGlobal.condominio_nome}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-slate-300 hidden sm:inline">
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* SELETOR MULTI-TENANT NO TOPO (EXCLUSIVO PARA A CONTA ADM CAETANO) */}
+            {eAdmin && (
+              <div className="bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <select
+                  value={condominioAtivoId}
+                  onChange={(e) => setCondominioAtivoId(e.target.value)}
+                  className="bg-slate-900 text-white text-xs font-bold py-1 px-2.5 rounded-lg border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer max-w-[200px] sm:max-w-[260px] truncate"
+                >
+                  <option value="">🏢 Todos os Condomínios (Visão Global)</option>
+                  {listaCondominios.map((c) => (
+                    <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <span className="text-xs text-slate-300 hidden md:inline">
               Operador: <strong>{operador.nome}</strong>
             </span>
+
             <button
               onClick={handleLogout}
               className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition shadow-sm"
@@ -261,19 +323,19 @@ export default function App() {
           </div>
         </div>
 
-        {/* Conteúdo do Módulo Ativo */}
+        {/* Conteúdo Dinâmico - Passando o contexto global para todos os módulos */}
         <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
-          {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operador} />}
-          {moduloAtual === 'custodia' && <Custodia usuarioLogado={operador} />}
-          {moduloAtual === 'materiais' && <Materiais usuarioLogado={operador} />}
-          {moduloAtual === 'chaves' && <Chaves usuarioLogado={operador} />}
-          {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operador} />}
-          {moduloAtual === 'rondas' && <Rondas usuarioLogado={operador} />}
-          {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operador} />}
-          {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operador} onTrocarOperador={handleTrocarOperador} />}
-          {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operador} />}
-          {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
-          {moduloAtual === 'configuracoes' && <Configuracoes usuarioLogado={operador} />}
+          {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'custodia' && <Custodia usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'materiais' && <Materiais usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'chaves' && <Chaves usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'rondas' && <Rondas usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />}
+          {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'configuracoes' && <Configuracoes usuarioLogado={operadorContextoGlobal} />}
         </main>
 
         {/* Rodapé */}
