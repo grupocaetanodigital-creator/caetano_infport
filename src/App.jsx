@@ -16,7 +16,6 @@ import {
   Lock, 
   User, 
   LogOut, 
-  Building2, 
   Database, 
   Package, 
   Shield, 
@@ -31,7 +30,6 @@ import {
   Filter,
   Menu,
   X,
-  ChevronRight,
   Home,
   Grid,
   ChevronLeft
@@ -68,8 +66,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
-  // Identificação de Perfil de Administrador (Nível 0 / Admin)
+  // Perfil de Acesso:
+  // Admin (Nível 0)
   const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
+  // Master / Síndico / Admin têm acesso ao Módulo 11 (Configurações)
+  const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
 
   useEffect(() => {
     if (operador) {
@@ -82,6 +83,9 @@ export default function App() {
       const idCondTarget = eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id;
       if (idCondTarget) {
         carregarFeatureFlags(idCondTarget);
+      } else {
+        // Se Admin não selecionou condomínio específico (visão global), mantém todas as flags ativas
+        resetarFeatureFlagsPadrao();
       }
     }
   }, [operador, condominioAtivoId]);
@@ -99,7 +103,26 @@ export default function App() {
     }
   };
 
+  const resetarFeatureFlagsPadrao = () => {
+    setFeatureFlags({
+      mod02_controle_acesso: true,
+      mod03_gestao_encomendas: true,
+      mod04_materiais_posto: true,
+      mod05_quadro_chaves: true,
+      mod06_gestao_manutencao: true,
+      mod07_gestao_ronda: true,
+      mod08_livro_ocorrencias: true,
+      mod09_passagem_posto: true,
+      mod10_prestadores_servico: true
+    });
+  };
+
   const carregarFeatureFlags = async (condominioId) => {
+    if (!condominioId) {
+      resetarFeatureFlagsPadrao();
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('configuracoes')
@@ -122,20 +145,11 @@ export default function App() {
           mod10_prestadores_servico: data.mod10_prestadores_servico ?? true
         });
       } else {
-        setFeatureFlags({
-          mod02_controle_acesso: true,
-          mod03_gestao_encomendas: true,
-          mod04_materiais_posto: true,
-          mod05_quadro_chaves: true,
-          mod06_gestao_manutencao: true,
-          mod07_gestao_ronda: true,
-          mod08_livro_ocorrencias: true,
-          mod09_passagem_posto: true,
-          mod10_prestadores_servico: true
-        });
+        resetarFeatureFlagsPadrao();
       }
     } catch (err) {
       console.error('Erro ao carregar Feature Flags:', err);
+      resetarFeatureFlagsPadrao();
     }
   };
 
@@ -227,7 +241,7 @@ export default function App() {
     { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: featureFlags.mod02_controle_acesso, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
   ];
 
-  if (eAdmin) {
+  if (podeAcessarConfiguracoes) {
     modulosDisponiveis.push({ id: 'configuracoes', titulo: 'Configurações', icone: Settings, flag: true, cor: 'bg-slate-800 text-white border-slate-900' });
   }
 
@@ -349,7 +363,7 @@ export default function App() {
                 <div className="truncate">
                   <p className="text-xs font-bold text-white truncate">{operador.nome}</p>
                   <p className="text-[10px] text-slate-400 uppercase font-mono">
-                    {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso}`}
+                    {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso ?? 3}`}
                   </p>
                 </div>
               </div>
@@ -464,7 +478,7 @@ export default function App() {
             {moduloAtual === 'dashboard' && (
               <div className="max-w-4xl mx-auto space-y-4">
                 
-                {/* Banner de Operador Fixo (Estilo Engemoura) */}
+                {/* Banner de Operador Fixo */}
                 <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex items-center justify-between border border-slate-800">
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800">
@@ -482,7 +496,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Grade 3xN de Ícones Grandes (Estilo PorteiroWeb / RJ Johnson) */}
+                {/* Grade 3xN de Ícones Grandes */}
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 px-1">
                     Módulos Operacionais
@@ -512,17 +526,37 @@ export default function App() {
             )}
 
             {/* Telas dos Módulos Específicos */}
-            {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'custodia' && <Custodia usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'materiais' && <Materiais usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'chaves' && <Chaves usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'rondas' && <Rondas usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />}
-            {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operadorContextoGlobal} />}
-            {moduloAtual === 'configuracoes' && eAdmin && (
+            {moduloAtual === 'encomendas' && featureFlags.mod03_gestao_encomendas && (
+              <Encomendas usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'custodia' && featureFlags.mod03_gestao_encomendas && (
+              <Custodia usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'materiais' && featureFlags.mod04_materiais_posto && (
+              <Materiais usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'chaves' && featureFlags.mod05_quadro_chaves && (
+              <Chaves usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'manutencao' && featureFlags.mod06_gestao_manutencao && (
+              <Manutencao usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'rondas' && featureFlags.mod07_gestao_ronda && (
+              <Rondas usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'ocorrencias' && featureFlags.mod08_livro_ocorrencias && (
+              <Ocorrencias usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'passagem' && featureFlags.mod09_passagem_posto && (
+              <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />
+            )}
+            {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
+              <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'cadastros' && featureFlags.mod02_controle_acesso && (
+              <Cadastros usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'configuracoes' && podeAcessarConfiguracoes && (
               <Configuracoes 
                 usuarioLogado={operadorContextoGlobal} 
                 onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
@@ -544,35 +578,41 @@ export default function App() {
             Início
           </button>
 
-          <button
-            onClick={() => setModuloAtual('encomendas')}
-            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-              moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-200'
-            }`}
-          >
-            <Package className="w-5 h-5 mb-0.5" />
-            Encomendas
-          </button>
+          {featureFlags.mod03_gestao_encomendas && (
+            <button
+              onClick={() => setModuloAtual('encomendas')}
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+                moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-200'
+              }`}
+            >
+              <Package className="w-5 h-5 mb-0.5" />
+              Encomendas
+            </button>
+          )}
 
-          <button
-            onClick={() => setModuloAtual('chaves')}
-            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-              moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-200'
-            }`}
-          >
-            <Key className="w-5 h-5 mb-0.5" />
-            Chaves
-          </button>
+          {featureFlags.mod05_quadro_chaves && (
+            <button
+              onClick={() => setModuloAtual('chaves')}
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+                moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-200'
+              }`}
+            >
+              <Key className="w-5 h-5 mb-0.5" />
+              Chaves
+            </button>
+          )}
 
-          <button
-            onClick={() => setModuloAtual('rondas')}
-            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-              moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-200'
-            }`}
-          >
-            <QrCode className="w-5 h-5 mb-0.5" />
-            Rondas
-          </button>
+          {featureFlags.mod07_gestao_ronda && (
+            <button
+              onClick={() => setModuloAtual('rondas')}
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+                moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-200'
+              }`}
+            >
+              <QrCode className="w-5 h-5 mb-0.5" />
+              Rondas
+            </button>
+          )}
 
           <button
             onClick={() => setDrawerMobileAberto(true)}
