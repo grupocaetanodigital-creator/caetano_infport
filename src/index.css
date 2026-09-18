@@ -2,13 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ajustes visuais e otimização de toque para os aparelhos da guarita */
-html, body {
-  touch-action: manipulation;
+/* Bloqueia o gesto de pull-to-refresh e o transbordo no telemóvel */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  touch-action: pan-x pan-y;
   -webkit-tap-highlight-color: transparent;
-  user-select: none;
 }
 
-input, textarea, select {
-  user-select: text;
+/* Garante scroll suave dentro dos módulos sem acionar atualização de página */
+.custom-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
