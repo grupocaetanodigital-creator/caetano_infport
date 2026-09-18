@@ -31,7 +31,10 @@ import {
   Filter,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  Home,
+  Grid,
+  ChevronLeft
 } from 'lucide-react';
 
 export default function App() {
@@ -44,8 +47,9 @@ export default function App() {
   const [listaCondominios, setListaCondominios] = useState([]);
   const [condominioAtivoId, setCondominioAtivoId] = useState('');
 
-  // Controle do Menu Lateral Responsivo (Sidebar)
-  const [menuAberto, setMenuAberto] = useState(true);
+  // Controles de Navegação Responsiva
+  const [menuAberto, setMenuAberto] = useState(true); // Sidebar Desktop
+  const [drawerMobileAberto, setDrawerMobileAberto] = useState(false); // Menu Gaveta Mobile
 
   // Feature Flags / Parametrização Dinâmica de Módulos
   const [featureFlags, setFeatureFlags] = useState({
@@ -60,7 +64,7 @@ export default function App() {
     mod10_prestadores_servico: true
   });
 
-  const [moduloAtual, setModuloAtual] = useState('encomendas');
+  const [moduloAtual, setModuloAtual] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -172,6 +176,7 @@ export default function App() {
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
       setCondominioAtivoId(opData.condominio_id || '');
+      setModuloAtual('dashboard');
     } catch (err) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
     } finally {
@@ -185,11 +190,17 @@ export default function App() {
     setLogin('');
     setSenha('');
     setCondominioAtivoId('');
+    setDrawerMobileAberto(false);
   };
 
   const handleTrocarOperador = (novoOperador) => {
     setOperador(novoOperador);
-    setModuloAtual('encomendas');
+    setModuloAtual('dashboard');
+  };
+
+  const navegarMobile = (modulo) => {
+    setModuloAtual(modulo);
+    setDrawerMobileAberto(false);
   };
 
   const objCondominioSelecionado = listaCondominios.find(c => c.id === condominioAtivoId);
@@ -198,21 +209,61 @@ export default function App() {
     ...operador,
     condominio_id: eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id,
     condominio_nome: eAdmin 
-      ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos os Condomínios)'))
+      ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos)'))
       : (condominio?.nome || 'Condomínio Geral')
   } : null;
 
+  // Grade de Módulos Ativos para a Home / Dashboard Mobile
+  const modulosDisponiveis = [
+    { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: featureFlags.mod03_gestao_encomendas, cor: 'bg-blue-50 text-blue-600 border-blue-200' },
+    { id: 'custodia', titulo: 'Custódia Itens', icone: Shield, flag: featureFlags.mod03_gestao_encomendas, cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { id: 'prestadores', titulo: 'Prestadores & Obras', icone: Briefcase, flag: featureFlags.mod10_prestadores_servico, cor: 'bg-purple-50 text-purple-600 border-purple-200' },
+    { id: 'materiais', titulo: 'Materiais Posto', icone: Radio, flag: featureFlags.mod04_materiais_posto, cor: 'bg-amber-50 text-amber-600 border-amber-200' },
+    { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: featureFlags.mod05_quadro_chaves, cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+    { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: featureFlags.mod06_gestao_manutencao, cor: 'bg-orange-50 text-orange-600 border-orange-200' },
+    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: featureFlags.mod07_gestao_ronda, cor: 'bg-teal-50 text-teal-600 border-teal-200' },
+    { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: featureFlags.mod08_livro_ocorrencias, cor: 'bg-rose-50 text-rose-600 border-rose-200' },
+    { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: featureFlags.mod09_passagem_posto, cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+    { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: featureFlags.mod02_controle_acesso, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
+  ];
+
+  if (eAdmin) {
+    modulosDisponiveis.push({ id: 'configuracoes', titulo: 'Configurações', icone: Settings, flag: true, cor: 'bg-slate-800 text-white border-slate-900' });
+  }
+
   if (operador) {
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans">
+      <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0">
         
-        {/* BARRA LATERAL / SIDEBAR DE NAVEGAÇÃO VERTICAL */}
-        <aside className={`bg-slate-900 text-white flex flex-col justify-between transition-all duration-300 z-30 ${
-          menuAberto ? 'w-full md:w-72' : 'w-full md:w-20'
-        } shrink-0`}>
+        {/* CABEÇALHO COMPACTO EXCLUSIVO MOBILE */}
+        <header className="md:hidden bg-slate-900 text-white p-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <ShieldCheck className="w-7 h-7 text-emerald-400 shrink-0" />
+            <div className="truncate">
+              <h1 className="font-bold text-sm leading-tight">INFPORT 1.0</h1>
+              <p className="text-[11px] text-slate-300 truncate max-w-[190px]">
+                {operadorContextoGlobal.condominio_nome}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDrawerMobileAberto(true)}
+              className="p-2 text-slate-200 bg-slate-800 active:bg-slate-700 rounded-xl transition"
+              title="Menu Principal"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        {/* SIDEBAR VERTICAL (Telas Médias/Grandes e Tablets) */}
+        <aside className={`hidden md:flex bg-slate-900 text-white flex-col justify-between transition-all duration-300 z-30 ${
+          menuAberto ? 'w-64' : 'w-20'
+        } shrink-0 min-h-screen sticky top-0`}>
           
           <div>
-            {/* Logótipo e Botão de Alternar Menu */}
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3 overflow-hidden">
                 <ShieldCheck className="w-8 h-8 text-emerald-400 shrink-0" />
@@ -221,7 +272,7 @@ export default function App() {
                     <h1 className="font-bold text-base leading-tight flex items-center gap-2">
                       INFPORT 1.0 <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-2 py-0.5 rounded">PWA</span>
                     </h1>
-                    <p className="text-[11px] text-slate-400 truncate max-w-[170px]">
+                    <p className="text-[11px] text-slate-400 truncate max-w-[150px]">
                       {operadorContextoGlobal.condominio_nome}
                     </p>
                   </div>
@@ -231,13 +282,12 @@ export default function App() {
               <button 
                 onClick={() => setMenuAberto(!menuAberto)}
                 className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-                title="Expandir/Recolher Menu"
               >
                 {menuAberto ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
 
-            {/* Seletor Multi-Tenant no Menu Lateral para Administrador */}
+            {/* Seletor Multi-Tenant Admin no Desktop */}
             {eAdmin && menuAberto && (
               <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
                 <label className="block text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
@@ -246,7 +296,7 @@ export default function App() {
                 <select
                   value={condominioAtivoId}
                   onChange={(e) => setCondominioAtivoId(e.target.value)}
-                  className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
+                  className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-600 focus:outline-none"
                 >
                   <option value="">🏢 Todos (Visão Global)</option>
                   {listaCondominios.map((c) => (
@@ -256,254 +306,212 @@ export default function App() {
               </div>
             )}
 
-            {/* Lista Vertical de Módulos Categorizada por Função */}
-            <nav className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-220px)]">
-              
-              {/* GRUPO 1: PORTARIA & ATENDIMENTO */}
-              <div className="space-y-1">
-                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Portaria & Atendimento</span>}
-                
-                {featureFlags.mod03_gestao_encomendas && (
+            {/* Menu de Ícones Lateral */}
+            <nav className="p-3 space-y-1.5 overflow-y-auto max-h-[calc(100vh-200px)]">
+              <button
+                onClick={() => setModuloAtual('dashboard')}
+                className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                  moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Home className="w-5 h-5 shrink-0" />
+                  {menuAberto && <span>Painel Principal</span>}
+                </div>
+              </button>
+
+              {modulosDisponiveis.filter(m => m.flag).map((item) => {
+                const IconeComponente = item.icone;
+                return (
                   <button
-                    onClick={() => setModuloAtual('encomendas')}
+                    key={item.id}
+                    onClick={() => setModuloAtual(item.id)}
                     className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'encomendas' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      moduloAtual === item.id ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Package className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Encomendas & Entregas</span>}
+                      <IconeComponente className="w-5 h-5 shrink-0" />
+                      {menuAberto && <span>{item.titulo}</span>}
                     </div>
-                    {menuAberto && moduloAtual === 'encomendas' && <ChevronRight className="w-4 h-4" />}
                   </button>
-                )}
-
-                {featureFlags.mod03_gestao_encomendas && (
-                  <button
-                    onClick={() => setModuloAtual('custodia')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'custodia' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Shield className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Custódia de Itens</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'custodia' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-
-                {featureFlags.mod10_prestadores_servico && (
-                  <button
-                    onClick={() => setModuloAtual('prestadores')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'prestadores' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Briefcase className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Prestadores & Obras</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'prestadores' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-              </div>
-
-              {/* GRUPO 2: GESTÃO DO POSTO */}
-              <div className="space-y-1 pt-2 border-t border-slate-800/80">
-                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Gestão do Posto</span>}
-
-                {featureFlags.mod04_materiais_posto && (
-                  <button
-                    onClick={() => setModuloAtual('materiais')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'materiais' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Radio className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Materiais do Posto</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'materiais' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-
-                {featureFlags.mod05_quadro_chaves && (
-                  <button
-                    onClick={() => setModuloAtual('chaves')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'chaves' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Key className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Quadro de Chaves</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'chaves' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-
-                {featureFlags.mod06_gestao_manutencao && (
-                  <button
-                    onClick={() => setModuloAtual('manutencao')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'manutencao' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Wrench className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Manutenção & OS</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'manutencao' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-              </div>
-
-              {/* GRUPO 3: SEGURANÇA & AUDITORIA */}
-              <div className="space-y-1 pt-2 border-t border-slate-800/80">
-                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Segurança & Auditoria</span>}
-
-                {featureFlags.mod07_gestao_ronda && (
-                  <button
-                    onClick={() => setModuloAtual('rondas')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'rondas' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <QrCode className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Rondas Patrimoniais</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'rondas' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-
-                {featureFlags.mod08_livro_ocorrencias && (
-                  <button
-                    onClick={() => setModuloAtual('ocorrencias')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'ocorrencias' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <BookOpen className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Livro de Ocorrências</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'ocorrencias' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-
-                {featureFlags.mod09_passagem_posto && (
-                  <button
-                    onClick={() => setModuloAtual('passagem')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'passagem' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Repeat className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Passagem de Posto</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'passagem' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-              </div>
-
-              {/* GRUPO 4: ADMINISTRAÇÃO */}
-              <div className="space-y-1 pt-2 border-t border-slate-800/80">
-                {menuAberto && <span className="text-[10px] font-bold text-slate-500 uppercase px-3 tracking-wider">Administração</span>}
-
-                {featureFlags.mod02_controle_acesso && (
-                  <button
-                    onClick={() => setModuloAtual('cadastros')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'cadastros' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Database className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Cadastros Base</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'cadastros' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-
-                {eAdmin && (
-                  <button
-                    onClick={() => setModuloAtual('configuracoes')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
-                      moduloAtual === 'configuracoes' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Settings className="w-5 h-5 shrink-0" />
-                      {menuAberto && <span>Configurações (ADM)</span>}
-                    </div>
-                    {menuAberto && moduloAtual === 'configuracoes' && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                )}
-              </div>
-
+                );
+              })}
             </nav>
           </div>
 
-          {/* Rodapé da Sidebar / Operador Conectado & Logout */}
           <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
-            {menuAberto ? (
+            {menuAberto && (
               <div className="flex items-center gap-2 overflow-hidden">
                 <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
                   {operador.nome?.charAt(0)}
                 </div>
                 <div className="truncate">
                   <p className="text-xs font-bold text-white truncate">{operador.nome}</p>
-                  <p className="text-[10px] text-slate-400 font-mono uppercase">
+                  <p className="text-[10px] text-slate-400 uppercase font-mono">
                     {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso}`}
                   </p>
                 </div>
               </div>
-            ) : null}
-
+            )}
             <button
               onClick={handleLogout}
-              className="bg-red-600/90 hover:bg-red-700 text-white p-2.5 rounded-xl transition shadow-sm flex items-center gap-1 text-xs font-bold mx-auto md:mx-0"
-              title="Sair da Conta"
+              className="bg-red-600/90 hover:bg-red-700 text-white p-2.5 rounded-xl transition font-bold text-xs mx-auto md:mx-0"
+              title="Sair"
             >
               <LogOut className="w-4 h-4" />
-              {menuAberto && <span>Sair</span>}
             </button>
           </div>
-
         </aside>
+
+        {/* DRAWER / MENU DESLIZANTE PARA TELAS MÓVEIS */}
+        {drawerMobileAberto && (
+          <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex justify-end md:hidden">
+            <div className="w-4/5 max-w-xs bg-slate-900 h-full flex flex-col justify-between p-4 shadow-2xl border-l border-slate-800 animate-in slide-in-from-right duration-200">
+              <div>
+                <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                    <span className="font-bold text-white text-sm">Menu INFPORT</span>
+                  </div>
+                  <button onClick={() => setDrawerMobileAberto(false)} className="text-slate-400 p-1">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {eAdmin && (
+                  <div className="my-3 p-2.5 bg-slate-800 rounded-xl space-y-1">
+                    <label className="text-[10px] font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
+                    <select
+                      value={condominioAtivoId}
+                      onChange={(e) => setCondominioAtivoId(e.target.value)}
+                      className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-700"
+                    >
+                      <option value="">🏢 Todos os Condomínios</option>
+                      {listaCondominios.map((c) => (
+                        <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="py-3 space-y-1 overflow-y-auto max-h-[60vh]">
+                  <button
+                    onClick={() => navegarMobile('dashboard')}
+                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center gap-3 ${
+                      moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <Home className="w-5 h-5" /> Painel Geral
+                  </button>
+
+                  {modulosDisponiveis.filter(m => m.flag).map((item) => {
+                    const Icone = item.icone;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => navegarMobile(item.id)}
+                        className={`w-full p-3 rounded-xl font-bold text-xs flex items-center gap-3 ${
+                          moduloAtual === item.id ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <Icone className="w-5 h-5" /> {item.titulo}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                <div className="truncate">
+                  <p className="text-xs font-bold text-white truncate">{operador.nome}</p>
+                  <p className="text-[10px] text-slate-400 uppercase">{operadorContextoGlobal.condominio_nome}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="bg-red-600 text-white p-2.5 rounded-xl font-bold text-xs"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ÁREA DE CONTEÚDO PRINCIPAL DO APLICATIVO */}
         <div className="flex-1 flex flex-col min-w-0">
           
-          {/* Cabeçalho do Conteúdo */}
-          <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Módulo Ativo:</span>
-              <span className="text-xs font-bold uppercase text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                {moduloAtual === 'encomendas' && '📦 Encomendas & Entregadores'}
-                {moduloAtual === 'custodia' && '🛡️ Custódia de Itens'}
-                {moduloAtual === 'materiais' && '📻 Materiais do Posto'}
-                {moduloAtual === 'chaves' && '🔑 Quadro de Chaves'}
-                {moduloAtual === 'manutencao' && '🔧 Manutenção & OS'}
-                {moduloAtual === 'rondas' && '📱 Rondas Patrimoniais'}
-                {moduloAtual === 'ocorrencias' && '📖 Livro de Ocorrências'}
-                {moduloAtual === 'passagem' && '🔄 Passagem de Posto'}
-                {moduloAtual === 'prestadores' && '💼 Prestadores & Obras'}
-                {moduloAtual === 'cadastros' && '🗄️ Cadastros Base'}
-                {moduloAtual === 'configuracoes' && '⚙️ Configurações do Sistema'}
+          {/* Cabeçalho do Módulo para Navegação Fácil */}
+          {moduloAtual !== 'dashboard' && (
+            <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
+              <button 
+                onClick={() => setModuloAtual('dashboard')}
+                className="flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition"
+              >
+                <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
+              </button>
+
+              <span className="text-xs font-bold uppercase text-slate-800 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
               </span>
             </div>
+          )}
 
-            <div className="text-xs text-slate-500 font-medium hidden sm:block">
-              Condomínio: <strong className="text-slate-800">{operadorContextoGlobal.condominio_nome}</strong>
-            </div>
-          </header>
+          {/* Renderização das Telas dos Módulos */}
+          <main className="flex-1 p-3 sm:p-6 overflow-y-auto">
+            
+            {/* TELA DASHBOARD / GRADE DE ICONES ESTILO APP MÓVEL */}
+            {moduloAtual === 'dashboard' && (
+              <div className="max-w-4xl mx-auto space-y-4">
+                
+                {/* Banner de Operador Fixo (Estilo Engemoura) */}
+                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex items-center justify-between border border-slate-800">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800">
+                      Posto Ativo
+                    </span>
+                    <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                      {operadorContextoGlobal.condominio_nome}
+                    </h2>
+                    <p className="text-xs text-slate-300">
+                      Operador: <strong className="text-white">{operador.nome}</strong>
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 bg-slate-800 rounded-full flex items-center justify-center text-emerald-400 font-bold text-lg border border-slate-700 shrink-0">
+                    {operador.nome?.charAt(0)}
+                  </div>
+                </div>
 
-          {/* Renderização da Tela do Módulo Selecionado */}
-          <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                {/* Grade 3xN de Ícones Grandes (Estilo PorteiroWeb / RJ Johnson) */}
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 px-1">
+                    Módulos Operacionais
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {modulosDisponiveis.filter(m => m.flag).map((item) => {
+                      const Icone = item.icone;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setModuloAtual(item.id)}
+                          className="bg-white hover:bg-slate-50 active:scale-[0.97] p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center gap-2.5 transition group"
+                        >
+                          <div className={`p-3.5 rounded-2xl border ${item.cor} group-hover:scale-110 transition duration-200`}>
+                            <Icone className="w-7 h-7" />
+                          </div>
+                          <span className="text-xs font-bold text-slate-800 leading-tight">
+                            {item.titulo}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* Telas dos Módulos Específicos */}
             {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operadorContextoGlobal} />}
             {moduloAtual === 'custodia' && <Custodia usuarioLogado={operadorContextoGlobal} />}
             {moduloAtual === 'materiais' && <Materiais usuarioLogado={operadorContextoGlobal} />}
@@ -522,11 +530,58 @@ export default function App() {
             )}
           </main>
 
-          {/* Rodapé Fixo da Área de Conteúdo */}
-          <footer className="bg-white border-t border-slate-200 text-slate-400 text-[11px] py-2.5 text-center font-medium">
-            INFPORT 1.0 — Gestão de Portaria Inteligente
-          </footer>
         </div>
+
+        {/* BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM BAR - ESTILO APP CELULAR) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-400 flex justify-around items-center h-16 z-40 px-1 shadow-2xl">
+          <button
+            onClick={() => setModuloAtual('dashboard')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+              moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-200'
+            }`}
+          >
+            <Home className="w-5 h-5 mb-0.5" />
+            Início
+          </button>
+
+          <button
+            onClick={() => setModuloAtual('encomendas')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+              moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-200'
+            }`}
+          >
+            <Package className="w-5 h-5 mb-0.5" />
+            Encomendas
+          </button>
+
+          <button
+            onClick={() => setModuloAtual('chaves')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+              moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-200'
+            }`}
+          >
+            <Key className="w-5 h-5 mb-0.5" />
+            Chaves
+          </button>
+
+          <button
+            onClick={() => setModuloAtual('rondas')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
+              moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-200'
+            }`}
+          >
+            <QrCode className="w-5 h-5 mb-0.5" />
+            Rondas
+          </button>
+
+          <button
+            onClick={() => setDrawerMobileAberto(true)}
+            className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold hover:text-slate-200 text-slate-300"
+          >
+            <Grid className="w-5 h-5 mb-0.5" />
+            Módulos
+          </button>
+        </nav>
 
       </div>
     );
