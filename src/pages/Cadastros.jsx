@@ -10,7 +10,9 @@ import {
   CheckCircle, 
   AlertCircle, 
   Pencil, 
-  X 
+  X,
+  Filter,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function Cadastros({ usuarioLogado }) {
@@ -19,6 +21,9 @@ export default function Cadastros({ usuarioLogado }) {
   const eMaster = usuarioLogado?.perfil === 'master' || usuarioLogado?.nivel_acesso === 1;
   const eSupervisor = usuarioLogado?.perfil === 'supervisor' || usuarioLogado?.nivel_acesso === 2;
   const eOperador = usuarioLogado?.perfil === 'operador' || usuarioLogado?.nivel_acesso === 3;
+
+  // Seletor de Condomínio Ativo para Administrador (Multi-Tenant Switcher)
+  const [condominioFiltroAdmin, setCondominioFiltroAdmin] = useState('');
 
   // Aba padrão inicial conforme permissão
   const [abaAtiva, setAbaAtiva] = useState(eAdmin ? 'condominios' : 'moradores');
@@ -55,9 +60,8 @@ export default function Cadastros({ usuarioLogado }) {
   const [termoBuscaMorador, setTermoBuscaMorador] = useState('');
 
   useEffect(() => {
-    limparFormularios();
     carregarDados();
-  }, [abaAtiva]);
+  }, [abaAtiva, condominioFiltroAdmin]);
 
   const limparFormularios = () => {
     setIdEdicao(null);
@@ -67,12 +71,12 @@ export default function Cadastros({ usuarioLogado }) {
     setLoginOperador('');
     setSenhaOperador('');
     setNivelAcesso('3');
-    setCondominioIdOperador(eAdmin ? '' : (usuarioLogado?.condominio_id || ''));
+    setCondominioIdOperador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
     setNomeMorador('');
     setBlocoMorador('');
     setUnidadeMorador('');
     setTelefoneMorador('');
-    setCondominioIdMorador(eAdmin ? '' : (usuarioLogado?.condominio_id || ''));
+    setCondominioIdMorador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
   };
 
   const carregarDados = async () => {
@@ -89,25 +93,29 @@ export default function Cadastros({ usuarioLogado }) {
       if (errCond) throw errCond;
       setCondominios(conds || []);
 
-      // 2. Carregar Operadores (Apenas ADM, Master ou Supervisor)
+      // 2. Carregar Operadores (Com filtro dinâmico de condomínio para ADM)
       if (abaAtiva === 'operadores' && !eOperador) {
         let queryOp = supabase.from('operadores').select('*').order('created_at', { ascending: false });
-        if (!eAdmin && usuarioLogado?.condominio_id) {
+        
+        if (eAdmin && condominioFiltroAdmin) {
+          queryOp = queryOp.eq('condominio_id', condominioFiltroAdmin);
+        } else if (!eAdmin && usuarioLogado?.condominio_id) {
           queryOp = queryOp.eq('condominio_id', usuarioLogado.condominio_id);
         }
+
         const { data: ops, error: errOp } = await queryOp;
         if (errOp) throw errOp;
         setOperadores(ops || []);
       }
 
-      // 3. Carregar Moradores (Com isolamento por Condomínio)
+      // 3. Carregar Moradores (Com filtro dinâmico de condomínio para ADM)
       if (abaAtiva === 'moradores') {
         let queryMor = supabase.from('moradores').select('*').order('nome', { ascending: true });
         
-        if (!eAdmin && usuarioLogado?.condominio_id) {
+        if (eAdmin && condominioFiltroAdmin) {
+          queryMor = queryMor.eq('condominio_id', condominioFiltroAdmin);
+        } else if (!eAdmin && usuarioLogado?.condominio_id) {
           queryMor = queryMor.eq('condominio_id', usuarioLogado.condominio_id);
-        } else if (eAdmin && condominioIdMorador) {
-          queryMor = queryMor.eq('condominio_id', condominioIdMorador);
         }
 
         if (termoBuscaMorador.trim()) {
@@ -123,6 +131,12 @@ export default function Cadastros({ usuarioLogado }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper para obter o nome do condomínio pelo ID
+  const getNomeCondominioPorId = (id) => {
+    const cond = condominios.find(c => c.id === id);
+    return cond ? cond.nome : 'Geral / Não Definido';
   };
 
   // Salvar ou Editar Condomínio (Exclusivo ADM)
@@ -175,7 +189,7 @@ export default function Cadastros({ usuarioLogado }) {
       return;
     }
 
-    const targetCondominioId = eAdmin ? condominioIdOperador : usuarioLogado?.condominio_id;
+    const targetCondominioId = eAdmin ? (condominioIdOperador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
 
     if (!nomeOperador.trim() || !loginOperador.trim() || !targetCondominioId) {
       setMensagem({ tipo: 'erro', texto: 'Preencha o nome, login e selecione um condomínio.' });
@@ -242,11 +256,11 @@ export default function Cadastros({ usuarioLogado }) {
     setCondominioIdOperador(op.condominio_id || '');
   };
 
-  // Salvar ou Editar Morador (LIBERADO PARA OPERADORES E PORTEIROS)
+  // Salvar ou Editar Morador
   const salvarMorador = async (e) => {
     e.preventDefault();
 
-    const targetCondominioId = eAdmin ? condominioIdMorador : usuarioLogado?.condominio_id;
+    const targetCondominioId = eAdmin ? (condominioIdMorador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
 
     if (!nomeMorador.trim() || !unidadeMorador.trim() || !targetCondominioId) {
       setMensagem({ tipo: 'erro', texto: 'Nome, Unidade e Condomínio são obrigatórios.' });
@@ -302,21 +316,44 @@ export default function Cadastros({ usuarioLogado }) {
 
   return (
     <div className="space-y-6">
-      {/* Banner Informativo de Perfil */}
-      <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between shadow-md">
+      {/* Banner Informativo & Seletor Multi-Tenant para Administração */}
+      <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-md">
         <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded">
-            Nível de Acesso: {eAdmin ? 'ADMINISTRADOR GERAL' : eMaster ? 'MASTER (SÍNDICO)' : eSupervisor ? 'SUPERVISOR' : 'OPERADOR (PORTARIA)'}
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
+            <ShieldCheck className="w-3.5 h-3.5" /> Nível de Acesso: {eAdmin ? 'ADMINISTRADOR GERAL (DEV)' : eMaster ? 'MASTER (SÍNDICO)' : eSupervisor ? 'SUPERVISOR' : 'OPERADOR (PORTARIA)'}
           </span>
-          <h3 className="font-bold text-base mt-1">
+          <h3 className="font-bold text-lg mt-1">
             {usuarioLogado?.nome || 'Usuário Conectado'}
           </h3>
           <p className="text-xs text-slate-300">
             {eAdmin 
-              ? 'Acesso Multi-Tenant Global Liberado.' 
-              : `Condomínio Vinculado ID: ${usuarioLogado?.condominio_id || 'Geral'}`}
+              ? 'Painel Multi-Tenant Ativo: Selecione o condomínio para alternar o gerenciamento.' 
+              : `Condomínio Vinculado: ${getNomeCondominioPorId(usuarioLogado?.condominio_id)}`}
           </p>
         </div>
+
+        {/* Seletor do Condomínio Ativo para ADM */}
+        {eAdmin && (
+          <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 w-full md:w-auto min-w-[280px] space-y-1">
+            <label className="block text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
+              <Filter className="w-3 h-3" /> Condomínio em Gerenciamento
+            </label>
+            <select
+              value={condominioFiltroAdmin}
+              onChange={(e) => {
+                setCondominioFiltroAdmin(e.target.value);
+                setCondominioIdOperador(e.target.value);
+                setCondominioIdMorador(e.target.value);
+              }}
+              className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            >
+              <option value="">🏢 Todos os Condomínios (Visão Global)</option>
+              {condominios.map((c) => (
+                <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Abas de Navegação */}
@@ -426,7 +463,7 @@ export default function Cadastros({ usuarioLogado }) {
           </form>
 
           <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-4">Condomínios Cadastrados</h3>
+            <h3 className="font-bold text-slate-800 mb-4">Condomínios Cadastrados ({condominios.length})</h3>
             <div className="space-y-3">
               {condominios.map((c) => (
                 <div key={c.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
@@ -435,6 +472,13 @@ export default function Cadastros({ usuarioLogado }) {
                     <p className="text-xs text-slate-500">{c.endereco || 'Sem endereço informado'}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCondominioFiltroAdmin(c.id)}
+                      className="px-2.5 py-1 text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg transition"
+                      title="Alternar para este Condomínio"
+                    >
+                      Gerenciar
+                    </button>
                     <button
                       onClick={() => prepararEdicaoCondominio(c)}
                       className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
@@ -479,7 +523,7 @@ export default function Cadastros({ usuarioLogado }) {
                 <select
                   value={condominioIdOperador}
                   onChange={(e) => setCondominioIdOperador(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-medium"
                   required
                 >
                   <option value="">Selecione o Condomínio...</option>
@@ -490,7 +534,7 @@ export default function Cadastros({ usuarioLogado }) {
               </div>
             ) : (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
-                Condomínio: {condominios.find(c => c.id === usuarioLogado?.condominio_id)?.nome || 'Meu Condomínio'}
+                Condomínio: {getNomeCondominioPorId(usuarioLogado?.condominio_id)}
               </div>
             )}
 
@@ -539,6 +583,7 @@ export default function Cadastros({ usuarioLogado }) {
                 <option value="3">Nível 3 - Operador (Portaria)</option>
                 <option value="2">Nível 2 - Supervisor</option>
                 {eAdmin && <option value="1">Nível 1 - Master (Síndico)</option>}
+                {eAdmin && <option value="0">Nível 0 - Administrador Dev</option>}
               </select>
             </div>
             <button
@@ -551,13 +596,21 @@ export default function Cadastros({ usuarioLogado }) {
           </form>
 
           <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-4">Operadores do Sistema ({operadores.length})</h3>
+            <h3 className="font-bold text-slate-800 mb-4">
+              Operadores Registrados ({operadores.length})
+              {condominioFiltroAdmin && <span className="text-xs font-normal text-emerald-600 block">Filtrado por: {getNomeCondominioPorId(condominioFiltroAdmin)}</span>}
+            </h3>
             <div className="space-y-3">
               {operadores.map((op) => (
                 <div key={op.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
                   <div>
                     <h4 className="font-bold text-slate-900">{op.nome}</h4>
                     <p className="text-xs text-slate-500">Login: <strong>{op.login}</strong></p>
+                    {eAdmin && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded mt-1 inline-block">
+                        🏢 {getNomeCondominioPorId(op.condominio_id)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -568,6 +621,8 @@ export default function Cadastros({ usuarioLogado }) {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      op.nivel_acesso === 0 ? 'bg-purple-100 text-purple-800' :
+                      op.nivel_acesso === 1 ? 'bg-indigo-100 text-indigo-800' :
                       op.nivel_acesso === 2 ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
                     }`}>
                       {op.nivel_acesso === 0 ? 'Dev Admin' : op.nivel_acesso === 1 ? 'Master' : op.nivel_acesso === 2 ? 'Supervisor' : 'Operador'}
@@ -606,7 +661,7 @@ export default function Cadastros({ usuarioLogado }) {
                 <select
                   value={condominioIdMorador}
                   onChange={(e) => setCondominioIdMorador(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-medium"
                   required
                 >
                   <option value="">Selecione o Condomínio...</option>
@@ -617,7 +672,7 @@ export default function Cadastros({ usuarioLogado }) {
               </div>
             ) : (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
-                Condomínio: {condominios.find(c => c.id === usuarioLogado?.condominio_id)?.nome || 'Meu Condomínio'}
+                Condomínio: {getNomeCondominioPorId(usuarioLogado?.condominio_id)}
               </div>
             )}
 
@@ -675,9 +730,12 @@ export default function Cadastros({ usuarioLogado }) {
           </form>
 
           <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-slate-800">Moradores Cadastrados ({moradores.length})</h3>
-              <div className="relative w-64">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+              <div>
+                <h3 className="font-bold text-slate-800">Moradores Cadastrados ({moradores.length})</h3>
+                {condominioFiltroAdmin && <span className="text-xs font-normal text-emerald-600 block">Filtrado por: {getNomeCondominioPorId(condominioFiltroAdmin)}</span>}
+              </div>
+              <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
@@ -703,6 +761,11 @@ export default function Cadastros({ usuarioLogado }) {
                       <p className="text-xs text-slate-500">
                         {m.bloco ? `Bloco ${m.bloco} - ` : ''}Unidade {m.unidade} | Tel: {m.telefone || 'Não informado'}
                       </p>
+                      {eAdmin && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded mt-1 inline-block">
+                          🏢 {getNomeCondominioPorId(m.condominio_id)}
+                        </span>
+                      )}
                     </div>
                     <button
                       onClick={() => prepararEdicaoMorador(m)}
