@@ -65,6 +65,11 @@ export default function Encomendas({ usuarioLogado }) {
   const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
   const [baixaConcluidaWhats, setBaixaConcluidaWhats] = useState(null);
 
+  // Extrai a lista de blocos únicos cadastrados no condomínio
+  const blocosDisponiveis = Array.from(
+    new Set(moradores.map(m => m.bloco).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
   useEffect(() => {
     carregarDadosBase();
   }, [etapa]);
@@ -324,7 +329,7 @@ export default function Encomendas({ usuarioLogado }) {
       if (error) throw error;
 
       const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${data.codigo_re}\nTransportadora: ${data.entregadores?.empresa || 'N/A'}\nEntregador: ${data.entregadores?.nome} (Doc: ${data.entregadores?.documento || 'N/A'})\nTotal de Volumes Declarados: ${data.qtd_declarada} pacotes\nOperador: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
-      
+
       setLoteCriadoWhats({ codigo: data.codigo_re, link: `https://wa.me/?text=${encodeURIComponent(textoWhats)}` });
       setEntregadorSelecionado(null);
       setBuscaEntregador('');
@@ -425,7 +430,7 @@ export default function Encomendas({ usuarioLogado }) {
 
       const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
       const nomeDestinatario = moradorSelecionado ? moradorSelecionado.nome : 'Morador';
-      
+
       const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria assim que possível!`;
 
       setItemTriadoWhats({
@@ -761,76 +766,132 @@ export default function Encomendas({ usuarioLogado }) {
 
             {/* CARD ALERTA DE AGRUPAMENTO */}
             {alertaAgrupamento && (
-              <div className="p-4 bg-red-600 text-white rounded-xl shadow-lg animate-pulse space-y-1">
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <ShieldAlert className="w-6 h-6" /> ⚠️ ATENÇÃO — AGRUPAMENTO DE PACOTES!
+              <div className="p-4 bg-red-600 text-white rounded-xl shadow-lg animate-pulse flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ShieldAlert className="w-7 h-7 flex-shrink-0" />
+                  <div>
+                    <strong className="text-sm uppercase tracking-wide block">Atenção: Agrupamento de Entregas!</strong>
+                    <p className="text-xs text-red-100">
+                      Já existe(m) <strong>{alertaAgrupamento.qtd} pacote(s) retido(s)</strong> para a Unidade {alertaAgrupamento.unidade} {alertaAgrupamento.bloco ? `(Bloco ${alertaAgrupamento.bloco})` : ''}.
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs leading-relaxed">
-                  A Unidade <strong>Apt {alertaAgrupamento.unidade} {alertaAgrupamento.bloco ? 'Bloco ' + alertaAgrupamento.bloco : ''}</strong> já possui <strong>{alertaAgrupamento.qtd} pacote(s) retido(s)</strong> na portaria.
-                  Por favor, junte este novo pacote aos anteriores no mesmo local físico!
-                </p>
               </div>
             )}
 
             <form onSubmit={salvarItemTriagem} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Seleção do Bloco a partir da lista do condomínio */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / AP *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Bloco do Condomínio
+                  </label>
+                  <select
+                    value={blocoTriagem}
+                    onChange={(e) => {
+                      const novoBloco = e.target.value;
+                      setBlocoTriagem(novoBloco);
+                      buscarMoradoresEChecarAgrupamento(unidadeTriagem, novoBloco);
+                    }}
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                  >
+                    <option value="">-- Selecione o Bloco --</option>
+                    {blocosDisponiveis.length > 0 ? (
+                      blocosDisponiveis.map((b) => (
+                        <option key={b} value={b}>
+                          Bloco / Torre {b}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="Único">Bloco Único</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* Número da Unidade com Teclado Numérico acionado */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Número da Unidade / Apt *
+                  </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     required
                     value={unidadeTriagem}
-                    onChange={(e) => buscarMoradoresEChecarAgrupamento(e.target.value, blocoTriagem)}
-                    placeholder="Ex: 24"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
-                  <input
-                    type="text"
-                    value={blocoTriagem}
-                    onChange={(e) => { setBlocoTriagem(e.target.value); buscarMoradoresEChecarAgrupamento(unidadeTriagem, e.target.value); }}
-                    placeholder="Ex: A"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                    onChange={(e) => {
+                      const novaUnid = e.target.value;
+                      setUnidadeTriagem(novaUnid);
+                      buscarMoradoresEChecarAgrupamento(novaUnid, blocoTriagem);
+                    }}
+                    placeholder="Ex: 102"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-lg font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
                   />
                 </div>
               </div>
 
-              {/* LISTAGEM DE MORADORES */}
-              {moradoresDaUnidade.length > 0 ? (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">
-                    Selecione o Morador / Destinatário ({moradoresDaUnidade.length} morador(es) na unidade) *
+              {/* Lista de Moradores da Unidade */}
+              {unidadeTriagem.trim() && (
+                <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase">
+                    Morador Destinatário na Unidade
                   </label>
-                  <select
-                    value={moradorSelecionado?.id || ''}
-                    onChange={(e) => {
-                      const m = moradoresDaUnidade.find(x => x.id === e.target.value);
-                      setMoradorSelecionado(m || null);
-                    }}
-                    className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm"
-                  >
-                    {moradoresDaUnidade.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.nome} — Tel: {m.telefone || 'Sem telefone'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : unidadeTriagem.trim() !== '' && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  Nenhum morador cadastrado nesta unidade. O registro será feito genérico.
+                  {moradoresDaUnidade.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {moradoresDaUnidade.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setMoradorSelecionado(m)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                            moradorSelecionado?.id === m.id
+                              ? 'bg-slate-900 text-white border-slate-900'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          {m.nome} {m.telefone ? '📱' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-700 font-semibold italic">
+                      Nenhum morador específico cadastrado para esta unidade. O aviso poderá ser genérico.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* CAPTURA DE FOTO */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Etiqueta / Pacote *</label>
+              {/* Código de Barras / Rastreio */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Código de Rastreio / Barras (Opcional)
+                </label>
                 <div className="flex gap-2">
-                  <label className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
-                    <Camera className="w-5 h-5 text-emerald-400" />
-                    <span>{uploadingFoto ? 'A carregar foto...' : fotoEtiquetaUrl ? 'Tirar Outra Foto' : 'Tirar Foto da Encomenda'}</span>
+                  <input
+                    type="text"
+                    value={codigoBarras}
+                    onChange={(e) => setCodigoBarras(e.target.value)}
+                    placeholder="Aproxime o leitor ou digite..."
+                    className="flex-1 p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={abrirLeitorCamera}
+                    className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                  >
+                    <QrCode className="w-4 h-4" /> Escanear
+                  </button>
+                </div>
+              </div>
+
+              {/* Foto do Pacote / Etiqueta */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Foto do Pacote / Etiqueta *
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold px-4 py-3 rounded-lg flex items-center gap-2 transition">
+                    <Camera className="w-4 h-4" /> Capturar Foto
                     <input
                       type="file"
                       accept="image/*"
@@ -845,67 +906,43 @@ export default function Encomendas({ usuarioLogado }) {
                       }}
                     />
                   </label>
-                </div>
 
-                {fotoEtiquetaUrl && (
-                  <div className="relative w-24 h-24 mt-2 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-sm">
-                    <img src={fotoEtiquetaUrl} alt="Foto da Etiqueta" className="w-full h-full object-cover" />
-                  </div>
-                )}
-              </div>
-
-              {/* CÓDIGO DE BARRAS / QR CODE / RASTREIO */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">
-                    Cód. Barras / QR Code / Rastreio (Opcional)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={abrirLeitorCamera}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
-                  >
-                    <QrCode className="w-4 h-4" /> Ler via Câmara
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={codigoBarras}
-                    onChange={(e) => setCodigoBarras(e.target.value)}
-                    placeholder="Leitura ou digitação do código..."
-                    className="w-full p-3 pr-10 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                  <Scan className="w-5 h-5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
+                  {uploadingFoto && <span className="text-xs text-amber-600 font-bold animate-pulse">Enviando foto...</span>}
+                  {fotoEtiquetaUrl && (
+                    <a href={fotoEtiquetaUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-600 underline">
+                      Ver Foto Enviada
+                    </a>
+                  )}
                 </div>
               </div>
 
-              {/* OBSERVAÇÕES */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Observações / Avarias</label>
-                <textarea
-                  rows="2"
+              {/* Observações */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Observações (Ex: Caixas grandes, frágil)
+                </label>
+                <input
+                  type="text"
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
-                  placeholder="Ex: Caixa levemente amassada"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-                ></textarea>
+                  placeholder="Ex: Caixa volumosa guardada na prateleira B"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
+                />
               </div>
 
               <button
                 type="submit"
-                disabled={loading || !loteAtivo || !unidadeTriagem || !fotoEtiquetaUrl}
-                className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold py-4 rounded-xl transition shadow-md text-base"
+                disabled={loading || !loteAtivo}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3.5 rounded-xl transition shadow-md"
               >
-                Salvar Pacote na Portaria
+                Salvar Pacote na Triagem
               </button>
             </form>
 
             {itemTriadoWhats && (
               <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
                 <p className="text-xs font-bold text-emerald-900">
-                  Pacote registado! Envie a notificação ao morador ({itemTriadoWhats.destinatario}):
+                  Pacote gravado! Avise {itemTriadoWhats.destinatario} no WhatsApp:
                 </p>
                 <a
                   href={itemTriadoWhats.link}
@@ -913,7 +950,7 @@ export default function Encomendas({ usuarioLogado }) {
                   rel="noreferrer"
                   className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
                 >
-                  <MessageCircle className="w-4 h-4" /> Notificar Morador no WhatsApp <ExternalLink className="w-3 h-3" />
+                  <MessageCircle className="w-4 h-4" /> Disparar Notificação WhatsApp <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
             )}
@@ -926,128 +963,155 @@ export default function Encomendas({ usuarioLogado }) {
       {/* ========================================================================= */}
       {etapa === '3' && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <h3 className="font-bold text-slate-900 text-lg border-b pb-4 flex items-center gap-2">
-            <UserCheck className="w-6 h-6 text-slate-800" /> Baixa / Entrega de Encomendas
+          <h3 className="font-bold text-slate-900 text-lg border-b pb-3 flex items-center gap-2">
+            <UserCheck className="w-6 h-6 text-slate-800" /> Consultar e Dar Baixa em Pacotes
           </h3>
 
-          <form onSubmit={buscarItensParaBaixa} className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / AP *</label>
-              <input
-                type="text"
-                required
-                value={buscaBaixaUnidade}
-                onChange={(e) => setBuscaBaixaUnidade(e.target.value)}
-                placeholder="Ex: 24"
-                className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold"
-              />
-            </div>
+          <form onSubmit={buscarItensParaBaixa} className="space-y-4 max-w-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Bloco
+                </label>
+                <select
+                  value={buscaBaixaBloco}
+                  onChange={(e) => setBuscaBaixaBloco(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-semibold"
+                >
+                  <option value="">Todos / Sem Bloco</option>
+                  {blocosDisponiveis.map((b) => (
+                    <option key={b} value={b}>
+                      Bloco / Torre {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco (Opcional)</label>
-              <input
-                type="text"
-                value={buscaBaixaBloco}
-                onChange={(e) => setBuscaBaixaBloco(e.target.value)}
-                placeholder="Ex: A"
-                className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold"
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                <Search className="w-4 h-4" /> Buscar Encomendas Retidas
-              </button>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Número da Unidade / Apt *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={buscaBaixaUnidade}
+                    onChange={(e) => setBuscaBaixaUnidade(e.target.value)}
+                    placeholder="Ex: 102"
+                    className="flex-1 p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-lg font-bold"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-6 font-bold rounded-lg text-sm transition flex items-center gap-2"
+                  >
+                    <Search className="w-4 h-4" /> Buscar
+                  </button>
+                </div>
+              </div>
             </div>
           </form>
 
           {itensParaBaixa.length > 0 && (
-            <form onSubmit={efetivarBaixaSaida} className="space-y-6 border-t pt-4">
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700 uppercase">
-                  Pacotes Encontrados ({itensParaBaixa.length} volume(s) aguardando retirada)
-                </label>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <form onSubmit={efetivarBaixaSaida} className="space-y-6 border-t pt-6">
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-slate-800">
+                  Pacotes Pendentes da Unidade ({itensParaBaixa.length})
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {itensParaBaixa.map((item) => (
                     <div
                       key={item.id}
                       onClick={() => toggleItemSelecao(item.id)}
-                      className={`p-4 rounded-xl border cursor-pointer transition flex gap-3 items-center ${
-                        itensSelecionadosIds.includes(item.id) ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200 bg-white'
+                      className={`p-4 rounded-xl border cursor-pointer transition flex gap-3 ${
+                        itensSelecionadosIds.includes(item.id)
+                          ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600'
+                          : 'border-slate-200 bg-slate-50'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={itensSelecionadosIds.includes(item.id)}
                         onChange={() => {}}
-                        className="w-5 h-5 accent-emerald-600 rounded cursor-pointer"
+                        className="w-5 h-5 text-emerald-600 rounded mt-1"
                       />
-                      {item.foto_etiqueta_url && (
-                        <img src={item.foto_etiqueta_url} alt="Etiqueta" className="w-14 h-14 object-cover rounded-lg border" />
-                      )}
-                      <div className="text-xs space-y-0.5 flex-1">
-                        <p className="font-bold text-slate-900">
-                          {item.moradores?.nome ? `Destinatário: ${item.moradores.nome}` : 'Morador Não Especificado'}
+                      <div className="space-y-1 text-xs">
+                        <strong className="text-slate-900 block font-semibold">
+                          Pacote retido em: {new Date(item.created_at).toLocaleString('pt-BR')}
+                        </strong>
+                        <p className="text-slate-600">
+                          Rastreio: <span className="font-mono font-bold">{item.codigo_barras || 'Sem código'}</span>
                         </p>
-                        <p className="text-slate-500 font-mono">Cód: {item.codigo_barras || 'Sem código'}</p>
-                        <p className="text-[11px] text-slate-400">Entrada: {new Date(item.created_at).toLocaleString('pt-BR')}</p>
+                        {item.observacoes && <p className="text-slate-500 italic">Obs: {item.observacoes}</p>}
+                        {item.foto_etiqueta_url && (
+                          <a
+                            href={item.foto_etiqueta_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-emerald-700 font-bold underline inline-block mt-1"
+                          >
+                            Ver Foto do Pacote
+                          </a>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome de Quem Retirou *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Nome de Quem Está Retirando *
+                  </label>
                   <input
                     type="text"
                     required
                     value={nomeRetirante}
                     onChange={(e) => setNomeRetirante(e.target.value)}
-                    placeholder="Ex: João da Silva (Próprio morador / Filho)"
-                    className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 text-sm font-bold"
+                    placeholder="Nome do morador ou autorizado..."
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-semibold"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Foto de Comprovativo da Entrega *</label>
-                  <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg cursor-pointer flex items-center justify-center gap-2 transition text-xs">
-                    <Camera className="w-4 h-4 text-emerald-400" />
-                    <span>{uploadingFoto ? 'A carregar...' : fotoRetiranteUrl ? 'Foto Tirada (Alterar)' : 'Tirar Foto da Entrega'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) uploadFotoStorage(file, 'retiradas', setFotoRetiranteUrl);
-                      }}
-                    />
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Foto do Retirante / Comprovante *
                   </label>
+                  <div className="flex items-center gap-3">
+                    <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold px-4 py-3 rounded-lg flex items-center gap-2 transition w-full justify-center">
+                      <Camera className="w-4 h-4" /> Foto da Entrega
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={(e) => uploadFotoStorage(e.target.files[0], 'retiradas', setFotoRetiranteUrl)}
+                      />
+                    </label>
+                  </div>
+                  {fotoRetiranteUrl && (
+                    <span className="text-xs font-bold text-emerald-600 block mt-1">✓ Comprovante Anexado</span>
+                  )}
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading || itensSelecionadosIds.length === 0 || !nomeRetirante || !fotoRetiranteUrl}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-4 rounded-xl transition shadow-md text-base"
+                disabled={loading || itensSelecionadosIds.length === 0}
+                className="w-full max-w-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-4 rounded-xl transition shadow-md text-base"
               >
-                Efetivar Entrega e Dar Baixa ({itensSelecionadosIds.length} pacote(s))
+                Confirmar Saída e Dar Baixa
               </button>
             </form>
           )}
 
           {baixaConcluidaWhats && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 max-w-2xl">
               <p className="text-xs font-bold text-emerald-900">
-                Entrega concluída com sucesso! Envie o comprovativo de saída para o WhatsApp do morador:
+                Baixa concluída! Envie o comprovante via WhatsApp:
               </p>
               <a
                 href={baixaConcluidaWhats.link}
@@ -1055,7 +1119,7 @@ export default function Encomendas({ usuarioLogado }) {
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition"
               >
-                <MessageCircle className="w-4 h-4" /> Enviar Comprovativo no WhatsApp <ExternalLink className="w-3 h-3" />
+                <MessageCircle className="w-4 h-4" /> Enviar Confirmação Cruzada no WhatsApp <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           )}
@@ -1063,71 +1127,19 @@ export default function Encomendas({ usuarioLogado }) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: LEITOR DE CÓDIGO DE BARRAS / QR CODE VIA CÂMARA */}
-      {/* ========================================================================= */}
-      {modalLeitor && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h4 className="font-bold text-sm flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-emerald-400" /> Leitor de Código de Barras / QR Code
-              </h4>
-              <button onClick={fecharLeitorCamera} className="text-slate-400 hover:text-white transition">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4 text-center">
-              {erroCamera ? (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs space-y-2">
-                  <VideoOff className="w-8 h-8 text-red-500 mx-auto" />
-                  <p className="font-bold">{erroCamera}</p>
-                  <p>Aponte a etiqueta diretamente no campo de foto para extrair o código.</p>
-                </div>
-              ) : (
-                <div className="relative w-full h-64 bg-black rounded-xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline muted></video>
-                  <div className="absolute inset-0 border-2 border-emerald-500/60 rounded-xl pointer-events-none flex items-center justify-center">
-                    <div className="w-64 h-32 border-2 border-dashed border-emerald-400 animate-pulse rounded-lg flex items-center justify-center">
-                      <span className="text-[10px] text-emerald-300 font-bold bg-black/60 px-2 py-1 rounded">
-                        Posicione o Código Aqui
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <p className="text-xs text-slate-500">
-                Aproxime o Código de Barras ou QR Code da etiqueta na câmara. A leitura é automática.
-              </p>
-
-              <button
-                onClick={fecharLeitorCamera}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 rounded-xl transition text-xs"
-              >
-                Cancelar Leitura
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
       {/* MODAL: CADASTRO RÁPIDO DE ENTREGADOR */}
       {/* ========================================================================= */}
       {modalNovoEntregador && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h4 className="font-bold text-sm flex items-center gap-2">
-                <Truck className="w-5 h-5 text-emerald-400" /> Cadastro Rápido de Entregador
-              </h4>
-              <button onClick={() => setModalNovoEntregador(false)} className="text-slate-400 hover:text-white transition">
-                <X className="w-6 h-6" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Novo Entregador</h3>
+              <button onClick={() => setModalNovoEntregador(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={cadastrarEntregadorRapido} className="p-6 space-y-4">
+            <form onSubmit={cadastrarEntregadorRapido} className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome Completo *</label>
                 <input
@@ -1135,8 +1147,8 @@ export default function Encomendas({ usuarioLogado }) {
                   required
                   value={novoEntNome}
                   onChange={(e) => setNovoEntNome(e.target.value)}
-                  placeholder="Ex: Carlos Abison"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-bold"
+                  placeholder="Ex: Carlos Silva"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
                 />
               </div>
 
@@ -1147,38 +1159,79 @@ export default function Encomendas({ usuarioLogado }) {
                   value={novoEntEmpresa}
                   onChange={(e) => setNovoEntEmpresa(e.target.value)}
                   placeholder="Ex: Mercado Livre, Shopee, Amazon"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Documento (RG / CPF / CNH)</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Documento (RG/CPF)</label>
                 <input
                   type="text"
                   value={novoEntDoc}
                   onChange={(e) => setNovoEntDoc(e.target.value)}
                   placeholder="Ex: 12.345.678-9"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-mono"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
                 />
               </div>
 
-              <div className="pt-2 flex gap-3">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalNovoEntregador(false)}
-                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition text-xs"
+                  className="flex-1 bg-slate-100 text-slate-700 font-bold py-2.5 rounded-lg text-xs"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || !novoEntNome.trim()}
-                  className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition text-xs shadow-md"
+                  disabled={loading}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs"
                 >
                   Salvar Entregador
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: LEITOR DE CÓDIGO DE BARRAS / CAMERA SCANNER */}
+      {/* ========================================================================= */}
+      {modalLeitor && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-base flex items-center gap-2">
+                <Scan className="w-5 h-5 text-emerald-400" /> Leitor de Código de Barras
+              </h3>
+              <button onClick={fecharLeitorCamera} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {erroCamera ? (
+              <div className="p-4 bg-red-950/50 border border-red-800 rounded-xl text-red-200 text-xs flex items-center gap-2">
+                <VideoOff className="w-5 h-5 flex-shrink-0" />
+                {erroCamera}
+              </div>
+            ) : (
+              <div className="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center">
+                <video ref={videoRef} className="w-full h-full object-cover" playInline muted />
+                <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-24 border-2 border-dashed border-emerald-400 rounded-lg pointer-events-none animate-pulse" />
+              </div>
+            )}
+
+            <p className="text-xs text-slate-400 text-center">
+              Aponte a câmera para o código de barras ou QR Code do pacote.
+            </p>
+
+            <button
+              onClick={fecharLeitorCamera}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-xs"
+            >
+              Fechar Câmera
+            </button>
           </div>
         </div>
       )}
