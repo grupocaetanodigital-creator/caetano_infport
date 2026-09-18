@@ -72,6 +72,37 @@ export default function App() {
   // Master / Síndico / Admin têm acesso ao Módulo 11 (Configurações)
   const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
 
+  // Gerenciamento do Histórico e Botão Voltar do Dispositivo / PWA
+  useEffect(() => {
+    if (!operador) return;
+
+    // Inicializa o estado base da pilha do histórico
+    window.history.replaceState({ modulo: moduloAtual }, '');
+
+    const handlePopState = (event) => {
+      // Se o usuário apertar voltar e estiver em um sub-módulo, retorna para o dashboard em vez de sair do app
+      if (moduloAtual !== 'dashboard') {
+        setModuloAtual('dashboard');
+        window.history.pushState({ modulo: 'dashboard' }, '');
+      } else {
+        // Se já estiver na dashboard e apertar voltar novamente, permite comportamento padrão ou mantêm na home
+        window.history.pushState({ modulo: 'dashboard' }, '');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [operador, moduloAtual]);
+
+  // Função customizada para mudar de tela e atualizar o histórico do navegador de forma segura
+  const mudarModulo = (novoModulo) => {
+    setModuloAtual(novoModulo);
+    setDrawerMobileAberto(false);
+    window.history.pushState({ modulo: novoModulo }, '');
+  };
+
   useEffect(() => {
     if (operador) {
       carregarCondominiosHeader();
@@ -84,7 +115,6 @@ export default function App() {
       if (idCondTarget) {
         carregarFeatureFlags(idCondTarget);
       } else {
-        // Se Admin não selecionou condomínio específico (visão global), mantém todas as flags ativas
         resetarFeatureFlagsPadrao();
       }
     }
@@ -190,7 +220,7 @@ export default function App() {
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
       setCondominioAtivoId(opData.condominio_id || '');
-      setModuloAtual('dashboard');
+      mudarModulo('dashboard');
     } catch (err) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
     } finally {
@@ -209,12 +239,7 @@ export default function App() {
 
   const handleTrocarOperador = (novoOperador) => {
     setOperador(novoOperador);
-    setModuloAtual('dashboard');
-  };
-
-  const navegarMobile = (modulo) => {
-    setModuloAtual(modulo);
-    setDrawerMobileAberto(false);
+    mudarModulo('dashboard');
   };
 
   const objCondominioSelecionado = listaCondominios.find(c => c.id === condominioAtivoId);
@@ -323,7 +348,7 @@ export default function App() {
             {/* Menu de Ícones Lateral */}
             <nav className="p-3 space-y-1.5 overflow-y-auto max-h-[calc(100vh-200px)]">
               <button
-                onClick={() => setModuloAtual('dashboard')}
+                onClick={() => mudarModulo('dashboard')}
                 className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
                   moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
                 }`}
@@ -339,7 +364,7 @@ export default function App() {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setModuloAtual(item.id)}
+                    onClick={() => mudarModulo(item.id)}
                     className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
                       moduloAtual === item.id ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
                     }`}
@@ -411,7 +436,7 @@ export default function App() {
 
                 <div className="py-3 space-y-1 overflow-y-auto max-h-[60vh]">
                   <button
-                    onClick={() => navegarMobile('dashboard')}
+                    onClick={() => mudarModulo('dashboard')}
                     className={`w-full p-3 rounded-xl font-bold text-xs flex items-center gap-3 ${
                       moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
                     }`}
@@ -424,7 +449,7 @@ export default function App() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => navegarMobile(item.id)}
+                        onClick={() => mudarModulo(item.id)}
                         className={`w-full p-3 rounded-xl font-bold text-xs flex items-center gap-3 ${
                           moduloAtual === item.id ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
                         }`}
@@ -459,7 +484,7 @@ export default function App() {
           {moduloAtual !== 'dashboard' && (
             <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
               <button 
-                onClick={() => setModuloAtual('dashboard')}
+                onClick={() => mudarModulo('dashboard')}
                 className="flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
@@ -507,7 +532,7 @@ export default function App() {
                       return (
                         <button
                           key={item.id}
-                          onClick={() => setModuloAtual(item.id)}
+                          onClick={() => mudarModulo(item.id)}
                           className="bg-white hover:bg-slate-50 active:scale-[0.97] p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center gap-2.5 transition group"
                         >
                           <div className={`p-3.5 rounded-2xl border ${item.cor} group-hover:scale-110 transition duration-200`}>
@@ -569,7 +594,7 @@ export default function App() {
         {/* BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM BAR - ESTILO APP CELULAR) */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-400 flex justify-around items-center h-16 z-40 px-1 shadow-2xl">
           <button
-            onClick={() => setModuloAtual('dashboard')}
+            onClick={() => mudarModulo('dashboard')}
             className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
               moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-200'
             }`}
@@ -580,7 +605,7 @@ export default function App() {
 
           {featureFlags.mod03_gestao_encomendas && (
             <button
-              onClick={() => setModuloAtual('encomendas')}
+              onClick={() => mudarModulo('encomendas')}
               className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
                 moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-200'
               }`}
@@ -592,7 +617,7 @@ export default function App() {
 
           {featureFlags.mod05_quadro_chaves && (
             <button
-              onClick={() => setModuloAtual('chaves')}
+              onClick={() => mudarModulo('chaves')}
               className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
                 moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-200'
               }`}
@@ -604,7 +629,7 @@ export default function App() {
 
           {featureFlags.mod07_gestao_ronda && (
             <button
-              onClick={() => setModuloAtual('rondas')}
+              onClick={() => mudarModulo('rondas')}
               className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
                 moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-200'
               }`}
