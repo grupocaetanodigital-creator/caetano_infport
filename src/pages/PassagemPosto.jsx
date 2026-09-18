@@ -88,18 +88,18 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     await varrerPendenciasModulos();
   };
 
-  // Varredura automática no banco de dados para cruzar informações de outros módulos
+  // Varredura abrangente no banco de dados para consolidar todos os módulos
   const varrerPendenciasModulos = async () => {
     const condId = usuarioLogado?.condominio_id;
     if (!condId) return;
 
     try {
-      // 1. Chaves fora do quadro (Módulo 05)
+      // 1. Chaves retidas / em uso (Módulo 05)
       const { data: chaves } = await supabase
         .from('chaves')
         .select('*')
         .eq('condominio_id', condId)
-        .eq('status', 'em_uso');
+        .neq('status', 'disponivel');
 
       // 2. Equipamentos/Materiais do posto (Módulo 04)
       const { data: materiais } = await supabase
@@ -112,14 +112,15 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         .from('ocorrencias')
         .select('*')
         .eq('condominio_id', condId)
-        .eq('status', 'aberto');
+        .neq('status', 'concluido')
+        .neq('status', 'resolvido');
 
-      // 4. Encomendas aguardando retirada (Módulo 02)
+      // 4. Encomendas pendentes de entrega ou em triagem (Módulo 02)
       const { data: encomendas } = await supabase
         .from('encomendas')
         .select('*')
         .eq('condominio_id', condId)
-        .eq('status', 'pendente');
+        .neq('status', 'entregue');
 
       setResumoPendencias({
         chavesFora: chaves?.length || 0,
