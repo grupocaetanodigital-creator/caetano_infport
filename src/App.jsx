@@ -41,11 +41,23 @@ export default function App() {
   const [listaCondominios, setListaCondominios] = useState([]);
   const [condominioAtivoId, setCondominioAtivoId] = useState('');
 
+  // Feature Flags / Parametrização Dinâmica de Módulos
+  const [featureFlags, setFeatureFlags] = useState({
+    mod02_controle_acesso: true,
+    mod03_gestao_encomendas: true,
+    mod04_materiais_posto: true,
+    mod05_quadro_chaves: true,
+    mod06_gestao_manutencao: true,
+    mod07_gestao_ronda: true,
+    mod08_livro_ocorrencias: true,
+    mod09_passagem_posto: true,
+    mod10_prestadores_servico: true
+  });
+
   const [moduloAtual, setModuloAtual] = useState('encomendas');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
-  // Identificação de Perfil de Administrador (Caetano / Nível 0)
   const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
 
   useEffect(() => {
@@ -54,7 +66,16 @@ export default function App() {
     }
   }, [operador]);
 
-  // Carrega a lista de condomínios cadastrados no banco para o menu do topo
+  // Recarrega as Feature Flags sempre que o condomínio ativo mudar
+  useEffect(() => {
+    if (operador) {
+      const idCondTarget = eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id;
+      if (idCondTarget) {
+        carregarFeatureFlags(idCondTarget);
+      }
+    }
+  }, [operador, condominioAtivoId]);
+
   const carregarCondominiosHeader = async () => {
     try {
       const { data, error } = await supabase
@@ -65,6 +86,48 @@ export default function App() {
       setListaCondominios(data || []);
     } catch (err) {
       console.error('Erro ao carregar condomínios no topo:', err);
+    }
+  };
+
+  // Carrega a tabela 'configuracoes' para ativar/desativar botões do menu
+  const carregarFeatureFlags = async (condominioId) => {
+    try {
+      const { data, error } = await supabase
+        .from('configuracoes')
+        .select('*')
+        .eq('condominio_id', condominioId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setFeatureFlags({
+          mod02_controle_acesso: data.mod02_controle_acesso ?? true,
+          mod03_gestao_encomendas: data.mod03_gestao_encomendas ?? true,
+          mod04_materiais_posto: data.mod04_materiais_posto ?? true,
+          mod05_quadro_chaves: data.mod05_quadro_chaves ?? true,
+          mod06_gestao_manutencao: data.mod06_gestao_manutencao ?? true,
+          mod07_gestao_ronda: data.mod07_gestao_ronda ?? true,
+          mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? true,
+          mod09_passagem_posto: data.mod09_passagem_posto ?? true,
+          mod10_prestadores_servico: data.mod10_prestadores_servico ?? true
+        });
+      } else {
+        // Padrão: todos os módulos ativos se não houver configuração salva
+        setFeatureFlags({
+          mod02_controle_acesso: true,
+          mod03_gestao_encomendas: true,
+          mod04_materiais_posto: true,
+          mod05_quadro_chaves: true,
+          mod06_gestao_manutencao: true,
+          mod07_gestao_ronda: true,
+          mod08_livro_ocorrencias: true,
+          mod09_passagem_posto: true,
+          mod10_prestadores_servico: true
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao carregar Feature Flags:', err);
     }
   };
 
@@ -125,10 +188,8 @@ export default function App() {
     setModuloAtual('encomendas');
   };
 
-  // Identifica o condomínio selecionado atualmente no dropdown
   const objCondominioSelecionado = listaCondominios.find(c => c.id === condominioAtivoId);
 
-  // Objeto unificado repassado a todas as telas filhas
   const operadorContextoGlobal = operador ? {
     ...operador,
     condominio_id: eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id,
@@ -155,7 +216,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {/* SELETOR MULTI-TENANT NO TOPO (EXCLUSIVO PARA A CONTA ADM CAETANO) */}
+            {/* Seletor Multi-Tenant de Condomínios (Exclusivo ADM CAETANO) */}
             {eAdmin && (
               <div className="bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-2">
                 <Filter className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
@@ -186,144 +247,143 @@ export default function App() {
           </div>
         </header>
 
-        {/* Menu de Módulos / Navegação */}
+        {/* Menu de Módulos / Navegação Dinâmico (Renderização Condicional por Feature Flags) */}
         <div className="bg-white border-b border-slate-200 shadow-sm overflow-x-auto">
           <div className="max-w-7xl mx-auto flex gap-2 p-2 min-w-max">
-            <button
-              onClick={() => setModuloAtual('encomendas')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'encomendas'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              Encomendas & Entregadores
-            </button>
+            
+            {/* Módulo 03: Encomendas */}
+            {featureFlags.mod03_gestao_encomendas && (
+              <button
+                onClick={() => setModuloAtual('encomendas')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'encomendas' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Package className="w-4 h-4" /> Encomendas & Entregadores
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('custodia')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'custodia'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              Custódia de Itens
-            </button>
+            {/* Custódia de Itens */}
+            {featureFlags.mod03_gestao_encomendas && (
+              <button
+                onClick={() => setModuloAtual('custodia')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'custodia' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Shield className="w-4 h-4" /> Custódia de Itens
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('materiais')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'materiais'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Radio className="w-4 h-4" />
-              Materiais do Posto
-            </button>
+            {/* Módulo 04: Materiais do Posto */}
+            {featureFlags.mod04_materiais_posto && (
+              <button
+                onClick={() => setModuloAtual('materiais')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'materiais' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Radio className="w-4 h-4" /> Materiais do Posto
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('chaves')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'chaves'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Key className="w-4 h-4" />
-              Quadro de Chaves
-            </button>
+            {/* Módulo 05: Quadro de Chaves */}
+            {featureFlags.mod05_quadro_chaves && (
+              <button
+                onClick={() => setModuloAtual('chaves')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'chaves' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Key className="w-4 h-4" /> Quadro de Chaves
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('manutencao')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'manutencao'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Wrench className="w-4 h-4" />
-              Manutenção & OS
-            </button>
+            {/* Módulo 06: Manutenção & OS */}
+            {featureFlags.mod06_gestao_manutencao && (
+              <button
+                onClick={() => setModuloAtual('manutencao')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'manutencao' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Wrench className="w-4 h-4" /> Manutenção & OS
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('rondas')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'rondas'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <QrCode className="w-4 h-4" />
-              Rondas Patrimoniais
-            </button>
+            {/* Módulo 07: Rondas Patrimoniais */}
+            {featureFlags.mod07_gestao_ronda && (
+              <button
+                onClick={() => setModuloAtual('rondas')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'rondas' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <QrCode className="w-4 h-4" /> Rondas Patrimoniais
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('ocorrencias')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'ocorrencias'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              Livro de Ocorrências
-            </button>
+            {/* Módulo 08: Livro de Ocorrências */}
+            {featureFlags.mod08_livro_ocorrencias && (
+              <button
+                onClick={() => setModuloAtual('ocorrencias')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'ocorrencias' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" /> Livro de Ocorrências
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('passagem')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'passagem'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Repeat className="w-4 h-4" />
-              Passagem de Posto
-            </button>
+            {/* Módulo 09: Passagem de Posto */}
+            {featureFlags.mod09_passagem_posto && (
+              <button
+                onClick={() => setModuloAtual('passagem')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'passagem' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Repeat className="w-4 h-4" /> Passagem de Posto
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('prestadores')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'prestadores'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Briefcase className="w-4 h-4" />
-              Prestadores & Obras
-            </button>
+            {/* Módulo 10: Prestadores & Obras */}
+            {featureFlags.mod10_prestadores_servico && (
+              <button
+                onClick={() => setModuloAtual('prestadores')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'prestadores' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" /> Prestadores & Obras
+              </button>
+            )}
 
-            <button
-              onClick={() => setModuloAtual('cadastros')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'cadastros'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Database className="w-4 h-4" />
-              Cadastro Base
-            </button>
+            {/* Módulo 01/02: Cadastro Base */}
+            {featureFlags.mod02_controle_acesso && (
+              <button
+                onClick={() => setModuloAtual('cadastros')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'cadastros' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Database className="w-4 h-4" /> Cadastro Base
+              </button>
+            )}
 
+            {/* Módulo 11: Configurações (Sempre visível para administração e personalização) */}
             <button
               onClick={() => setModuloAtual('configuracoes')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'configuracoes'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
+                moduloAtual === 'configuracoes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <Settings className="w-4 h-4" />
-              Configurações
+              <Settings className="w-4 h-4" /> Configurações
             </button>
           </div>
         </div>
 
-        {/* Conteúdo Dinâmico - Passando o contexto global para todos os módulos */}
+        {/* Conteúdo Dinâmico */}
         <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
           {moduloAtual === 'encomendas' && <Encomendas usuarioLogado={operadorContextoGlobal} />}
           {moduloAtual === 'custodia' && <Custodia usuarioLogado={operadorContextoGlobal} />}
@@ -335,7 +395,12 @@ export default function App() {
           {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />}
           {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operadorContextoGlobal} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'configuracoes' && <Configuracoes usuarioLogado={operadorContextoGlobal} />}
+          {moduloAtual === 'configuracoes' && (
+            <Configuracoes 
+              usuarioLogado={operadorContextoGlobal} 
+              onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
+            />
+          )}
         </main>
 
         {/* Rodapé */}
