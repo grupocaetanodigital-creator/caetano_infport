@@ -58,6 +58,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
+  // Identificação de Perfil de Administrador (Nível 0 / Admin)
   const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
 
   useEffect(() => {
@@ -66,7 +67,6 @@ export default function App() {
     }
   }, [operador]);
 
-  // Recarrega as Feature Flags sempre que o condomínio ativo mudar
   useEffect(() => {
     if (operador) {
       const idCondTarget = eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id;
@@ -89,7 +89,6 @@ export default function App() {
     }
   };
 
-  // Carrega a tabela 'configuracoes' para ativar/desativar botões do menu
   const carregarFeatureFlags = async (condominioId) => {
     try {
       const { data, error } = await supabase
@@ -113,7 +112,6 @@ export default function App() {
           mod10_prestadores_servico: data.mod10_prestadores_servico ?? true
         });
       } else {
-        // Padrão: todos os módulos ativos se não houver configuração salva
         setFeatureFlags({
           mod02_controle_acesso: true,
           mod03_gestao_encomendas: true,
@@ -216,7 +214,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Seletor Multi-Tenant de Condomínios (Exclusivo ADM CAETANO) */}
+            {/* Seletor Multi-Tenant de Condomínios (Exclusivo para Login Admin) */}
             {eAdmin && (
               <div className="bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-2">
                 <Filter className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
@@ -247,7 +245,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Menu de Módulos / Navegação Dinâmico (Renderização Condicional por Feature Flags) */}
+        {/* Menu de Módulos / Navegação Dinâmico */}
         <div className="bg-white border-b border-slate-200 shadow-sm overflow-x-auto">
           <div className="max-w-7xl mx-auto flex gap-2 p-2 min-w-max">
             
@@ -371,15 +369,17 @@ export default function App() {
               </button>
             )}
 
-            {/* Módulo 11: Configurações (Sempre visível para administração e personalização) */}
-            <button
-              onClick={() => setModuloAtual('configuracoes')}
-              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
-                moduloAtual === 'configuracoes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Settings className="w-4 h-4" /> Configurações
-            </button>
+            {/* Módulo 11: Configurações (VISÍVEL APENAS QUANDO LOGADO COM CONTA ADMIN) */}
+            {eAdmin && (
+              <button
+                onClick={() => setModuloAtual('configuracoes')}
+                className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                  moduloAtual === 'configuracoes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Settings className="w-4 h-4" /> Configurações
+              </button>
+            )}
           </div>
         </div>
 
@@ -395,7 +395,7 @@ export default function App() {
           {moduloAtual === 'passagem' && <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />}
           {moduloAtual === 'prestadores' && <PrestadoresObras usuarioLogado={operadorContextoGlobal} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operadorContextoGlobal} />}
-          {moduloAtual === 'configuracoes' && (
+          {moduloAtual === 'configuracoes' && eAdmin && (
             <Configuracoes 
               usuarioLogado={operadorContextoGlobal} 
               onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
