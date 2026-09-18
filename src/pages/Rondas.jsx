@@ -19,7 +19,9 @@ import {
   UserCheck,
   History,
   Timer,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Lock,
+  User
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
@@ -27,20 +29,23 @@ export default function Rondas({ usuarioLogado }) {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Controle do Operador do Ronda em Plantão (permite Assumir Posto sem Logout)
+  // Operador Ativo no Posto
   const [operadorRondaAtual, setOperadorRondaAtual] = useState(
     usuarioLogado?.nome || usuarioLogado?.login || 'Vigia / Portaria'
   );
 
-  // Listagens
+  // Lista de Operadores Cadastrados para Seleção no Login
+  const [listaOperadores, setListaOperadores] = useState([]);
+
+  // Listagens de Rondas
   const [pontos, setPontos] = useState([]);
   const [rondaAtiva, setRondaAtiva] = useState(null);
   const [registrosRonda, setRegistrosRonda] = useState([]);
   const [historicoRondas, setHistoricoRondas] = useState([]);
   const [historicoPassagens, setHistoricoPassagens] = useState([]);
 
-  // Temporizador de 15 Minutos para Próxima Ronda
-  const [tempoRestanteTimer, setTempoRestanteTimer] = useState(0); // em segundos
+  // Temporizador de 15 Minutos (900 segundos)
+  const [tempoRestanteTimer, setTempoRestanteTimer] = useState(0);
   const [timerAtivo, setTimerAtivo] = useState(false);
 
   // Modais
@@ -60,8 +65,9 @@ export default function Rondas({ usuarioLogado }) {
   const [fotoPontoUrl, setFotoPontoUrl] = useState('');
   const [coords, setCoords] = useState(null);
 
-  // Form Assumir Posto
-  const [novoOperadorNome, setNovoOperadorNome] = useState('');
+  // Form Assumir Posto (Login Obrigatório)
+  const [operadorSelecionadoId, setOperadorSelecionadoId] = useState('');
+  const [senhaLoginEntrante, setSenhaLoginEntrante] = useState('');
   const [ocorrenciasPlantao, setOcorrenciasPlantao] = useState('');
 
   useEffect(() => {
@@ -69,9 +75,10 @@ export default function Rondas({ usuarioLogado }) {
     verificarRondaAtiva();
     carregarHistorico();
     carregarPassagensPosto();
+    carregarOperadores();
   }, []);
 
-  // Efeito do Temporizador de 15 minutos (900 segundos)
+  // Efeito do Temporizador de 15 Minutos com Alerta Sonoro
   useEffect(() => {
     let interval = null;
     if (timerAtivo && tempoRestanteTimer > 0) {
@@ -80,14 +87,53 @@ export default function Rondas({ usuarioLogado }) {
       }, 1000);
     } else if (tempoRestanteTimer === 0 && timerAtivo) {
       setTimerAtivo(false);
+      dispararAlertaSonoro();
     }
     return () => clearInterval(interval);
   }, [timerAtivo, tempoRestanteTimer]);
+
+  // Alerta Sonoro usando Web Audio API Nativa do Navegador
+  const dispararAlertaSonoro = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Tom A5
+      gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + 1.2);
+    } catch (e) {
+      console.log('Erro ao emitir áudio:', e);
+    }
+  };
 
   const formatarTempoTimer = (segundos) => {
     const mins = Math.floor(segundos / 60);
     const segs = segundos % 60;
     return `${mins.toString().padStart(2, '0')}:${segs.toString().padStart(2, '0')}`;
+  };
+
+  const carregarOperadores = async () => {
+    if (!usuarioLogado?.condominio_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('operadores')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) throw error;
+      setListaOperadores(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar operadores:', err.message);
+    }
   };
 
   const carregarPontos = async () => {
@@ -354,10 +400,10 @@ export default function Rondas({ usuarioLogado }) {
       if (error) throw error;
 
       // Iniciar Temporizador de 15 Minutos para a próxima ronda
-      setTempoRestanteTimer(15 * 60); // 900 segundos
+      setTempoRestanteTimer(15 * 60);
       setTimerAtivo(true);
 
-      // Gerar Link de Disparo para o Grupo de WhatsApp
+      // Link de Disparo para WhatsApp
       setWhatsAppRelatorio({
         texto: resumoTexto,
         link: `https://wa.me/?text=${encodeURIComponent(resumoTexto)}`
@@ -368,7 +414,7 @@ export default function Rondas({ usuarioLogado }) {
       carregarHistorico();
       setMensagem({
         tipo: 'sucesso',
-        texto: 'Ronda finalizada! Timer de 15 minutos iniciado para a próxima verificação.'
+        texto: 'Ronda finalizada! Temporizador de 15 minutos iniciado para a próxima varredura.'
       });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
@@ -377,34 +423,65 @@ export default function Rondas({ usuarioLogado }) {
     }
   };
 
-  // Efetivar a Troca de Planta / Assumir Posto de Ronda
+  // ASSUMIR POSTO COM AUTENTICAÇÃO OBRIGATÓRIA DE CONTA E SENHA
   const efetivarAssumirPosto = async (e) => {
     e.preventDefault();
-    if (!novoOperadorNome.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Informe o nome do novo operador.' });
+
+    if (!operadorSelecionadoId) {
+      setMensagem({ tipo: 'erro', texto: 'Selecione o operador que irá assumir o posto.' });
       return;
     }
+
+    if (!senhaLoginEntrante.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Digite a senha de acesso para autenticar a troca de posto.' });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      // 1. Buscar e autenticar o operador na tabela Supabase
+      const { data: opData, error: opError } = await supabase
+        .from('operadores')
+        .select('*')
+        .eq('id', operadorSelecionadoId)
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .single();
+
+      if (opError || !opData) {
+        throw new Error('Operador não encontrado no sistema.');
+      }
+
+      // Validar senha
+      if (opData.senha !== senhaLoginEntrante.trim()) {
+        throw new Error('Senha de acesso incorreta! Falha na autenticação do novo ronda.');
+      }
+
+      // 2. Registrar no Histórico de Passagem de Posto
+      const { error: passError } = await supabase
         .from('rondas_passagem_posto')
         .insert([{
           condominio_id: usuarioLogado.condominio_id,
           operador_sainte: operadorRondaAtual,
-          operador_entrante: novoOperadorNome.trim(),
+          operador_entrante: opData.nome,
           data_hora: new Date().toISOString(),
-          ocorrencias_plantao: ocorrenciasPlantao.trim() || 'Sem alterações ou ocorrências grave.'
+          ocorrencias_plantao: ocorrenciasPlantao.trim() || 'Sem alterações ou ocorrências graves.'
         }]);
 
-      if (error) throw error;
+      if (passError) throw passError;
 
-      setOperadorRondaAtual(novoOperadorNome.trim());
-      setNovoOperadorNome('');
+      // 3. Atualizar o ronda ativo na aplicação
+      setOperadorRondaAtual(opData.nome);
+      setOperadorSelecionadoId('');
+      setSenhaLoginEntrante('');
       setOcorrenciasPlantao('');
       setModalAssumirPosto(false);
       carregarPassagensPosto();
-      setMensagem({ tipo: 'sucesso', texto: `Posto assumido com sucesso por ${novoOperadorNome.trim()}!` });
+
+      setMensagem({
+        tipo: 'sucesso',
+        texto: `Autenticado com sucesso! Posto assumido pelo ronda ${opData.nome}.`
+      });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
@@ -417,25 +494,28 @@ export default function Rondas({ usuarioLogado }) {
 
   return (
     <div className="space-y-6">
-      {/* Banner Superior com Troca de Posto e Status do Operador */}
+      {/* Banner Superior */}
       <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
-            <UserCheck className="w-3.5 h-3.5" /> Ronda Atual: {operadorRondaAtual}
+            <UserCheck className="w-3.5 h-3.5" /> Ronda Ativo: {operadorRondaAtual}
           </span>
           <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-400" /> Controle de Rondas Patrimoniais
           </h3>
           <p className="text-xs text-slate-300">
-            QR Code / Tag NFC com geolocalização GPS, timer de intervalo e disparo em grupo.
+            Validação por QR Code / NFC, timer de 15 minutos e login obrigatório na troca de turno.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setModalAssumirPosto(true)}
+            onClick={() => {
+              carregarOperadores();
+              setModalAssumirPosto(true);
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase shadow-sm"
-            title="Trocar operador do ronda sem sair da conta"
+            title="Autenticar novo operador para assumir o posto"
           >
             <ArrowRightLeft className="w-4 h-4" /> Assumir Posto
           </button>
@@ -467,14 +547,14 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       </div>
 
-      {/* TEMPORIZADOR DE 15 MINUTOS APÓS A ÚLTIMA RONDA */}
+      {/* TEMPORIZADOR REGRESSIVO DE 15 MINUTOS */}
       {tempoRestanteTimer > 0 && (
         <div className="bg-amber-500 text-slate-950 p-4 rounded-xl flex items-center justify-between shadow-md animate-pulse">
           <div className="flex items-center gap-3">
             <Timer className="w-6 h-6 flex-shrink-0" />
             <div>
-              <strong className="block font-bold text-sm">PRÓXIMA RONDA EM BREVE!</strong>
-              <p className="text-xs font-medium">Aguarde o tempo regulamentar para iniciar a nova varredura patrimonial.</p>
+              <strong className="block font-bold text-sm">INTERVALO DE RONDA (15 MINUTOS)</strong>
+              <p className="text-xs font-medium">Aguarde a contagem para iniciar a próxima varredura no condomínio.</p>
             </div>
           </div>
           <div className="text-2xl font-black font-mono bg-slate-950 text-amber-400 px-4 py-1.5 rounded-xl">
@@ -483,28 +563,28 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* BOTAO DE ENVIO PARA O GRUPO DE WHATSAPP DA ULTIMA RONDA */}
+      {/* DISPARO DO RELATÓRIO VIA WHATSAPP */}
       {whatsAppRelatorio && (
         <div className="bg-emerald-50 border-2 border-emerald-500 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-sm">
           <div className="flex items-center gap-3">
             <MessageCircle className="w-8 h-8 text-emerald-600 flex-shrink-0" />
             <div>
-              <strong className="font-bold text-emerald-900 text-sm">Relatório da Ronda Pronto!</strong>
-              <p className="text-xs text-emerald-700">Dispare os detalhes completos e links de fotos diretamente no Grupo de Rondas.</p>
+              <strong className="font-bold text-emerald-900 text-sm">Relatório da Ronda Gerado!</strong>
+              <p className="text-xs text-emerald-700">Dispare os detalhes, horários e evidências no Grupo de Rondas.</p>
             </div>
           </div>
           <a
             href={whatsAppRelatorio.link}
             target="_blank"
             rel="noreferrer"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition whitespace-nowrap shadow-md uppercase"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md"
           >
-            <MessageCircle className="w-4 h-4" /> Disparar no Grupo <ExternalLink className="w-3.5 h-3.5" />
+            <MessageCircle className="w-4 h-4" /> Enviar no Grupo <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
       )}
 
-      {/* Alertas Globais */}
+      {/* Alertas */}
       {mensagem.texto && (
         <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -514,26 +594,26 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* PAINEL DE EXECUÇÃO DA RONDA ATIVA */}
+      {/* RONDA EM ANDAMENTO */}
       {rondaAtiva && (
         <div className="bg-slate-950 text-white p-5 rounded-2xl space-y-4 border border-slate-800 shadow-lg">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
             <div>
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">Ronda em Andamento</span>
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">Ronda Ativa</span>
               <p className="text-xs text-slate-300">
-                Iniciada às: <strong>{new Date(rondaAtiva.data_inicio).toLocaleTimeString('pt-BR')}</strong> por <strong>{rondaAtiva.operador_nome}</strong>
+                Início: <strong>{new Date(rondaAtiva.data_inicio).toLocaleTimeString('pt-BR')}</strong> por <strong>{rondaAtiva.operador_nome}</strong>
               </p>
             </div>
 
             <span className="text-xs font-bold bg-slate-800 text-emerald-400 px-3 py-1 rounded-full border border-slate-700">
-              Progresso: {registrosRonda.length} / {pontos.length} Pontos
+              {registrosRonda.length} de {pontos.length} Pontos Validados
             </span>
           </div>
 
           {pontosZerados.length > 0 && (
             <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-300 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              <span>Ainda restam <strong>{pontosZerados.length} ponto(s) zerados</strong> nesta varredura.</span>
+              <span>Ainda restam <strong>{pontosZerados.length} ponto(s) zerados</strong> nesta ronda.</span>
             </div>
           )}
 
@@ -570,7 +650,7 @@ export default function Rondas({ usuarioLogado }) {
                   <div className="mt-3 pt-2 border-t border-slate-800">
                     {lido ? (
                       <span className="text-[10px] text-emerald-400 font-bold block">
-                        ✓ Validado às {new Date(reg?.data_hora).toLocaleTimeString('pt-BR')}
+                        ✓ Lido às {new Date(reg?.data_hora).toLocaleTimeString('pt-BR')}
                       </span>
                     ) : (
                       <button
@@ -588,12 +668,12 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* HISTÓRICO DE RONDAS E HISTÓRICO DE PASSAGEM DE POSTO */}
+      {/* HISTÓRICOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* COLUNA 1: HISTÓRICO DE RONDAS (COM INÍCIO E FIM) */}
+        {/* HISTÓRICO DE RONDAS */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-            <Clock className="w-4 h-4 text-emerald-600" /> Histórico de Rondas (Início & Fim)
+            <Clock className="w-4 h-4 text-emerald-600" /> Histórico de Rondas (Início e Fim)
           </h4>
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
@@ -636,10 +716,10 @@ export default function Rondas({ usuarioLogado }) {
           </div>
         </div>
 
-        {/* COLUNA 2: HISTÓRICO DE ASSUMIR POSTO E OCORRÊNCIAS DO PLANTÃO */}
+        {/* HISTÓRICO DE TROCA DE POSTO COM AUDITORIA */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-            <History className="w-4 h-4 text-emerald-600" /> Passagem de Posto & Troca de Plantão
+            <History className="w-4 h-4 text-emerald-600" /> Passagem de Posto Auditada
           </h4>
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
@@ -668,7 +748,7 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       </div>
 
-      {/* MODAL ASSUMIR POSTO / TROCAR GUARDA */}
+      {/* MODAL ASSUMIR POSTO - AUTENTICAÇÃO COM LOGIN E SENHA */}
       {modalAssumirPosto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
@@ -677,12 +757,12 @@ export default function Rondas({ usuarioLogado }) {
             </button>
 
             <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <UserCheck className="w-5 h-5 text-emerald-600" /> Assumir Posto de Ronda
+              <Lock className="w-5 h-5 text-emerald-600" /> Autenticar e Assumir Posto
             </h3>
 
             <form onSubmit={efetivarAssumirPosto} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Operador Sainte (Atual)</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Operador Sainte (Saindo)</label>
                 <input
                   type="text"
                   disabled
@@ -692,25 +772,48 @@ export default function Rondas({ usuarioLogado }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Novo Operador / Entrante *</label>
-                <input
-                  type="text"
-                  required
-                  value={novoOperadorNome}
-                  onChange={(e) => setNovoOperadorNome(e.target.value)}
-                  placeholder="Ex: Roberto Vigia"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                />
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Selecionar Novo Ronda (Entrante) *</label>
+                <div className="relative">
+                  <select
+                    required
+                    value={operadorSelecionadoId}
+                    onChange={(e) => setOperadorSelecionadoId(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 appearance-none pl-9"
+                  >
+                    <option value="">-- Selecione seu Nome --</option>
+                    {listaOperadores.map((op) => (
+                      <option key={op.id} value={op.id}>
+                        {op.nome} ({op.login})
+                      </option>
+                    ))}
+                  </select>
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ocorrências do Plantão Anterior *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Senha do Operador *</label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={senhaLoginEntrante}
+                    onChange={(e) => setSenhaLoginEntrante(e.target.value)}
+                    placeholder="Digite sua senha de acesso"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium pl-9"
+                  />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ocorrências e Alterações do Plantão *</label>
                 <textarea
                   rows="3"
                   required
                   value={ocorrenciasPlantao}
                   onChange={(e) => setOcorrenciasPlantao(e.target.value)}
-                  placeholder="Relate portões defeituosos, luzes apagadas ou anormalidades que o novo ronda precisa saber..."
+                  placeholder="Relate falhas no patrimônio, lâmpadas queimadas ou avisos importantes..."
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
@@ -718,9 +821,9 @@ export default function Rondas({ usuarioLogado }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md flex items-center justify-center gap-2"
               >
-                Assumir Posto
+                <UserCheck className="w-4 h-4" /> Autenticar e Assumir Posto
               </button>
             </form>
           </div>
@@ -747,7 +850,7 @@ export default function Rondas({ usuarioLogado }) {
                   required
                   value={nomePonto}
                   onChange={(e) => setNomePonto(e.target.value)}
-                  placeholder="Ex: Bloco A - Caixa D'água"
+                  placeholder="Ex: Bloco A - Portão dos Fundos"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
@@ -770,7 +873,7 @@ export default function Rondas({ usuarioLogado }) {
                   type="text"
                   value={descricaoPonto}
                   onChange={(e) => setDescricaoPonto(e.target.value)}
-                  placeholder="Ex: Checar tranca e luz externa"
+                  placeholder="Ex: Checar cadeado e iluminação"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
@@ -787,7 +890,7 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL REGISTRAR LEITURA DE PONTO */}
+      {/* MODAL LEITURA DO PONTO */}
       {modalRegistrarPonto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
@@ -801,7 +904,7 @@ export default function Rondas({ usuarioLogado }) {
 
             <form onSubmit={confirmarLeituraPonto} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Digite ou Escaneie o Código do Ponto *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Código do Ponto *</label>
                 <input
                   type="text"
                   required
@@ -818,7 +921,7 @@ export default function Rondas({ usuarioLogado }) {
                   type="text"
                   value={observacaoPonto}
                   onChange={(e) => setObservacaoPonto(e.target.value)}
-                  placeholder="Ex: Portão trancado sem anomalias"
+                  placeholder="Ex: Local limpo e trancado"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
@@ -827,7 +930,7 @@ export default function Rondas({ usuarioLogado }) {
                 <label className="block text-xs font-bold text-slate-700 uppercase">Foto do Local / Evidência (Opcional)</label>
                 <label className="w-full bg-slate-900 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 text-xs transition">
                   <Camera className="w-4 h-4 text-emerald-400" />
-                  {uploadingFoto ? 'Processando foto...' : '📷 Anexar Foto do Ponto'}
+                  {uploadingFoto ? 'Enviando foto...' : '📷 Anexar Foto do Ponto'}
                   <input
                     type="file"
                     accept="image/*"
