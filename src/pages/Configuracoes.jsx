@@ -2,30 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { 
   Settings, 
-  MessageSquare, 
   ShieldAlert, 
   CheckCircle2, 
   AlertCircle, 
   Save, 
   Sliders, 
-  Phone, 
-  Building,
-  Radio
+  Phone
 } from 'lucide-react';
 
 export default function Configuracoes({ usuarioLogado }) {
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Templates de Mensagem do WhatsApp
-  const [templateEncomenda, setTemplateEncomenda] = useState(
-    'Olá {NOME}, sua encomenda ({CODIGO}) chegou na portaria do condomínio e está disponível para retirada!'
-  );
-  const [templateCustodia, setTemplateCustodia] = useState(
-    'Olá {NOME}, um item retido na portaria ({DESCRICAO}) aguarda sua retirada.'
-  );
-
-  // Feature Flags (Módulos Ativos)
+  // Feature Flags (Módulos Habilitados)
   const [modulosAtivos, setModulosAtivos] = useState({
     encomendas: true,
     custodia: true,
@@ -38,7 +27,7 @@ export default function Configuracoes({ usuarioLogado }) {
     prestadores: true
   });
 
-  // Contatos de Emergência
+  // Contatos para o Botão de Emergência
   const [telefonePolicia, setTelefonePolicia] = useState('190');
   const [telefoneBombeiros, setTelefoneBombeiros] = useState('193');
   const [telefoneSindico, setTelefoneSindico] = useState('');
@@ -59,8 +48,6 @@ export default function Configuracoes({ usuarioLogado }) {
         .maybeSingle();
 
       if (data) {
-        if (data.template_encomenda) setTemplateEncomenda(data.template_encomenda);
-        if (data.template_custodia) setTemplateCustodia(data.template_custodia);
         if (data.telefone_sindico) setTelefoneSindico(data.telefone_sindico);
         if (data.modulos_ativos) setModulosAtivos(data.modulos_ativos);
       }
@@ -79,8 +66,6 @@ export default function Configuracoes({ usuarioLogado }) {
     try {
       const payload = {
         condominio_id: usuarioLogado.condominio_id,
-        template_encomenda: templateEncomenda,
-        template_custodia: templateCustodia,
         telefone_sindico: telefoneSindico,
         modulos_ativos: modulosAtivos
       };
@@ -91,7 +76,7 @@ export default function Configuracoes({ usuarioLogado }) {
 
       if (error) throw error;
 
-      setMensagem({ tipo: 'sucesso', texto: 'Configurações e templates salvos com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Configurações e módulos salvos com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar configurações: ' + err.message });
     } finally {
@@ -104,7 +89,7 @@ export default function Configuracoes({ usuarioLogado }) {
   };
 
   const dispararEmergencia = (tipo, numero) => {
-    const texto = encodeURIComponent(`🚨 ALERTA DE EMERGÊNCIA NA PORTARIA - CONDOMÍNIO: ${usuarioLogado?.condominio_nome || 'INFPORT'}\nSolicitação de apoio imediato para ocorrência de ${tipo}.`);
+    const texto = encodeURIComponent(`🚨 ALERTA DE EMERGÊNCIA NA PORTARIA - CONDOMÍNIO: ${usuarioLogado?.condominio_nome || 'INFPORT'}\nSolicitação de apoio para ${tipo}.`);
     window.open(`https://wa.me/${numero}?text=${texto}`, '_blank');
   };
 
@@ -116,8 +101,8 @@ export default function Configuracoes({ usuarioLogado }) {
           <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
             <Settings className="w-3.5 h-3.5" /> Módulo 11 - Configurações Gerais
           </span>
-          <h3 className="font-bold text-lg mt-1">Geral, Feature Flags & Emergência</h3>
-          <p className="text-xs text-slate-300">Personalize os templates do WhatsApp, ative módulos e configure o botão de pânico.</p>
+          <h3 className="font-bold text-lg mt-1">Feature Flags & Botão de Emergência</h3>
+          <p className="text-xs text-slate-300">Habilite ou desabilite módulos e configure o botão de pânico para a guarita.</p>
         </div>
       </div>
 
@@ -131,17 +116,15 @@ export default function Configuracoes({ usuarioLogado }) {
         </div>
       )}
 
-      {/* Painel de Botões de Emergência Direta */}
+      {/* Botões de Emergência Direta */}
       <div className="bg-red-50 border border-red-200 p-5 rounded-2xl space-y-3">
         <h4 className="font-bold text-red-900 text-sm flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-red-600" /> Botão de Emergência da Guarita
         </h4>
-        <p className="text-xs text-red-700">
-          Disparo rápido de chamados de emergência direto pelo WhatsApp da equipe de segurança e gestão.
-        </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
           <button
+            type="button"
             onClick={() => dispararEmergencia('POLÍCIA / INVASÃO', telefonePolicia)}
             className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow transition"
           >
@@ -149,6 +132,7 @@ export default function Configuracoes({ usuarioLogado }) {
           </button>
 
           <button
+            type="button"
             onClick={() => dispararEmergencia('INCÊNDIO / RESGATE', telefoneBombeiros)}
             className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow transition"
           >
@@ -156,7 +140,8 @@ export default function Configuracoes({ usuarioLogado }) {
           </button>
 
           <button
-            onClick={() => telefoneSindico ? dispararEmergencia('URGÊNCIA NO POSTO', telefoneSindico) : alert('Cadastre o telefone do síndico abaixo.')}
+            type="button"
+            onClick={() => telefoneSindico ? dispararEmergencia('URGÊNCIA NO POSTO', telefoneSindico) : alert('Cadastre o contacto do síndico abaixo.')}
             className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow transition"
           >
             <Phone className="w-4 h-4" /> Alerta Síndico / Supervisor
@@ -165,51 +150,20 @@ export default function Configuracoes({ usuarioLogado }) {
       </div>
 
       <form onSubmit={salvarConfiguracoes} className="space-y-6">
-        {/* Templates de WhatsApp */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-            <MessageSquare className="w-4 h-4 text-emerald-600" /> Templates do WhatsApp
-          </h4>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Notificação de Encomenda Recebida
-              </label>
-              <textarea
-                rows="2"
-                value={templateEncomenda}
-                onChange={(e) => setTemplateEncomenda(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs resize-none font-mono"
-              ></textarea>
-              <span className="text-[10px] text-slate-400">Variáveis disponíveis: &#123;NOME&#125;, &#123;CODIGO&#125;, &#123;UNIDADE&#125;</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Notificação de Custódia de Itens
-              </label>
-              <textarea
-                rows="2"
-                value={templateCustodia}
-                onChange={(e) => setTemplateCustodia(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs resize-none font-mono"
-              ></textarea>
-              <span className="text-[10px] text-slate-400">Variáveis disponíveis: &#123;NOME&#125;, &#123;DESCRICAO&#125;</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Telefone do Síndico / Supervisor (WhatsApp)
-              </label>
-              <input
-                type="text"
-                value={telefoneSindico}
-                onChange={(e) => setTelefoneSindico(e.target.value)}
-                placeholder="Ex: 5511999999999"
-                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
-              />
-            </div>
+        {/* Contacto do Síndico */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h4 className="font-bold text-slate-900 text-sm border-b pb-2">Contacto de Pânico do Síndico</h4>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Telefone WhatsApp do Síndico / Supervisor
+            </label>
+            <input
+              type="text"
+              value={telefoneSindico}
+              onChange={(e) => setTelefoneSindico(e.target.value)}
+              placeholder="Ex: 5511999999999"
+              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
+            />
           </div>
         </div>
 
