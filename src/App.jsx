@@ -7,14 +7,29 @@ import Materiais from './pages/Materiais';
 import Chaves from './pages/Chaves';
 import Manutencao from './pages/Manutencao';
 import Rondas from './pages/Rondas';
-import { ShieldCheck, Lock, User, LogOut, Building2, Database, Package, Shield, Radio, Key, Wrench, QrCode } from 'lucide-react';
+import Ocorrencias from './pages/Ocorrencias';
+import { 
+  ShieldCheck, 
+  Lock, 
+  User, 
+  LogOut, 
+  Building2, 
+  Database, 
+  Package, 
+  Shield, 
+  Radio, 
+  Key, 
+  Wrench, 
+  QrCode, 
+  BookOpen 
+} from 'lucide-react';
 
 export default function App() {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState(null);
   const [condominio, setCondominio] = useState(null);
-  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'cadastros'
+  const [moduloAtual, setModuloAtual] = useState('encomendas'); // 'encomendas', 'custodia', 'materiais', 'chaves', 'manutencao', 'rondas', 'ocorrencias', 'cadastros'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -174,6 +189,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setModuloAtual('ocorrencias')}
+              className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
+                moduloAtual === 'ocorrencias'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              Livro de Ocorrências
+            </button>
+
+            <button
               onClick={() => setModuloAtual('cadastros')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition ${
                 moduloAtual === 'cadastros'
@@ -195,6 +222,7 @@ export default function App() {
           {moduloAtual === 'chaves' && <Chaves usuarioLogado={operador} />}
           {moduloAtual === 'manutencao' && <Manutencao usuarioLogado={operador} />}
           {moduloAtual === 'rondas' && <Rondas usuarioLogado={operador} />}
+          {moduloAtual === 'ocorrencias' && <Ocorrencias usuarioLogado={operador} />}
           {moduloAtual === 'cadastros' && <Cadastros usuarioLogado={operador} />}
         </main>
 
