@@ -19,6 +19,8 @@ import {
   Radio,
   Wrench,
   Package,
+  Box,
+  Footprints,
   AlertTriangle,
   ChevronRight
 } from 'lucide-react';
@@ -28,24 +30,29 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Modal e Estados do Processo
+  // Modal e Passos da Passagem de Posto
   const [modalNova, setModalNova] = useState(false);
-  const [etapa, setEtapa] = useState(1); // 1: Consolidação e Checklist, 2: Divergência e Aceite, 3: Dupla Assinatura
+  const [etapa, setEtapa] = useState(1);
   const [loginEntrante, setLoginEntrante] = useState('');
   const [senhaEntrante, setSenhaEntrante] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [divergencia, setDivergencia] = useState('');
   const [temDivergencia, setTemDivergencia] = useState(false);
 
-  // Consolidação Automática dos Módulos
+  // Consolidação Automática Módulo por Módulo
   const [resumoPendencias, setResumoPendencias] = useState({
     chavesFora: 0,
     listaChaves: [],
     materiaisOk: true,
     qtdMateriais: 0,
+    listaMateriaisAvariados: [],
     ocorrenciasAbertas: 0,
     listaOcorrencias: [],
-    encomendasPendentes: 0
+    encomendasPendentes: 0,
+    listaEncomendas: [],
+    custodiasPendentes: 0,
+    listaCustodias: [],
+    ultimaRondaStatus: 'Não registrada'
   });
 
   // Checklist Manual da Guarita
@@ -53,6 +60,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     materiaisOk: true,
     chavesOk: true,
     encomendasOk: true,
+    custodiaOk: true,
     limpezaOk: true,
     ocorrenciasCientes: true
   });
@@ -88,51 +96,88 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     await varrerPendenciasModulos();
   };
 
-  // Varredura abrangente no banco de dados para consolidar todos os módulos
+  // Varredura Completa e Precisa de Todos os Módulos do Sistema
   const varrerPendenciasModulos = async () => {
     const condId = usuarioLogado?.condominio_id;
     if (!condId) return;
 
     try {
-      // 1. Chaves retidas / em uso (Módulo 05)
+      // 1. Chaves em Uso / Retidas (Módulo 05)
       const { data: chaves } = await supabase
         .from('chaves')
         .select('*')
-        .eq('condominio_id', condId)
-        .neq('status', 'disponivel');
+        .eq('condominio_id', condId);
 
-      // 2. Equipamentos/Materiais do posto (Módulo 04)
+      const chavesFora = (chaves || []).filter(c => 
+        c.status && c.status.toLowerCase() !== 'disponivel'
+      );
+
+      // 2. Inventário do Posto e Avarias (Módulo 04)
       const { data: materiais } = await supabase
         .from('materiais')
         .select('*')
         .eq('condominio_id', condId);
 
-      // 3. Ocorrências / OS em aberto (Módulos 06 e 08)
+      const materiaisAvariados = (materiais || []).filter(m => 
+        m.status && ['avaria', 'defeito', 'manutencao'].includes(m.status.toLowerCase())
+      );
+
+      // 3. Ocorrências e OS em Aberto (Módulos 06 e 08)
       const { data: ocorrencias } = await supabase
         .from('ocorrencias')
         .select('*')
-        .eq('condominio_id', condId)
-        .neq('status', 'concluido')
-        .neq('status', 'resolvido');
+        .eq('condominio_id', condId);
 
-      // 4. Encomendas pendentes de entrega ou em triagem (Módulo 02)
+      const ocorrenciasAbertas = (ocorrencias || []).filter(o => 
+        !o.status || !['concluido', 'resolvido', 'fechado'].includes(o.status.toLowerCase())
+      );
+
+      // 4. Encomendas e Pacotes Retidos (Módulo 02)
       const { data: encomendas } = await supabase
         .from('encomendas')
         .select('*')
+        .eq('condominio_id', condId);
+
+      const encomendasPendentes = (encomendas || []).filter(e => 
+        !e.status || !['entregue', 'baixado', 'retirado'].includes(e.status.toLowerCase())
+      );
+
+      // 5. Custódia de Itens Pendentes (Módulo 03)
+      const { data: custodias } = await supabase
+        .from('custodias')
+        .select('*')
+        .eq('condominio_id', condId);
+
+      const custodiasPendentes = (custodias || []).filter(c => 
+        !c.status || !['devolvido', 'retirado', 'concluido'].includes(c.status.toLowerCase())
+      );
+
+      // 6. Última Ronda Patrimonial (Módulo 07)
+      const { data: rondas } = await supabase
+        .from('rondas')
+        .select('*')
         .eq('condominio_id', condId)
-        .neq('status', 'entregue');
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const ultimaRonda = rondas && rondas.length > 0 ? rondas[0] : null;
 
       setResumoPendencias({
-        chavesFora: chaves?.length || 0,
-        listaChaves: chaves || [],
-        materiaisOk: materiais ? !materiais.some(m => m.status === 'avario' || m.status === 'defeito') : true,
+        chavesFora: chavesFora.length,
+        listaChaves: chavesFora,
+        materiaisOk: materiaisAvariados.length === 0,
         qtdMateriais: materiais?.length || 0,
-        ocorrenciasAbertas: ocorrencias?.length || 0,
-        listaOcorrencias: ocorrencias || [],
-        encomendasPendentes: encomendas?.length || 0
+        listaMateriaisAvariados: materiaisAvariados,
+        ocorrenciasAbertas: ocorrenciasAbertas.length,
+        listaOcorrencias: ocorrenciasAbertas,
+        encomendasPendentes: encomendasPendentes.length,
+        listaEncomendas: encomendasPendentes,
+        custodiasPendentes: custodiasPendentes.length,
+        listaCustodias: custodiasPendentes,
+        ultimaRondaStatus: ultimaRonda ? (ultimaRonda.status || 'Concluída') : 'Sem registros'
       });
     } catch (err) {
-      console.error('Erro na varredura de pendências:', err);
+      console.error('Erro ao varrer pendências dos módulos:', err);
     }
   };
 
@@ -146,7 +191,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      // Validação da Dupla Assinatura do Operador Entrante
+      // Dupla Assinatura Digital do Operador Entrante
       const { data: opEntrante, error: opError } = await supabase
         .from('operadores')
         .select('*')
@@ -159,18 +204,18 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
       if (opError) throw opError;
 
       if (!opEntrante) {
-        setMensagem({ tipo: 'erro', texto: 'Credenciais do operador entrante inválidas.' });
+        setMensagem({ tipo: 'erro', texto: 'Credenciais do operador entrante incorretas.' });
         setLoading(false);
         return;
       }
 
       if (opEntrante.id === usuarioLogado.id) {
-        setMensagem({ tipo: 'erro', texto: 'O operador entrante precisa ser diferente do operador sainte.' });
+        setMensagem({ tipo: 'erro', texto: 'O operador entrante deve ser diferente do sainte.' });
         setLoading(false);
         return;
       }
 
-      // Gerar código único PAS:DDMMAAOPERNN
+      // Código de Identificação Único PAS:DDMMAAOPERNN
       const agora = new Date();
       const dia = String(agora.getDate()).padStart(2, '0');
       const mes = String(agora.getMonth() + 1).padStart(2, '0');
@@ -184,7 +229,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         operador_entrante_nome: opEntrante.nome || opEntrante.login,
         checklist: checklist,
         pendencias: resumoPendencias,
-        observacoes: observacoes.trim() || 'Sem recados adicionais para o próximo turno.',
+        observacoes: observacoes.trim() || 'Sem observações gravadas para o próximo turno.',
         divergencia: temDivergencia ? divergencia.trim() : null,
         status: temDivergencia ? 'Divergência Registrada' : 'Concluída'
       };
@@ -220,18 +265,20 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
     const dataHora = new Date(item.created_at).toLocaleString('pt-BR');
     const pend = item.pendencias || {};
 
-    const texto = `🔄 *RELATÓRIO DE PASSAGEM DE POSTO AUDITADA*\n` +
+    const texto = `🔄 *RELATÓRIO COMPLETO DE PASSAGEM DE POSTO*\n` +
       `Código: ${item.codigo || 'PAS:INFPORT'}\n` +
       `Data/Hora: ${dataHora}\n\n` +
-      `• *Operador Sainte (Saindo):* ${item.operador_sainte_nome}\n` +
-      `• *Operador Entrante (Assumindo):* ${item.operador_entrante_nome}\n` +
-      `• *Status:* ${item.status === 'Divergência Registrada' ? '⚠️ DIVERGÊNCIA REGISTRADA' : '🟢 CONCLUÍDA E VALIDADA'}\n\n` +
-      `📋 *RESUMO DE PENDÊNCIAS DO POSTO:*\n` +
-      `• 🔑 *Chaves Fora do Quadro:* ${pend.chavesFora || 0} chave(s) em uso\n` +
-      `• 🔦 *Materiais do Posto:* ${pend.materiaisOk ? '100% OK' : 'Com Avarias/Atenção'}\n` +
-      `• 🛠️ *Manutenções / Ocorrências:* ${pend.ocorrenciasAbertas || 0} registro(s) em aberto\n` +
-      `• 📦 *Encomendas na Portaria:* ${pend.encomendasPendentes || 0} pacote(s) pendentes\n\n` +
-      `💬 *RECADOS DO TURNO:*\n` +
+      `👤 *Operador Sainte (Saindo):* ${item.operador_sainte_nome}\n` +
+      `👤 *Operador Entrante (Assumindo):* ${item.operador_entrante_nome}\n` +
+      `📌 *Status:* ${item.status === 'Divergência Registrada' ? '⚠️ DIVERGÊNCIA APONTADA' : '🟢 CONCLUÍDA E VALIDADA'}\n\n` +
+      `📊 *RESUMO GERAL DO POSTO (MÓDULOS 01 A 08):*\n` +
+      `📦 *Módulo 02 - Encomendas:* ${pend.encomendasPendentes || 0} volume(s) pendente(s)\n` +
+      `🎁 *Módulo 03 - Custódia Itens:* ${pend.custodiasPendentes || 0} item(ns) retido(s)\n` +
+      `🔦 *Módulo 04 - Materiais Posto:* ${pend.materiaisOk ? '100% OK' : 'Avarias Mapeadas'}\n` +
+      `🔑 *Módulo 05 - Quadro Chaves:* ${pend.chavesFora || 0} chave(s) fora\n` +
+      `🛠️ *Módulo 06/08 - Ocorrências/OS:* ${pend.ocorrenciasAbertas || 0} pendente(s)\n` +
+      `🚨 *Módulo 07 - Última Ronda:* ${pend.ultimaRondaStatus || 'N/A'}\n\n` +
+      `💬 *RECADOS E INSTRUÇÕES DO TURNO:*\n` +
       `"${item.observacoes}"\n` +
       (item.divergencia ? `\n⚠️ *DIVERGÊNCIA APONTADA:*\n"${item.divergencia}"` : '');
 
@@ -240,17 +287,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
 
   return (
     <div className="space-y-6">
-      {/* Banner Superior */}
+      {/* Cabecalho Principal */}
       <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
             <Repeat className="w-3.5 h-3.5" /> Módulo 09 - Passagem de Posto
           </span>
           <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" /> Livro de Passagem de Posto Auditado
+            <ShieldCheck className="w-5 h-5 text-emerald-400" /> Passagem de Posto Auditada
           </h3>
           <p className="text-xs text-slate-300">
-            Varredura automática do banco de dados, checagem física e dupla assinatura digital.
+            Relatório consolidado automático dos Módulos 01 a 08 com Dupla Assinatura Digital.
           </p>
         </div>
 
@@ -272,7 +319,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
         </div>
       )}
 
-      {/* Histórico de Passagens */}
+      {/* Lista de Registros Anteriores */}
       <div className="space-y-4">
         <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
           <Clock className="w-4 h-4 text-slate-600" /> Histórico de Trocas de Turno Registradas
@@ -304,21 +351,27 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                   </div>
                 </div>
 
-                {/* Resumo de Pendências Mapeadas */}
+                {/* Resumo Completo das Pendencias Mapeadas */}
                 <div className="text-[11px] space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <span className="font-bold text-slate-700 uppercase text-[10px] block border-b pb-1">Varredura de Pendências:</span>
+                  <span className="font-bold text-slate-700 uppercase text-[10px] block border-b pb-1">Relatório dos Módulos:</span>
                   <div className="grid grid-cols-2 gap-1.5 text-slate-600">
                     <span className="flex items-center gap-1">
-                      <Key className="w-3 h-3 text-slate-500" /> Chaves Fora: <strong>{item.pendencias?.chavesFora || 0}</strong>
+                      <Package className="w-3 h-3 text-purple-600" /> Encomendas: <strong>{item.pendencias?.encomendasPendentes || 0}</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Radio className="w-3 h-3 text-slate-500" /> Materiais: <strong>{item.pendencias?.materiaisOk ? 'OK' : 'Atenção'}</strong>
+                      <Box className="w-3 h-3 text-blue-600" /> Custódia: <strong>{item.pendencias?.custodiasPendentes || 0}</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Wrench className="w-3 h-3 text-slate-500" /> Ocorrências/OS: <strong>{item.pendencias?.ocorrenciasAbertas || 0}</strong>
+                      <Key className="w-3 h-3 text-amber-600" /> Chaves Fora: <strong>{item.pendencias?.chavesFora || 0}</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Package className="w-3 h-3 text-slate-500" /> Encomendas: <strong>{item.pendencias?.encomendasPendentes || 0}</strong>
+                      <Radio className="w-3 h-3 text-emerald-600" /> Equipamentos: <strong>{item.pendencias?.materiaisOk ? 'OK' : 'Atenção'}</strong>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Wrench className="w-3 h-3 text-red-500" /> Ocorrências/OS: <strong>{item.pendencias?.ocorrenciasAbertas || 0}</strong>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Footprints className="w-3 h-3 text-indigo-600" /> Última Ronda: <strong>{item.pendencias?.ultimaRondaStatus || 'N/A'}</strong>
                     </span>
                   </div>
                 </div>
@@ -364,21 +417,21 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
       {/* MODAL TROCA DE TURNO E DUPLA ASSINATURA */}
       {modalNova && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setModalNova(false)} className="absolute top-4 right-4 text-slate-400 p-1">
               <X className="w-5 h-5" />
             </button>
 
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-emerald-600" /> Passagem de Posto Auditada
+                <UserCheck className="w-5 h-5 text-emerald-600" /> Relatório de Passagem de Posto
               </h3>
               <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
                 Etapa {etapa} de 3
               </span>
             </div>
 
-            {/* ETAPA 1: Consolidação Automática & Checklist */}
+            {/* ETAPA 1: Relatorio Completo Mapeado */}
             {etapa === 1 && (
               <div className="space-y-4">
                 <div className="bg-slate-900 text-white p-3.5 rounded-xl text-xs flex justify-between items-center">
@@ -388,62 +441,88 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
 
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-slate-800 uppercase">
-                    Consolidação Automática de Pendências (Outros Módulos)
+                    Consolidação de Módulos da Portaria
                   </label>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-2">
-                      <Key className="w-4 h-4 text-amber-600" />
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 flex items-center gap-2">
+                      <Package className="w-4 h-4 text-purple-600 flex-shrink-0" />
                       <div>
-                        <span className="block text-[10px] text-slate-400">Chaves Fora:</span>
-                        <strong className="text-slate-800">{resumoPendencias.chavesFora} em uso</strong>
+                        <span className="block text-[10px] text-purple-700">Encomendas:</span>
+                        <strong className="text-purple-950">{resumoPendencias.encomendasPendentes} vol. pendentes</strong>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-2">
-                      <Radio className="w-4 h-4 text-emerald-600" />
+                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex items-center gap-2">
+                      <Box className="w-4 h-4 text-blue-600 flex-shrink-0" />
                       <div>
-                        <span className="block text-[10px] text-slate-400">Equipamentos Posto:</span>
-                        <strong className="text-slate-800">{resumoPendencias.materiaisOk ? '100% OK' : 'Atenção'}</strong>
+                        <span className="block text-[10px] text-blue-700">Custódia Itens:</span>
+                        <strong className="text-blue-950">{resumoPendencias.custodiasPendentes} itens retidos</strong>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-2">
-                      <Wrench className="w-4 h-4 text-blue-600" />
+                    <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 flex items-center gap-2">
+                      <Key className="w-4 h-4 text-amber-600 flex-shrink-0" />
                       <div>
-                        <span className="block text-[10px] text-slate-400">Ocorrências / OS:</span>
-                        <strong className="text-slate-800">{resumoPendencias.ocorrenciasAbertas} abertas</strong>
+                        <span className="block text-[10px] text-amber-700">Chaves Fora:</span>
+                        <strong className="text-amber-950">{resumoPendencias.chavesFora} em uso</strong>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-purple-600" />
+                    <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                       <div>
-                        <span className="block text-[10px] text-slate-400">Encomendas:</span>
-                        <strong className="text-slate-800">{resumoPendencias.encomendasPendentes} pendentes</strong>
+                        <span className="block text-[10px] text-emerald-700">Equipamentos:</span>
+                        <strong className="text-emerald-950">{resumoPendencias.materiaisOk ? '100% OK' : 'Avarias'}</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex items-center gap-2">
+                      <Wrench className="w-4 h-4 text-red-600 flex-shrink-0" />
+                      <div>
+                        <span className="block text-[10px] text-red-700">Ocorrências/OS:</span>
+                        <strong className="text-red-950">{resumoPendencias.ocorrenciasAbertas} abertas</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-2">
+                      <Footprints className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <div>
+                        <span className="block text-[10px] text-indigo-700">Última Ronda:</span>
+                        <strong className="text-indigo-950">{resumoPendencias.ultimaRondaStatus}</strong>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Checklist de Validação Física */}
+                {/* Checklist Manual de Conferencia */}
                 <div className="space-y-2 border-t pt-3">
                   <label className="block text-xs font-bold text-slate-800 uppercase">Checklist da Guarita</label>
 
-                  <div className="space-y-1.5 text-xs">
-                    <button type="button" onClick={() => toggleChecklist('materiaisOk')} className="flex items-center gap-2 w-full text-left p-1.5 rounded hover:bg-slate-50">
+                  <div className="space-y-1 text-xs">
+                    <button type="button" onClick={() => toggleChecklist('encomendasOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
+                      {checklist.encomendasOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
+                      <span>Encomendas físicas conferidas com o saldo do sistema.</span>
+                    </button>
+
+                    <button type="button" onClick={() => toggleChecklist('custodiaOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
+                      {checklist.custodiaOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
+                      <span>Objetos de custódia na portaria conferidos.</span>
+                    </button>
+
+                    <button type="button" onClick={() => toggleChecklist('materiaisOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
                       {checklist.materiaisOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
-                      <span>HTs, lanternas e controles conferidos presencialmente.</span>
+                      <span>HTs, lanternas e equipamentos testados.</span>
                     </button>
 
-                    <button type="button" onClick={() => toggleChecklist('chavesOk')} className="flex items-center gap-2 w-full text-left p-1.5 rounded hover:bg-slate-50">
+                    <button type="button" onClick={() => toggleChecklist('chavesOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
                       {checklist.chavesOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
-                      <span>Quadro de chaves confere com os registros digitais.</span>
+                      <span>Quadro de chaves confere com as devoluções registradas.</span>
                     </button>
 
-                    <button type="button" onClick={() => toggleChecklist('limpezaOk')} className="flex items-center gap-2 w-full text-left p-1.5 rounded hover:bg-slate-50">
+                    <button type="button" onClick={() => toggleChecklist('limpezaOk')} className="flex items-center gap-2 w-full text-left p-1 rounded hover:bg-slate-50">
                       {checklist.limpezaOk ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
-                      <span>Guarita limpa, organizada e higienizada.</span>
+                      <span>Guarita limpa e organizada para o próximo turno.</span>
                     </button>
                   </div>
                 </div>
@@ -457,7 +536,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
               </div>
             )}
 
-            {/* ETAPA 2: Recados do Turno & Divergências */}
+            {/* ETAPA 2: Recados do Turno & Divergencias */}
             {etapa === 2 && (
               <div className="space-y-4">
                 <div>
@@ -466,7 +545,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                     rows="3"
                     value={observacoes}
                     onChange={(e) => setObservacoes(e.target.value)}
-                    placeholder="Instruções para o operador entrante, avisos de moradores, pendências do dia..."
+                    placeholder="Avisos sobre entregas, moradores, agendamentos do dia..."
                     className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                   ></textarea>
                 </div>
@@ -474,7 +553,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                 <div className="border-t pt-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" /> Apontar Divergência
+                      <AlertTriangle className="w-4 h-4 text-amber-600" /> Registrar Divergência
                     </label>
                     <input
                       type="checkbox"
@@ -489,7 +568,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                       rows="2"
                       value={divergencia}
                       onChange={(e) => setDivergencia(e.target.value)}
-                      placeholder="Descreva qualquer alteração não registrada (ex.: lanterna trincada, chave faltante sem registro)..."
+                      placeholder="Especifique a divergência (ex: 1 volume não encontrado fisicamente, chave em falta sem registro)..."
                       className="w-full p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-lg text-xs resize-none"
                     ></textarea>
                   )}
@@ -512,15 +591,15 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
               </div>
             )}
 
-            {/* ETAPA 3: Dupla Assinatura do Operador Entrante */}
+            {/* ETAPA 3: Dupla Assinatura Digital do Operador Entrante */}
             {etapa === 3 && (
               <form onSubmit={realizarPassagemPosto} className="space-y-4">
                 <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 space-y-3">
                   <label className="block text-xs font-bold text-emerald-950 uppercase flex items-center gap-1.5">
-                    <Lock className="w-4 h-4 text-emerald-700" /> Assinatura Digital / Confirmação do Entrante
+                    <Lock className="w-4 h-4 text-emerald-700" /> Assinatura do Operador Entrante
                   </label>
                   <p className="text-[11px] text-emerald-800">
-                    O operador que assume o posto deve validar com seu login e senha abaixo para confirmar o recebimento e iniciar a nova sessão.
+                    O operador que assume o posto deve informar seu login e senha abaixo para validar a passagem e assumir a sessão.
                   </p>
 
                   <div className="space-y-2">
@@ -563,7 +642,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }) {
                     disabled={loading}
                     className="w-2/3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md"
                   >
-                    {loading ? 'Assinando...' : 'Assinar & Concluir Passagem'}
+                    {loading ? 'Assinando...' : 'Assinar e Finalizar Passagem'}
                   </button>
                 </div>
               </form>
