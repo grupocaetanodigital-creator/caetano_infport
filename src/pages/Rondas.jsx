@@ -385,7 +385,7 @@ export default function Rondas({ usuarioLogado }) {
       setMensagem({ tipo: 'sucesso', texto: 'Foto de evidência anexada!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao enviar foto: ' + err.message });
-    } fontally {
+    } finally {
       setUploadingFoto(false);
     }
   };
