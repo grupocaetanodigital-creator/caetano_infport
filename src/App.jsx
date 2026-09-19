@@ -269,7 +269,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
         
-        {/* COMPONENTE DE ALERTA GLOBAL DE RONDA */}
+        {/* COMPONENTE DE ALERTA GLOBAL DE RONDA ATUALIZADO */}
         <AlertaRondaGlobal 
           onNavegarRondas={() => mudarModulo('rondas')} 
           usuarioLogado={operadorContextoGlobal} 
