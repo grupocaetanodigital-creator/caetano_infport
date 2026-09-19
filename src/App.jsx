@@ -272,15 +272,35 @@ export default function App() {
 
   if (operador) {
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0">
+      <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
+        
+        {/* REGRAS DE ESTILO GLOBAL PARA FORÇAR NAVEGADORES E DISPOSITIVOS A RENDERIZAR TEXTOS ESCUROS E VÍVIDOS */}
+        <style>{`
+          input, select, textarea {
+            color: #0f172a !important;
+            background-color: #ffffff !important;
+            -webkit-text-fill-color: #0f172a !important;
+            opacity: 1 !important;
+            font-size: 0.95rem !important;
+            font-weight: 600 !important;
+          }
+          input::placeholder, textarea::placeholder {
+            color: #64748b !important;
+            -webkit-text-fill-color: #64748b !important;
+            opacity: 0.8 !important;
+          }
+          .bg-white, .bg-slate-50, .bg-gray-50 {
+            color: #0f172a !important;
+          }
+        `}</style>
         
         {/* CABEÇALHO COMPACTO EXCLUSIVO MOBILE */}
         <header className="md:hidden bg-slate-900 text-white p-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <ShieldCheck className="w-7 h-7 text-emerald-400 shrink-0" />
             <div className="truncate">
-              <h1 className="font-bold text-sm leading-tight">INFPORT 1.0</h1>
-              <p className="text-[11px] text-slate-300 truncate max-w-[190px]">
+              <h1 className="font-bold text-base leading-tight">INFPORT 1.0</h1>
+              <p className="text-xs text-slate-300 truncate max-w-[190px]">
                 {operadorContextoGlobal.condominio_nome}
               </p>
             </div>
@@ -311,7 +331,7 @@ export default function App() {
                     <h1 className="font-bold text-base leading-tight flex items-center gap-2">
                       INFPORT 1.0 <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-2 py-0.5 rounded">PWA</span>
                     </h1>
-                    <p className="text-[11px] text-slate-400 truncate max-w-[150px]">
+                    <p className="text-xs text-slate-400 truncate max-w-[150px]">
                       {operadorContextoGlobal.condominio_nome}
                     </p>
                   </div>
@@ -329,13 +349,13 @@ export default function App() {
             {/* Seletor Multi-Tenant Admin no Desktop */}
             {eAdmin && menuAberto && (
               <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
-                <label className="block text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1">
-                  <Filter className="w-3 h-3" /> Condomínio Ativo
+                <label className="block text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5" /> Condomínio Ativo
                 </label>
                 <select
                   value={condominioAtivoId}
                   onChange={(e) => setCondominioAtivoId(e.target.value)}
-                  className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-600 focus:outline-none"
+                  className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-600 focus:outline-none"
                 >
                   <option value="">🏢 Todos (Visão Global)</option>
                   {listaCondominios.map((c) => (
@@ -349,7 +369,7 @@ export default function App() {
             <nav className="p-3 space-y-1.5 overflow-y-auto max-h-[calc(100vh-200px)]">
               <button
                 onClick={() => mudarModulo('dashboard')}
-                className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-between transition ${
                   moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
                 }`}
               >
@@ -365,7 +385,7 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => mudarModulo(item.id)}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center justify-between transition ${
+                    className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-between transition ${
                       moduloAtual === item.id ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
                     }`}
                   >
@@ -386,8 +406,8 @@ export default function App() {
                   {operador.nome?.charAt(0)}
                 </div>
                 <div className="truncate">
-                  <p className="text-xs font-bold text-white truncate">{operador.nome}</p>
-                  <p className="text-[10px] text-slate-400 uppercase font-mono">
+                  <p className="text-xs sm:text-sm font-bold text-white truncate">{operador.nome}</p>
+                  <p className="text-xs text-slate-400 uppercase font-mono">
                     {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso ?? 3}`}
                   </p>
                 </div>
@@ -411,7 +431,7 @@ export default function App() {
                 <div className="flex justify-between items-center pb-4 border-b border-slate-800">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                    <span className="font-bold text-white text-sm">Menu INFPORT</span>
+                    <span className="font-bold text-white text-sm sm:text-base">Menu INFPORT</span>
                   </div>
                   <button onClick={() => setDrawerMobileAberto(false)} className="text-slate-400 p-1">
                     <X className="w-6 h-6" />
@@ -420,11 +440,11 @@ export default function App() {
 
                 {eAdmin && (
                   <div className="my-3 p-2.5 bg-slate-800 rounded-xl space-y-1">
-                    <label className="text-[10px] font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
+                    <label className="text-xs font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
                     <select
                       value={condominioAtivoId}
                       onChange={(e) => setCondominioAtivoId(e.target.value)}
-                      className="w-full bg-slate-900 text-white text-xs font-bold p-2 rounded-lg border border-slate-700"
+                      className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-700"
                     >
                       <option value="">🏢 Todos os Condomínios</option>
                       {listaCondominios.map((c) => (
@@ -437,7 +457,7 @@ export default function App() {
                 <div className="py-3 space-y-1 overflow-y-auto max-h-[60vh]">
                   <button
                     onClick={() => mudarModulo('dashboard')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs flex items-center gap-3 ${
+                    className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-3 ${
                       moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
                     }`}
                   >
@@ -450,7 +470,7 @@ export default function App() {
                       <button
                         key={item.id}
                         onClick={() => mudarModulo(item.id)}
-                        className={`w-full p-3 rounded-xl font-bold text-xs flex items-center gap-3 ${
+                        className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-3 ${
                           moduloAtual === item.id ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
                         }`}
                       >
@@ -463,8 +483,8 @@ export default function App() {
 
               <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
                 <div className="truncate">
-                  <p className="text-xs font-bold text-white truncate">{operador.nome}</p>
-                  <p className="text-[10px] text-slate-400 uppercase">{operadorContextoGlobal.condominio_nome}</p>
+                  <p className="text-xs sm:text-sm font-bold text-white truncate">{operador.nome}</p>
+                  <p className="text-xs text-slate-400 uppercase">{operadorContextoGlobal.condominio_nome}</p>
                 </div>
                 <button
                   onClick={handleLogout}
@@ -482,22 +502,22 @@ export default function App() {
           
           {/* Cabeçalho do Módulo para Navegação Fácil */}
           {moduloAtual !== 'dashboard' && (
-            <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
+            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm">
               <button 
                 onClick={() => mudarModulo('dashboard')}
-                className="flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition"
+                className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
               </button>
 
-              <span className="text-xs font-bold uppercase text-slate-800 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+              <span className="text-xs sm:text-sm font-bold uppercase text-slate-900 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200">
                 {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
               </span>
             </div>
           )}
 
           {/* Renderização das Telas dos Módulos */}
-          <main className="flex-1 p-3 sm:p-6 overflow-y-auto">
+          <main className="flex-1 p-3 sm:p-6 overflow-y-auto text-slate-900">
             
             {/* TELA DASHBOARD / GRADE DE ICONES ESTILO APP MÓVEL */}
             {moduloAtual === 'dashboard' && (
@@ -506,13 +526,13 @@ export default function App() {
                 {/* Banner de Operador Fixo */}
                 <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex items-center justify-between border border-slate-800">
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800">
+                    <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-md border border-emerald-800">
                       Posto Ativo
                     </span>
                     <h2 className="text-base sm:text-lg font-bold text-white truncate">
                       {operadorContextoGlobal.condominio_nome}
                     </h2>
-                    <p className="text-xs text-slate-300">
+                    <p className="text-xs sm:text-sm text-slate-300">
                       Operador: <strong className="text-white">{operador.nome}</strong>
                     </p>
                   </div>
@@ -523,7 +543,7 @@ export default function App() {
 
                 {/* Grade 3xN de Ícones Grandes */}
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 px-1">
+                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600 mb-3 px-1">
                     Módulos Operacionais
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -538,7 +558,7 @@ export default function App() {
                           <div className={`p-3.5 rounded-2xl border ${item.cor} group-hover:scale-110 transition duration-200`}>
                             <Icone className="w-7 h-7" />
                           </div>
-                          <span className="text-xs font-bold text-slate-800 leading-tight">
+                          <span className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">
                             {item.titulo}
                           </span>
                         </button>
@@ -592,11 +612,11 @@ export default function App() {
         </div>
 
         {/* BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM BAR - ESTILO APP CELULAR) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-400 flex justify-around items-center h-16 z-40 px-1 shadow-2xl">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-300 flex justify-around items-center h-16 z-40 px-1 shadow-2xl">
           <button
             onClick={() => mudarModulo('dashboard')}
-            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-              moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+              moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-100'
             }`}
           >
             <Home className="w-5 h-5 mb-0.5" />
@@ -606,8 +626,8 @@ export default function App() {
           {featureFlags.mod03_gestao_encomendas && (
             <button
               onClick={() => mudarModulo('encomendas')}
-              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-                moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-200'
+              className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+                moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-100'
               }`}
             >
               <Package className="w-5 h-5 mb-0.5" />
@@ -618,8 +638,8 @@ export default function App() {
           {featureFlags.mod05_quadro_chaves && (
             <button
               onClick={() => mudarModulo('chaves')}
-              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-                moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-200'
+              className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+                moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-100'
               }`}
             >
               <Key className="w-5 h-5 mb-0.5" />
@@ -630,8 +650,8 @@ export default function App() {
           {featureFlags.mod07_gestao_ronda && (
             <button
               onClick={() => mudarModulo('rondas')}
-              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition ${
-                moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-200'
+              className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+                moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-100'
               }`}
             >
               <QrCode className="w-5 h-5 mb-0.5" />
@@ -641,7 +661,7 @@ export default function App() {
 
           <button
             onClick={() => setDrawerMobileAberto(true)}
-            className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold hover:text-slate-200 text-slate-300"
+            className="flex flex-col items-center justify-center w-full h-full text-xs font-bold hover:text-slate-100 text-slate-300"
           >
             <Grid className="w-5 h-5 mb-0.5" />
             Módulos
@@ -653,53 +673,71 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
+      
+      {/* REGRAS DE ESTILO GLOBAL PARA FORÇAR NAVEGADORES E DISPOSITIVOS A RENDERIZAR TEXTOS ESCUROS E VÍVIDOS NA TELA DE LOGIN */}
+      <style>{`
+        input, select, textarea {
+          color: #0f172a !important;
+          background-color: #f8fafc !important;
+          -webkit-text-fill-color: #0f172a !important;
+          opacity: 1 !important;
+          font-size: 1rem !important;
+          font-weight: 600 !important;
+        }
+        input::placeholder, textarea::placeholder {
+          color: #64748b !important;
+          -webkit-text-fill-color: #64748b !important;
+          opacity: 0.8 !important;
+        }
+      `}</style>
+
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8">
         <div className="text-center mb-6">
           <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
             <ShieldCheck className="w-10 h-10 text-slate-800" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">INFPORT 1.0</h1>
-          <p className="text-sm text-slate-500">Acesso à Guarita / Operação</p>
+          <p className="text-sm font-medium text-slate-600">Acesso à Guarita / Operação</p>
         </div>
 
         {erro && (
-          <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4 border border-red-200 break-words">
+          <div className="bg-red-50 text-red-700 p-3.5 rounded-xl text-sm mb-4 border border-red-200 break-words font-semibold">
             {erro}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-800 uppercase mb-1.5">
               Usuário / Login
             </label>
             <div className="relative">
-              <User className="w-5 h-5 text-slate-400 absolute left-3 top-3" />
+              <User className="w-5 h-5 text-slate-500 absolute left-3 top-3.5 z-10" />
               <input
                 type="text"
                 required
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
                 placeholder="Digite seu usuário"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-900 text-base"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-900 text-base font-semibold"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-800 uppercase mb-1.5">
               Senha
             </label>
             <div className="relative">
-              <Lock className="w-5 h-5 text-slate-400 absolute left-3 top-3" />
+              <Lock className="w-5 h-5 text-slate-500 absolute left-3 top-3.5 z-10" />
               <input
                 type="password"
                 required
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 placeholder="Digite sua senha"
-                className="w-full p-3 pl-10 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-base"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-900 text-base font-semibold"
               />
             </div>
           </div>
