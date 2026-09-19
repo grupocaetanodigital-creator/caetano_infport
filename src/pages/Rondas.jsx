@@ -32,9 +32,6 @@ export default function Rondas({ usuarioLogado }) {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Permissão abrangente e segura para Cadastrar Pontos:
-  // Aceita Nível 0 (Dev Admin), Nível 1 (Master), perfis contendo 'admin', 'adm', 'master', 'dev', 'sindico'
-  // ou quando o atributo 'nivel' não estiver restrito a Operadores/Supervisores comuns (2 ou 3).
   const nivelNum = Number(usuarioLogado?.nivel);
   const perfilTexto = String(
     usuarioLogado?.perfil || 
@@ -59,24 +56,16 @@ export default function Rondas({ usuarioLogado }) {
     usuarioLogado?.nivel === undefined || 
     usuarioLogado?.nivel === null;
 
-  // Operador Ativo no Posto
   const [operadorRondaAtual, setOperadorRondaAtual] = useState(
     usuarioLogado?.nome || usuarioLogado?.login || 'Vigia / Portaria'
   );
 
-  // Lista de Operadores Cadastrados
   const [listaOperadores, setListaOperadores] = useState([]);
-
-  // Listagens de Rondas
   const [pontos, setPontos] = useState([]);
   const [rondaAtiva, setRondaAtiva] = useState(null);
   const [registrosRonda, setRegistrosRonda] = useState([]);
   const [historicoRondas, setHistoricoRondas] = useState([]);
   const [historicoPassagens, setHistoricoPassagens] = useState([]);
-
-  // Temporizador de 15 Minutos (900 segundos)
-  const [tempoRestanteTimer, setTempoRestanteTimer] = useState(0);
-  const [timerAtivo, setTimerAtivo] = useState(false);
 
   // Modais
   const [modalNovoPonto, setModalNovoPonto] = useState(false);
@@ -97,7 +86,7 @@ export default function Rondas({ usuarioLogado }) {
   const [coords, setCoords] = useState(null);
   const [temProblema, setTemProblema] = useState(false);
 
-  // Scanner de Câmera para QR Code
+  // Scanner Câmera
   const [lendoQrCamera, setLendoQrCamera] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -119,20 +108,6 @@ export default function Rondas({ usuarioLogado }) {
     };
   }, []);
 
-  // Temporizador de 15 Minutos com Alerta Sonoro
-  useEffect(() => {
-    let interval = null;
-    if (timerAtivo && tempoRestanteTimer > 0) {
-      interval = setInterval(() => {
-        setTempoRestanteTimer((prev) => prev - 1);
-      }, 1000);
-    } else if (tempoRestanteTimer === 0 && timerAtivo) {
-      setTimerAtivo(false);
-      dispararAlertaSonoro();
-    }
-    return () => clearInterval(interval);
-  }, [timerAtivo, tempoRestanteTimer]);
-
   const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
     if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
     const R = 6371000;
@@ -145,32 +120,6 @@ export default function Rondas({ usuarioLogado }) {
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return Math.round(R * c);
-  };
-
-  const dispararAlertaSonoro = () => {
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      osc.start();
-      osc.stop(audioCtx.currentTime + 1.2);
-    } catch (e) {
-      console.log('Erro ao emitir áudio:', e);
-    }
-  };
-
-  const formatarTempoTimer = (segundos) => {
-    const mins = Math.floor(segundos / 60);
-    const segs = segundos % 60;
-    return `${mins.toString().padStart(2, '0')}:${segs.toString().padStart(2, '0')}`;
   };
 
   const carregarOperadores = async () => {
@@ -220,8 +169,11 @@ export default function Rondas({ usuarioLogado }) {
       setRondaAtiva(data);
 
       if (data) {
+        localStorage.setItem('infport_ronda_ativa', 'true');
         if (data.operador_nome) setOperadorRondaAtual(data.operador_nome);
         carregarRegistrosRonda(data.id);
+      } else {
+        localStorage.setItem('infport_ronda_ativa', 'false');
       }
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
@@ -329,7 +281,6 @@ export default function Rondas({ usuarioLogado }) {
     }
   };
 
-  // Ativar Câmera para Leitura Automática do QR Code
   const iniciarCameraQr = async () => {
     setLendoQrCamera(true);
     try {
@@ -479,6 +430,12 @@ export default function Rondas({ usuarioLogado }) {
       setRondaAtiva(data);
       setRegistrosRonda([]);
       setWhatsAppRelatorio(null);
+
+      // Atualiza o estado global de ronda iniciada
+      localStorage.setItem('infport_ronda_ativa', 'true');
+      localStorage.removeItem('infport_ultima_ronda_fim');
+      window.dispatchEvent(new Event('ronda_iniciada'));
+
       setMensagem({ tipo: 'sucesso', texto: 'Ronda iniciada!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
@@ -593,8 +550,10 @@ export default function Rondas({ usuarioLogado }) {
 
       if (error) throw error;
 
-      setTempoRestanteTimer(15 * 60);
-      setTimerAtivo(true);
+      // Grava o horário de término para acionar o alerta global após 15min
+      localStorage.setItem('infport_ultima_ronda_fim', dataFim.toISOString());
+      localStorage.setItem('infport_ronda_ativa', 'false');
+      window.dispatchEvent(new Event('ronda_finalizada'));
 
       setWhatsAppRelatorio({
         texto: resumoTexto,
@@ -606,7 +565,7 @@ export default function Rondas({ usuarioLogado }) {
       carregarHistorico();
       setMensagem({
         tipo: 'sucesso',
-        texto: 'Ronda finalizada! Intervalo de 15 minutos iniciado.'
+        texto: 'Ronda finalizada! Intervalo de 15 minutos iniciado em todo o aplicativo.'
       });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
@@ -683,7 +642,7 @@ export default function Rondas({ usuarioLogado }) {
             <ShieldCheck className="w-5 h-5 text-emerald-400" /> Controle de Rondas Patrimoniais
           </h3>
           <p className="text-xs text-slate-300">
-            Validação por Câmera QR Code com GPS e temporizador de 15 minutos.
+            Validação por Câmera QR Code com GPS e temporizador global de 15 minutos.
           </p>
         </div>
 
@@ -698,7 +657,6 @@ export default function Rondas({ usuarioLogado }) {
             <ArrowRightLeft className="w-4 h-4" /> Assumir Posto
           </button>
 
-          {/* Botão de Cadastrar Ponto liberado para Administrador / Master */}
           {podeCadastrarPonto && (
             <button
               onClick={() => {
@@ -730,22 +688,6 @@ export default function Rondas({ usuarioLogado }) {
           )}
         </div>
       </div>
-
-      {/* TEMPORIZADOR REGRESSIVO */}
-      {tempoRestanteTimer > 0 && (
-        <div className="bg-amber-500 text-slate-950 p-4 rounded-xl flex items-center justify-between shadow-md animate-pulse">
-          <div className="flex items-center gap-3">
-            <Timer className="w-6 h-6 flex-shrink-0" />
-            <div>
-              <strong className="block font-bold text-sm">INTERVALO DE RONDA (15 MINUTOS)</strong>
-              <p className="text-xs font-medium">Aguarde a contagem para iniciar a próxima varredura.</p>
-            </div>
-          </div>
-          <div className="text-2xl font-black font-mono bg-slate-950 text-amber-400 px-4 py-1.5 rounded-xl">
-            {formatarTempoTimer(tempoRestanteTimer)}
-          </div>
-        </div>
-      )}
 
       {/* RELATÓRIO VIA WHATSAPP */}
       {whatsAppRelatorio && (
@@ -866,7 +808,6 @@ export default function Rondas({ usuarioLogado }) {
             </div>
 
             <div className="space-y-3">
-              {/* ÁREA DE LEITURA POR CÂMERA */}
               <div className="bg-slate-900 text-white p-3.5 rounded-xl text-center space-y-3">
                 <span className="text-[11px] text-slate-300 font-medium block">
                   CÓDIGO ESPERADO: <strong className="text-emerald-400 font-mono">{modalRegistrarPonto.codigo_tag}</strong>
@@ -912,7 +853,6 @@ export default function Rondas({ usuarioLogado }) {
                 )}
               </div>
 
-              {/* BOTÃO PARA RELATAR PROBLEMA */}
               <button
                 type="button"
                 onClick={alternarProblema}
@@ -926,7 +866,6 @@ export default function Rondas({ usuarioLogado }) {
                 {temProblema ? '⚠️ PROBLEMA NOTIFICADO (CLIQUE PARA REMOVER)' : 'RELATAR ANOMALIA / PROBLEMA NESTE PONTO'}
               </button>
 
-              {/* CAMPO DE OBSERVAÇÕES */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   OBSERVAÇÕES DO RONDA {temProblema && <span className="text-red-600">*</span>}
@@ -940,7 +879,6 @@ export default function Rondas({ usuarioLogado }) {
                 />
               </div>
 
-              {/* FOTO DA EVIDÊNCIA */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   FOTO DA EVIDÊNCIA {temProblema ? '(OBRIGATÓRIA PARA PROBLEMA)' : '(OPCIONAL)'}
