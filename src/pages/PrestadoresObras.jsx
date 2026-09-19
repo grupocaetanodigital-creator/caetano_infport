@@ -11,7 +11,6 @@ import {
   LogOut, 
   Camera, 
   Building2, 
-  FileText, 
   Scan, 
   Loader2 
 } from 'lucide-react';
@@ -63,7 +62,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
     }
   };
 
-  // Leitura de Documentos via OCR (Extração de Nome e Documento)
+  // Leitura de Documentos via OCR
   const processarDocumentoOCR = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -78,39 +77,55 @@ export default function PrestadoresObras({ usuarioLogado }) {
           const script = document.createElement('script');
           script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
           script.onload = resolve;
-          script.onerror = reject;
+          script.onerror = () => reject(new Error('Não foi possível carregar a biblioteca de OCR. Verifique sua conexão.'));
           document.head.appendChild(script);
         });
       }
 
-      const worker = await window.Tesseract.createWorker('por');
-      const ret = await worker.recognize(file);
-      await worker.terminate();
+      // Execução direta e simplificada do OCR no Tesseract v5
+      const ret = await window.Tesseract.recognize(file, 'por');
+      const textoLido = ret?.data?.text || '';
 
-      const textoLido = ret.data.text || '';
+      if (!textoLido.trim()) {
+        throw new Error('Nenhum texto legível foi identificado na foto do documento.');
+      }
 
-      // Tenta extrair CPF ou RG via Expressão Regular
-      const cpfMatch = textoLido.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/) || textoLido.match(/\d{11}/);
-      const rgMatch = textoLido.match(/\d{2}\.\d{3}\.\d{3}-[\dX]/i);
+      // Extração de CPF ou RG com expressões regulares flexíveis
+      const cpfMatch = textoLido.match(/\d{3}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?\d{2}/) || textoLido.match(/\d{11}/);
+      const rgMatch = textoLido.match(/\d{1,2}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?[\dX|x]/i);
 
       if (cpfMatch) {
-        setDocumento(cpfMatch[0]);
+        setDocumento(cpfMatch[0].replace(/\s/g, ''));
       } else if (rgMatch) {
-        setDocumento(rgMatch[0]);
+        setDocumento(rgMatch[0].replace(/\s/g, ''));
       }
 
-      // Procura por linhas de nome no documento
-      const linhas = textoLido.split('\n').map(l => l.trim()).filter(l => l.length > 5);
-      if (linhas.length > 0) {
-        const linhaNome = linhas.find(l => !l.match(/\d/) && l === l.toUpperCase());
-        if (linhaNome) setNomeProfissional(linhaNome);
+      // Termos comuns em documentos a serem ignorados para não preencher como nome
+      const palavrasIgnoradas = [
+        'REPUBLICA', 'FEDERATIVA', 'BRASIL', 'CARTEIRA', 'IDENTIDADE',
+        'REGISTRO', 'GERAL', 'MINISTERIO', 'FAZENDA', 'RECEITA', 'FEDERAL',
+        'VALIDA', 'TODO', 'TERRITORIO', 'NACIONAL', 'CPF', 'NOME', 'DOC', 'ESTADO'
+      ];
+
+      // Busca pela linha provável do nome do profissional
+      const linhas = textoLido.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+      const linhaNome = linhas.find(linha => {
+        const linhaUpper = linha.toUpperCase();
+        const temNumero = /\d/.test(linha);
+        const ehPalavraChave = palavrasIgnoradas.some(p => linhaUpper.includes(p));
+        return !temNumero && !ehPalavraChave && linha.length >= 6;
+      });
+
+      if (linhaNome) {
+        setNomeProfissional(linhaNome);
       }
 
-      setMensagem({ tipo: 'sucesso', texto: 'OCR concluído! Verifique os dados extraídos.' });
+      setMensagem({ tipo: 'sucesso', texto: 'OCR concluído com sucesso! Verifique os dados extraídos.' });
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: 'Falha na leitura automática do documento: ' + err.message });
+      setMensagem({ tipo: 'erro', texto: 'Falha na leitura do documento: ' + err.message });
     } finally {
       setProcessandoOcr(false);
+      e.target.value = ''; // Permite selecionar a mesma imagem novamente se necessário
     }
   };
 
@@ -221,7 +236,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
             <Briefcase className="w-3.5 h-3.5" /> Módulo 10 - Obras e Prestadores
           </span>
           <h3 className="font-bold text-lg mt-1">Controle de Prestadores de Serviço e Obras</h3>
-          <p className="text-xs text-slate-300">Acesso agilizado com OCR de documentos e registo de visitas ao Condomínio.</p>
+          <p className="text-xs text-slate-300">Acesso agilizado com OCR de documentos e registro de visitas ao Condomínio.</p>
         </div>
 
         <button
