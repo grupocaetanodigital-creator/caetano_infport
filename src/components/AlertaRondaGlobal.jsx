@@ -12,7 +12,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
 
   useEffect(() => {
     const checarStatusRonda = async () => {
-      // 1. Verifica se há ronda em andamento
+      // 1. Verifica se há ronda em andamento no dispositivo
       const rondaAtiva = localStorage.getItem('infport_ronda_ativa');
       if (rondaAtiva === 'true') {
         setStatusRonda('em_andamento');
@@ -22,7 +22,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
 
       let dataUltimaRonda = null;
 
-      // 2. Busca a última ronda no Supabase para o condomínio logado
+      // 2. Consulta a última ronda no Supabase para o condomínio ativo
       if (usuarioLogado?.condominio_id) {
         try {
           const { data } = await supabase
@@ -40,12 +40,12 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
         }
       }
 
-      // 3. Fallback no localStorage caso esteja offline ou sem registro no banco
+      // 3. Fallback no localStorage
       if (!dataUltimaRonda) {
         dataUltimaRonda = localStorage.getItem('infport_ultima_ronda_fim');
       }
 
-      // Se nunca foi feita nenhuma ronda, inicia contagem padrão de 15 min
+      // Se nunca houve ronda registrada, inicia contagem padrão
       if (!dataUltimaRonda) {
         const tempoInicial = localStorage.getItem('infport_inicio_timer_padrao');
         if (!tempoInicial) {
@@ -76,7 +76,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
         setTempoRestante(0);
         setTempoAtrasado(Math.abs(restante));
 
-        // Dispara o Popup apenas se não estiver silenciado/adiado
+        // Dispara o Popup se não estiver silenciado
         if (!silenciadoAte || agora >= silenciadoAte) {
           if (!alertaDisparado) {
             setAlertaDisparado(true);
@@ -93,7 +93,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
     };
 
     checarStatusRonda();
-    const interval = setInterval(checarStatusRonda, 1000); // Atualiza a cada 1 segundo para efeito do cronômetro
+    const interval = setInterval(checarStatusRonda, 1000);
 
     const handleRondaEvent = () => checarStatusRonda();
     window.addEventListener('ronda_finalizada', handleRondaEvent);
@@ -140,7 +140,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
 
   const handleIrParaRondas = () => {
     setAlertaDisparado(false);
-    setSilenciadoAte(new Date().getTime() + 10 * 60 * 1000); // Silencia o popup por 10 min para não reabrir enquanto faz a ronda
+    setSilenciadoAte(new Date().getTime() + 10 * 60 * 1000);
     if (onNavegarRondas) {
       onNavegarRondas();
     }
@@ -153,7 +153,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
 
   return (
     <>
-      {/* 1. BARRA SUPERIOR FIXA PERMANENTE DE CRONÔMETRO (NÃO BLOQUEANTE) */}
+      {/* BARRA SUPERIOR FIXA PERMANENTE DE CRONÔMETRO */}
       <div className={`w-full px-3 py-2 flex items-center justify-between text-xs font-bold shadow-md sticky top-0 z-40 transition-colors ${
         statusRonda === 'em_andamento'
           ? 'bg-emerald-600 text-white'
@@ -203,7 +203,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado }) {
         </div>
       </div>
 
-      {/* 2. JANELA MODAL DE ALERTA DE URGÊNCIA (EXIBIDA SE VENCIDO O TEMPO) */}
+      {/* JANELA MODAL POPUP URGENTE QUANDO EXPIRAR */}
       {alertaDisparado && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 text-center space-y-5 shadow-2xl border-4 border-red-600 relative animate-in zoom-in-95 duration-150">
