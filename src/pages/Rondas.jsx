@@ -1,302 +1,670 @@
+// Pasta: src/pages/Rondas.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { 
-  Briefcase, 
-  Plus, 
+  ShieldCheck, 
+  QrCode, 
+  MapPin, 
+  Play, 
   CheckCircle2, 
   AlertCircle, 
   X, 
-  Search, 
-  LogIn, 
-  LogOut, 
+  Plus, 
   Camera, 
-  Building2, 
-  Scan, 
-  Loader2 
+  Navigation, 
+  Clock, 
+  Flag,
+  AlertTriangle,
+  MessageCircle,
+  ExternalLink,
+  UserCheck,
+  History,
+  Timer,
+  ArrowRightLeft,
+  Lock,
+  User
 } from 'lucide-react';
 
-export default function PrestadoresObras({ usuarioLogado }) {
-  const [prestadores, setPrestadores] = useState([]);
+export default function Rondas({ usuarioLogado }) {
   const [loading, setLoading] = useState(false);
-  const [processandoOcr, setProcessandoOcr] = useState(false);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
-  const [busca, setBusca] = useState('');
+
+  // Verificar se o usuário logado é Nível 0 (Administrador do Sistema)
+  const eNivel0 = Number(usuarioLogado?.nivel) === 0 || usuarioLogado?.nivel === 0 || usuarioLogado?.nivel === '0';
+
+  // Operador Ativo no Posto
+  const [operadorRondaAtual, setOperadorRondaAtual] = useState(
+    usuarioLogado?.nome || usuarioLogado?.login || 'Vigia / Portaria'
+  );
+
+  // Lista de Operadores Cadastrados para Seleção no Login
+  const [listaOperadores, setListaOperadores] = useState([]);
+
+  // Listagens de Rondas
+  const [pontos, setPontos] = useState([]);
+  const [rondaAtiva, setRondaAtiva] = useState(null);
+  const [registrosRonda, setRegistrosRonda] = useState([]);
+  const [historicoRondas, setHistoricoRondas] = useState([]);
+  const [historicoPassagens, setHistoricoPassagens] = useState([]);
+
+  // Temporizador de 15 Minutos (900 segundos)
+  const [tempoRestanteTimer, setTempoRestanteTimer] = useState(0);
+  const [timerAtivo, setTimerAtivo] = useState(false);
 
   // Modais
-  const [modalCadastro, setModalCadastro] = useState(false);
-  const [modalAcesso, setModalAcesso] = useState(false);
-  const [prestadorSelecionado, setPrestadorSelecionado] = useState(null);
+  const [modalNovoPonto, setModalNovoPonto] = useState(false);
+  const [modalRegistrarPonto, setModalRegistrarPonto] = useState(null);
+  const [modalAssumirPosto, setModalAssumirPosto] = useState(false);
+  const [whatsAppRelatorio, setWhatsAppRelatorio] = useState(null);
 
-  // Campos do Formulário
-  const [nomeProfissional, setNomeProfissional] = useState('');
-  const [empresa, setEmpresa] = useState('');
-  const [documento, setDocumento] = useState('');
-  const [tipoServico, setTipoServico] = useState('Manutenção / Reforma');
-  const [atendeCondominio, setAtendeCondominio] = useState(false);
-  const [unidadeDestino, setUnidadeDestino] = useState('');
-  const [blocoDestino, setBlocoDestino] = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [cracha, setCracha] = useState('');
+  // Form Novo Ponto (Nível 0)
+  const [nomePonto, setNomePonto] = useState('');
+  const [codigoTag, setCodigoTag] = useState('');
+  const [descricaoPonto, setDescricaoPonto] = useState('');
+  const [coordsNovoPonto, setCoordsNovoPonto] = useState(null);
+
+  // Form Leitura de Ponto
+  const [codigoLido, setCodigoLido] = useState('');
+  const [observacaoPonto, setObservacaoPonto] = useState('');
+  const [fotoPontoUrl, setFotoPontoUrl] = useState('');
+  const [coords, setCoords] = useState(null);
+
+  // Form Assumir Posto (Login Obrigatório)
+  const [operadorSelecionadoId, setOperadorSelecionadoId] = useState('');
+  const [senhaLoginEntrante, setSenhaLoginEntrante] = useState('');
+  const [ocorrenciasPlantao, setOcorrenciasPlantao] = useState('');
 
   useEffect(() => {
-    carregarPrestadores();
-  }, [usuarioLogado]);
+    carregarPontos();
+    verificarRondaAtiva();
+    carregarHistorico();
+    carregarPassagensPosto();
+    carregarOperadores();
+  }, []);
 
-  const carregarPrestadores = async () => {
+  // Efeito do Temporizador de 15 Minutos com Alerta Sonoro
+  useEffect(() => {
+    let interval = null;
+    if (timerAtivo && tempoRestanteTimer > 0) {
+      interval = setInterval(() => {
+        setTempoRestanteTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (tempoRestanteTimer === 0 && timerAtivo) {
+      setTimerAtivo(false);
+      dispararAlertaSonoro();
+    }
+    return () => clearInterval(interval);
+  }, [timerAtivo, tempoRestanteTimer]);
+
+  // Função para calcular distância entre dois pontos de GPS em Metros (Fórmula de Haversine)
+  const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
+    if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+    const R = 6371000; // Raio da Terra em metros
+    const rad = (graus) => (graus * Math.PI) / 180;
+    const dLat = rad(lat2 - lat1);
+    const dLon = rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(rad(lat1)) * Math.cos(rad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c);
+  };
+
+  // Alerta Sonoro usando Web Audio API Nativa do Navegador
+  const dispararAlertaSonoro = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Tom A5
+      gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + 1.2);
+    } catch (e) {
+      console.log('Erro ao emitir áudio:', e);
+    }
+  };
+
+  const formatarTempoTimer = (segundos) => {
+    const mins = Math.floor(segundos / 60);
+    const segs = segundos % 60;
+    return `${mins.toString().padStart(2, '0')}:${segs.toString().padStart(2, '0')}`;
+  };
+
+  const carregarOperadores = async () => {
     if (!usuarioLogado?.condominio_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('operadores')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) throw error;
+      setListaOperadores(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar operadores:', err.message);
+    }
+  };
+
+  const carregarPontos = async () => {
+    if (!usuarioLogado?.condominio_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('rondas_pontos')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .order('nome_ponto');
+
+      if (error) throw error;
+      setPontos(data || []);
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    }
+  };
+
+  const verificarRondaAtiva = async () => {
+    if (!usuarioLogado?.condominio_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('rondas_execucao')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('status', 'Em Andamento')
+        .maybeSingle();
+
+      if (error) throw error;
+      setRondaAtiva(data);
+
+      if (data) {
+        if (data.operador_nome) setOperadorRondaAtual(data.operador_nome);
+        carregarRegistrosRonda(data.id);
+      }
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    }
+  };
+
+  const carregarRegistrosRonda = async (rondaId) => {
+    try {
+      const { data, error } = await supabase
+        .from('rondas_registros')
+        .select('*, rondas_pontos(*)')
+        .eq('ronda_id', rondaId);
+
+      if (error) throw error;
+      setRegistrosRonda(data || []);
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    }
+  };
+
+  const carregarHistorico = async () => {
+    if (!usuarioLogado?.condominio_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('rondas_execucao')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .neq('status', 'Em Andamento')
+        .order('data_inicio', { ascending: false })
+        .limit(15);
+
+      if (error) throw error;
+      setHistoricoRondas(data || []);
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    }
+  };
+
+  const carregarPassagensPosto = async () => {
+    if (!usuarioLogado?.condominio_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('rondas_passagem_posto')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .order('data_hora', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setHistoricoPassagens(data || []);
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    }
+  };
+
+  const capturarGPS = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => setMensagem({ tipo: 'erro', texto: 'Não foi possível capturar a geolocalização GPS do aparelho.' }),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  };
+
+  const capturarGPSNovoPonto = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoordsNovoPonto({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setMensagem({ tipo: 'sucesso', texto: 'Coordenadas GPS capturadas com sucesso para o novo ponto!' });
+        },
+        (err) => setMensagem({ tipo: 'erro', texto: 'Erro ao capturar GPS para o ponto: ' + err.message }),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      setMensagem({ tipo: 'erro', texto: 'Seu navegador/dispositivo não possui suporte para GPS.' });
+    }
+  };
+
+  const uploadFoto = async (file) => {
+    if (!file) return;
+    setUploadingFoto(true);
+
+    try {
+      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
+      const fileName = `rondas_evidencias/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('encomendas')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('encomendas')
+        .getPublicUrl(fileName);
+
+      setFotoPontoUrl(urlData.publicUrl);
+      setMensagem({ tipo: 'sucesso', texto: 'Foto do ponto anexada com sucesso!' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao enviar foto: ' + err.message });
+    } finally {
+      setUploadingFoto(false);
+    }
+  };
+
+  const cadastrarPonto = async (e) => {
+    e.preventDefault();
+
+    if (!eNivel0) {
+      setMensagem({ tipo: 'erro', texto: 'Apenas usuários Nível 0 (Administrador) possuem permissão para cadastrar pontos de ronda.' });
+      return;
+    }
+
+    if (!nomePonto.trim() || !codigoTag.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Preencha o nome do ponto e o código do QR Code / NFC.' });
+      return;
+    }
+
+    if (!coordsNovoPonto?.lat || !coordsNovoPonto?.lng) {
+      setMensagem({ tipo: 'erro', texto: 'Capture a localização GPS no local exato do ponto antes de salvar.' });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('rondas_pontos')
+        .insert([{
+          condominio_id: usuarioLogado.condominio_id,
+          nome_ponto: nomePonto.trim(),
+          codigo_tag: codigoTag.trim().toUpperCase(),
+          localizacao_descricao: descricaoPonto.trim(),
+          latitude: coordsNovoPonto.lat,
+          longitude: coordsNovoPonto.lng
+        }]);
+
+      if (error) throw error;
+
+      setNomePonto('');
+      setCodigoTag('');
+      setDescricaoPonto('');
+      setCoordsNovoPonto(null);
+      setModalNovoPonto(false);
+      carregarPontos();
+      setMensagem({ tipo: 'sucesso', texto: 'Ponto de ronda com geolocalização cadastrado com sucesso!' });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const iniciarRonda = async () => {
+    if (pontos.length === 0) {
+      setMensagem({ tipo: 'erro', texto: 'Cadastre ao menos um ponto antes de iniciar a ronda.' });
+      return;
+    }
     setLoading(true);
 
     try {
       const { data, error } = await supabase
-        .from('prestadores')
-        .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
-        .order('created_at', { ascending: false });
+        .from('rondas_execucao')
+        .insert([{
+          condominio_id: usuarioLogado.condominio_id,
+          operador_nome: operadorRondaAtual,
+          status: 'Em Andamento',
+          data_inicio: new Date().toISOString()
+        }])
+        .select()
+        .single();
 
       if (error) throw error;
-      setPrestadores(data || []);
+
+      setRondaAtiva(data);
+      setRegistrosRonda([]);
+      setWhatsAppRelatorio(null);
+      setMensagem({ tipo: 'sucesso', texto: 'Ronda iniciada! Percorra os pontos cadastrados.' });
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao carregar prestadores: ' + err.message });
+      setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para carregar e rotacionar a imagem no Canvas para tratar fotos tiradas na vertical
-  const processarImagemCanvas = (fileSource, angulo = 0) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        if (angulo === 90 || angulo === 270) {
-          canvas.width = img.height;
-          canvas.height = img.width;
-        } else {
-          canvas.width = img.width;
-          canvas.height = img.height;
-        }
-
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((angulo * Math.PI) / 180);
-        ctx.drawImage(img, -img.width / 2, -img.height / 2);
-        resolve(canvas.toDataURL('image/jpeg', 0.9));
-      };
-      img.src = URL.createObjectURL(fileSource);
-    });
+  const abrirRegistroPonto = (ponto) => {
+    setModalRegistrarPonto(ponto);
+    setCodigoLido('');
+    setObservacaoPonto('');
+    setFotoPontoUrl('');
+    capturarGPS();
   };
 
-  // Leitura de Documentos via OCR com Rotação Inteligente
-  const processarDocumentoOCR = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const confirmarLeituraPonto = async (e) => {
+    e.preventDefault();
 
-    setProcessandoOcr(true);
-    setMensagem({ tipo: '', texto: '' });
+    if (codigoLido.trim().toUpperCase() !== modalRegistrarPonto.codigo_tag.toUpperCase()) {
+      setMensagem({ tipo: 'erro', texto: 'Código lido incorreto! Não corresponde a este ponto.' });
+      return;
+    }
+
+    // Validação de Localização GPS (Anti-Fraude)
+    if (!coords?.lat || !coords?.lng) {
+      setMensagem({ tipo: 'erro', texto: 'Sua localização GPS não foi identificada. Ative a geolocalização do dispositivo.' });
+      return;
+    }
+
+    if (modalRegistrarPonto.latitude && modalRegistrarPonto.longitude) {
+      const distanciaMetros = calcularDistanciaMetros(
+        coords.lat,
+        coords.lng,
+        modalRegistrarPonto.latitude,
+        modalRegistrarPonto.longitude
+      );
+
+      const DISTANCIA_MAXIMA_PERMITIDA = 50; // Raio máximo de 50 metros para tolerância
+
+      if (distanciaMetros !== null && distanciaMetros > DISTANCIA_MAXIMA_PERMITIDA) {
+        setMensagem({
+          tipo: 'erro',
+          texto: `Leitura bloqueada por divergência de local! Você está a ${distanciaMetros}m do ponto cadastrado (Máximo permitido: ${DISTANCIA_MAXIMA_PERMITIDA}m).`
+        });
+        return;
+      }
+    }
+
+    setLoading(true);
 
     try {
-      if (!window.Tesseract) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          script.onload = resolve;
-          script.onerror = () => reject(new Error('Erro ao carregar a biblioteca Tesseract.js.'));
-          document.head.appendChild(script);
-        });
-      }
+      const { error } = await supabase
+        .from('rondas_registros')
+        .insert([{
+          ronda_id: rondaAtiva.id,
+          ponto_id: modalRegistrarPonto.id,
+          condominio_id: usuarioLogado.condominio_id,
+          data_hora: new Date().toISOString(),
+          latitude: coords.lat,
+          longitude: coords.lng,
+          foto_evidencia_url: fotoPontoUrl.trim() || '',
+          observacao: observacaoPonto.trim() || ''
+        }]);
 
-      const angulosTeste = [0, 90, 270];
-      let textoLidoMelhor = '';
-      let cpfEncontrado = null;
-      let rgEncontrado = null;
+      if (error) throw error;
 
-      // Executa tentativas de OCR variando os ângulos caso a imagem esteja virada
-      for (const angulo of angulosTeste) {
-        const imgData = await processarImagemCanvas(file, angulo);
-        const ret = await window.Tesseract.recognize(imgData, 'por');
-        const txt = ret?.data?.text || '';
+      setModalRegistrarPonto(null);
+      carregarRegistrosRonda(rondaAtiva.id);
+      setMensagem({ tipo: 'sucesso', texto: `Ponto "${modalRegistrarPonto.nome_ponto}" validado com sucesso no local!` });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        const cpfMatch = txt.match(/\d{3}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?\d{2}/) || txt.match(/\d{11}/);
-        const rgMatch = txt.match(/\d{1,2}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?[\dX|x]/i);
+  const finalizarRonda = async () => {
+    if (!rondaAtiva) return;
+    setLoading(true);
 
-        if (cpfMatch || rgMatch) {
-          textoLidoMelhor = txt;
-          if (cpfMatch) cpfEncontrado = cpfMatch[0].replace(/[^\d]/g, '');
-          if (rgMatch) rgEncontrado = rgMatch[0].replace(/\s/g, '');
-          break; // Interrompe se já encontrou o documento no ângulo testado
-        }
+    const dataFim = new Date();
+    const pontosLidosIds = registrosRonda.map(r => r.ponto_id);
+    const todosLidos = pontos.every(p => pontosLidosIds.includes(p.id));
+    const statusFinal = todosLidos ? 'Concluída' : 'Incompleta';
 
-        if (!textoLidoMelhor) {
-          textoLidoMelhor = txt;
-        }
-      }
+    const lidosNomes = registrosRonda.map(r => `• ${r.rondas_pontos?.nome_ponto || 'Ponto'} (${new Date(r.data_hora).toLocaleTimeString('pt-BR')})`).join('\n');
+    const zeradosNomes = pontos.filter(p => !pontosLidosIds.includes(p.id)).map(p => `• ${p.nome_ponto}`).join('\n');
+    const fotosEvidencias = registrosRonda.filter(r => r.foto_evidencia_url).map(r => `📷 ${r.rondas_pontos?.nome_ponto}: ${r.foto_evidencia_url}`).join('\n');
 
-      // Aplica máscara e preenche o documento
-      let docFinal = '';
-      if (cpfEncontrado && cpfEncontrado.length === 11) {
-        docFinal = cpfEncontrado.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-        setDocumento(docFinal);
-      } else if (rgEncontrado) {
-        docFinal = rgEncontrado;
-        setDocumento(rgEncontrado);
-      }
+    const resumoTexto = `🛡️ *RELATÓRIO PATRIMONIAL DE RONDA*\n` +
+      `👤 Ronda: ${operadorRondaAtual}\n` +
+      `⏱️ Início: ${new Date(rondaAtiva.data_inicio).toLocaleString('pt-BR')}\n` +
+      `🏁 Fim: ${dataFim.toLocaleString('pt-BR')}\n` +
+      `📊 Status: ${statusFinal.toUpperCase()} (${registrosRonda.length}/${pontos.length})\n\n` +
+      `✅ *PONTOS VALIDADOS:*\n${lidosNomes || 'Nenhum'}\n\n` +
+      (zeradosNomes ? `⚠️ *PONTOS ZERADOS / NÃO VISITADOS:*\n${zeradosNomes}\n\n` : '') +
+      (fotosEvidencias ? `📸 *EVIDÊNCIAS DE FOTOS:*\n${fotosEvidencias}\n` : '');
 
-      // Termos de cabeçalho e labels de RG / CNH a serem ignorados
-      const palavrasIgnoradas = [
-        'REPUBLICA', 'FEDERATIVA', 'BRASIL', 'CARTEIRA', 'HABILITACAO', 'IDENTIDADE',
-        'REGISTRO', 'GERAL', 'MINISTERIO', 'FAZENDA', 'RECEITA', 'FEDERAL',
-        'VALIDA', 'TERRITORIO', 'NACIONAL', 'CPF', 'NOME', 'SOBRENOME', 'DRIVER',
-        'LICENSE', 'PERMISO', 'CONDUCCION', 'SECRETARIA', 'INFRAESTRUTURA', 'TRANSITO',
-        'FILIACAO', 'NACIONALIDADE', 'BRASILEIRO', 'ASSINATURA', 'PORTADOR', 'EMISSAO', 'DOC'
-      ];
+    try {
+      const { error } = await supabase
+        .from('rondas_execucao')
+        .update({
+          status: statusFinal,
+          data_fim: dataFim.toISOString(),
+          pontos_totais: pontos.length,
+          pontos_lidos: registrosRonda.length,
+          resumo_detalhado: resumoTexto
+        })
+        .eq('id', rondaAtiva.id);
 
-      // Busca linha provável do nome completo
-      const linhas = textoLidoMelhor.split('\n').map(l => l.trim()).filter(l => l.length > 3);
-      const linhaNome = linhas.find(linha => {
-        const linhaUpper = linha.toUpperCase();
-        const temNumero = /\d/.test(linha);
-        const ehIgnorada = palavrasIgnoradas.some(p => linhaUpper.includes(p));
-        return !temNumero && !ehIgnorada && linha.length >= 6;
+      if (error) throw error;
+
+      // Iniciar Temporizador de 15 Minutos para a próxima ronda
+      setTempoRestanteTimer(15 * 60);
+      setTimerAtivo(true);
+
+      // Link de Disparo para WhatsApp
+      setWhatsAppRelatorio({
+        texto: resumoTexto,
+        link: `https://wa.me/?text=${encodeURIComponent(resumoTexto)}`
       });
 
-      if (linhaNome) {
-        const nomeFormatado = linhaNome.replace(/[^a-zA-LÁ-ÿ\s]/g, '').replace(/\s+/g, ' ').trim();
-        if (nomeFormatado.length >= 5) {
-          setNomeProfissional(nomeFormatado);
-        }
+      setRondaAtiva(null);
+      setRegistrosRonda([]);
+      carregarHistorico();
+      setMensagem({
+        tipo: 'sucesso',
+        texto: 'Ronda finalizada! Temporizador de 15 minutos iniciado para a próxima varredura.'
+      });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const efetivarAssumirPosto = async (e) => {
+    e.preventDefault();
+
+    if (!operadorSelecionadoId) {
+      setMensagem({ tipo: 'erro', texto: 'Selecione o operador que irá assumir o posto.' });
+      return;
+    }
+
+    if (!senhaLoginEntrante.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Digite a senha de acesso para autenticar a troca de posto.' });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data: opData, error: opError } = await supabase
+        .from('operadores')
+        .select('*')
+        .eq('id', operadorSelecionadoId)
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .single();
+
+      if (opError || !opData) {
+        throw new Error('Operador não encontrado no sistema.');
       }
 
-      if (docFinal || linhaNome) {
-        setMensagem({ tipo: 'sucesso', texto: 'OCR concluído com sucesso! Confira os dados e clique em "Salvar Cadastro".' });
-      } else {
-        setMensagem({ tipo: 'erro', texto: 'Não foi possível identificar dados legíveis no documento. Tente tirar uma foto mais nítida ou preencha manualmente.' });
+      if (opData.senha !== senhaLoginEntrante.trim()) {
+        throw new Error('Senha de acesso incorreta! Falha na autenticação do novo ronda.');
       }
+
+      const { error: passError } = await supabase
+        .from('rondas_passagem_posto')
+        .insert([{
+          condominio_id: usuarioLogado.condominio_id,
+          operador_sainte: operadorRondaAtual,
+          operador_entrante: opData.nome,
+          data_hora: new Date().toISOString(),
+          ocorrencias_plantao: ocorrenciasPlantao.trim() || 'Sem alterações ou ocorrências graves.'
+        }]);
+
+      if (passError) throw passError;
+
+      setOperadorRondaAtual(opData.nome);
+      setOperadorSelecionadoId('');
+      setSenhaLoginEntrante('');
+      setOcorrenciasPlantao('');
+      setModalAssumirPosto(false);
+      carregarPassagensPosto();
+
+      setMensagem({
+        tipo: 'sucesso',
+        texto: `Autenticado com sucesso! Posto assumido pelo ronda ${opData.nome}.`
+      });
     } catch (err) {
-      setMensagem({ tipo: 'erro', texto: 'Falha na leitura do documento: ' + err.message });
-    } finally {
-      setProcessandoOcr(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleCadastrar = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMensagem({ tipo: '', texto: '' });
-
-    try {
-      const novoRegistro = {
-        condominio_id: usuarioLogado.condominio_id,
-        nome_profissional: nomeProfissional.trim(),
-        empresa: empresa.trim(),
-        documento: documento.trim(),
-        tipo_servico: tipoServico,
-        atende_condominio: atendeCondominio,
-        unidade: atendeCondominio ? 'Condomínio' : unidadeDestino.trim(),
-        bloco: atendeCondominio ? 'Área Comum' : blocoDestino.trim(),
-        observacoes: observacoes.trim(),
-        status_acesso: 'AUTORIZADO'
-      };
-
-      const { error } = await supabase
-        .from('prestadores')
-        .insert([novoRegistro]);
-
-      if (error) throw error;
-
-      setModalCadastro(false);
-      setNomeProfissional('');
-      setEmpresa('');
-      setDocumento('');
-      setUnidadeDestino('');
-      setBlocoDestino('');
-      setAtendeCondominio(false);
-      setObservacoes('');
-      await carregarPrestadores();
-      setMensagem({ tipo: 'sucesso', texto: 'Prestador / Obra cadastrado com sucesso!' });
-    } catch (err) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao cadastrar: ' + err.message });
+      setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const registrarEntrada = async (e) => {
-    e.preventDefault();
-    if (!prestadorSelecionado) return;
-    setLoading(true);
-
-    try {
-      const { error } = await supabase
-        .from('prestadores')
-        .update({
-          status_acesso: 'EM_ANDAMENTO',
-          data_hora_entrada: new Date().toISOString(),
-          cracha_atribuido: cracha.trim() || 'Crachá Portaria'
-        })
-        .eq('id', prestadorSelecionado.id);
-
-      if (error) throw error;
-
-      setModalAcesso(false);
-      setPrestadorSelecionado(null);
-      setCracha('');
-      await carregarPrestadores();
-      setMensagem({ tipo: 'sucesso', texto: 'Entrada registrada com sucesso!' });
-    } catch (err) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao registrar entrada: ' + err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const registrarSaida = async (id) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('prestadores')
-        .update({
-          status_acesso: 'CONCLUIDO',
-          data_hora_saida: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-      await carregarPrestadores();
-      setMensagem({ tipo: 'sucesso', texto: 'Saída registrada e crachá devolvido!' });
-    } catch (err) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao registrar saída: ' + err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const prestadoresFiltrados = prestadores.filter(p => 
-    p.nome_profissional?.toLowerCase().includes(busca.toLowerCase()) ||
-    p.empresa?.toLowerCase().includes(busca.toLowerCase()) ||
-    p.unidade?.toLowerCase().includes(busca.toLowerCase())
-  );
+  const pontosLidosIds = registrosRonda.map(r => r.ponto_id);
+  const pontosZerados = pontos.filter(p => !pontosLidosIds.includes(p.id));
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
+      {/* Banner Superior */}
       <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
-            <Briefcase className="w-3.5 h-3.5" /> Módulo 10 - Obras e Prestadores
+            <UserCheck className="w-3.5 h-3.5" /> Ronda Ativo: {operadorRondaAtual}
           </span>
-          <h3 className="font-bold text-lg mt-1">Controle de Prestadores de Serviço e Obras</h3>
-          <p className="text-xs text-slate-300">Acesso agilizado com OCR de documentos e registro de visitas ao Condomínio.</p>
+          <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" /> Controle de Rondas Patrimoniais
+          </h3>
+          <p className="text-xs text-slate-300">
+            Validação por QR Code / NFC com trava anti-fraude por GPS e temporizador de 15 minutos.
+          </p>
         </div>
 
-        <button
-          onClick={() => setModalCadastro(true)}
-          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase shadow-md"
-        >
-          <Plus className="w-4 h-4" /> Novo Prestador / Obra
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              carregarOperadores();
+              setModalAssumirPosto(true);
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase shadow-sm"
+            title="Autenticar novo operador para assumir o posto"
+          >
+            <ArrowRightLeft className="w-4 h-4" /> Assumir Posto
+          </button>
+
+          {/* Somente Nível 0 visualiza o botão de cadastrar pontos */}
+          {eNivel0 && (
+            <button
+              onClick={() => {
+                setCoordsNovoPonto(null);
+                setModalNovoPonto(true);
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition border border-slate-700"
+            >
+              <Plus className="w-4 h-4" /> Cadastrar Ponto
+            </button>
+          )}
+
+          {!rondaAtiva ? (
+            <button
+              onClick={iniciarRonda}
+              disabled={loading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase"
+            >
+              <Play className="w-4 h-4" /> Iniciar Ronda
+            </button>
+          ) : (
+            <button
+              onClick={finalizarRonda}
+              disabled={loading}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase"
+            >
+              <Flag className="w-4 h-4" /> Finalizar Ronda
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* TEMPORIZADOR REGRESSIVO DE 15 MINUTOS */}
+      {tempoRestanteTimer > 0 && (
+        <div className="bg-amber-500 text-slate-950 p-4 rounded-xl flex items-center justify-between shadow-md animate-pulse">
+          <div className="flex items-center gap-3">
+            <Timer className="w-6 h-6 flex-shrink-0" />
+            <div>
+              <strong className="block font-bold text-sm">INTERVALO DE RONDA (15 MINUTOS)</strong>
+              <p className="text-xs font-medium">Aguarde a contagem para iniciar a próxima varredura no condomínio.</p>
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono bg-slate-950 text-amber-400 px-4 py-1.5 rounded-xl">
+            {formatarTempoTimer(tempoRestanteTimer)}
+          </div>
+        </div>
+      )}
+
+      {/* DISPARO DO RELATÓRIO VIA WHATSAPP */}
+      {whatsAppRelatorio && (
+        <div className="bg-emerald-50 border-2 border-emerald-500 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <MessageCircle className="w-8 h-8 text-emerald-600 flex-shrink-0" />
+            <div>
+              <strong className="font-bold text-emerald-900 text-sm">Relatório da Ronda Gerado!</strong>
+              <p className="text-xs text-emerald-700">Dispare os detalhes, horários e evidências no Grupo de Rondas.</p>
+            </div>
+          </div>
+          <a
+            href={whatsAppRelatorio.link}
+            target="_blank"
+            rel="noreferrer"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md"
+          >
+            <MessageCircle className="w-4 h-4" /> Enviar no Grupo <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      )}
 
       {/* Alertas */}
       {mensagem.texto && (
@@ -308,250 +676,246 @@ export default function PrestadoresObras({ usuarioLogado }) {
         </div>
       )}
 
-      {/* Barra de Pesquisa */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-        <input
-          type="text"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Pesquisar por nome, empresa, unidade ou condomínio..."
-          className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs shadow-sm font-medium"
-        />
-      </div>
-
-      {/* Lista de Registros */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {prestadoresFiltrados.map((item) => (
-          <div key={item.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-xs font-bold text-slate-900 uppercase">
-                  {item.empresa || 'Autônomo'}
-                </span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                  item.status_acesso === 'EM_ANDAMENTO' ? 'bg-amber-100 text-amber-800' :
-                  item.status_acesso === 'CONCLUIDO' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800'
-                }`}>
-                  {item.status_acesso || 'AUTORIZADO'}
-                </span>
-              </div>
-
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">{item.nome_profissional}</h4>
-                <p className="text-xs text-slate-500">Doc: {item.documento || 'Não informado'}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl text-xs border border-slate-100">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Serviço:</span>
-                  <strong className="text-slate-800">{item.tipo_servico}</strong>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Destino:</span>
-                  {item.atende_condominio ? (
-                    <strong className="text-purple-700 flex items-center gap-1">
-                      <Building2 className="w-3 h-3" /> Condomínio
-                    </strong>
-                  ) : (
-                    <strong className="text-emerald-700">Bloco {item.bloco} - Apto {item.unidade}</strong>
-                  )}
-                </div>
-              </div>
-
-              {item.observacoes && (
-                <p className="text-xs text-slate-600 italic bg-slate-50 p-2 rounded border border-slate-100">
-                  "{item.observacoes}"
-                </p>
-              )}
+      {/* RONDA EM ANDAMENTO */}
+      {rondaAtiva && (
+        <div className="bg-slate-950 text-white p-5 rounded-2xl space-y-4 border border-slate-800 shadow-lg">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">Ronda Ativa</span>
+              <p className="text-xs text-slate-300">
+                Início: <strong>{new Date(rondaAtiva.data_inicio).toLocaleTimeString('pt-BR')}</strong> por <strong>{rondaAtiva.operador_nome}</strong>
+              </p>
             </div>
 
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-400 font-mono">
-                {new Date(item.created_at).toLocaleDateString('pt-BR')}
-              </span>
+            <span className="text-xs font-bold bg-slate-800 text-emerald-400 px-3 py-1 rounded-full border border-slate-700">
+              {registrosRonda.length} de {pontos.length} Pontos Validados
+            </span>
+          </div>
 
-              {item.status_acesso === 'EM_ANDAMENTO' ? (
-                <button
-                  onClick={() => registrarSaida(item.id)}
-                  className="bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1 transition shadow-sm"
-                >
-                  <LogOut className="w-3.5 h-3.5" /> Registrar Saída
-                </button>
-              ) : item.status_acesso === 'CONCLUIDO' ? (
-                <span className="text-xs text-slate-400 font-medium italic">Acesso finalizado</span>
-              ) : (
-                <button
-                  onClick={() => { setPrestadorSelecionado(item); setModalAcesso(true); }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1 transition shadow-sm"
-                >
-                  <LogIn className="w-3.5 h-3.5" /> Liberar Entrada
-                </button>
-              )}
+          {pontosZerados.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>Ainda restam <strong>{pontosZerados.length} ponto(s) zerados</strong> nesta ronda.</span>
             </div>
-          </div>
-        ))}
+          )}
 
-        {prestadoresFiltrados.length === 0 && !loading && (
-          <div className="col-span-full bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
-            Nenhum prestador ou obra cadastrado até o momento.
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {pontos.map((ponto) => {
+              const lido = pontosLidosIds.includes(ponto.id);
+              const reg = registrosRonda.find(r => r.ponto_id === ponto.id);
+
+              return (
+                <div
+                  key={ponto.id}
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between transition ${
+                    lido ? 'bg-emerald-950/40 border-emerald-700/60' : 'bg-slate-900 border-slate-800'
+                  }`}
+                >
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
+                        {ponto.codigo_tag}
+                      </span>
+                      {lido ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      ) : (
+                        <QrCode className="w-5 h-5 text-slate-500" />
+                      )}
+                    </div>
+
+                    <h4 className="font-bold text-white text-xs mt-2">{ponto.nome_ponto}</h4>
+                    {ponto.localizacao_descricao && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">{ponto.localizacao_descricao}</p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-slate-800">
+                    {lido ? (
+                      <span className="text-[10px] text-emerald-400 font-bold block">
+                        ✓ Lido às {new Date(reg?.data_hora).toLocaleTimeString('pt-BR')}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => abrirRegistroPonto(ponto)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 rounded-lg transition uppercase"
+                      >
+                        Validar Ponto
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
+
+      {/* HISTÓRICOS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* HISTÓRICO DE RONDAS */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
+            <Clock className="w-4 h-4 text-emerald-600" /> Histórico de Rondas (Início e Fim)
+          </h4>
+
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+            {historicoRondas.map((r) => (
+              <div key={r.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <strong className="text-slate-900 block font-bold text-xs">{r.operador_nome}</strong>
+                    <span className="text-[11px] text-slate-500 font-medium block">
+                      Início: <strong>{new Date(r.data_inicio).toLocaleString('pt-BR')}</strong>
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium block">
+                      Fim: <strong>{r.data_fim ? new Date(r.data_fim).toLocaleString('pt-BR') : 'Não registrado'}</strong>
+                    </span>
+                  </div>
+
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+                    r.status === 'Concluída' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {r.status} ({r.pontos_lidos || 0}/{r.pontos_totais || 0})
+                  </span>
+                </div>
+
+                {r.resumo_detalhado && (
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(r.resumo_detalhado)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" /> Reenviar no WhatsApp
+                  </a>
+                )}
+              </div>
+            ))}
+
+            {historicoRondas.length === 0 && (
+              <p className="text-xs text-slate-500 italic text-center py-4">Nenhuma ronda encerrada no histórico.</p>
+            )}
+          </div>
+        </div>
+
+        {/* HISTÓRICO DE TROCA DE POSTO COM AUDITORIA */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
+            <History className="w-4 h-4 text-emerald-600" /> Passagem de Posto Auditada
+          </h4>
+
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+            {historicoPassagens.map((p) => (
+              <div key={p.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-slate-900">
+                    Sainte: <strong className="text-red-700">{p.operador_sainte}</strong> ➔ Entrante: <strong className="text-emerald-700">{p.operador_entrante}</strong>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {new Date(p.data_hora).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+
+                <div className="p-2 bg-white border rounded-lg text-[11px] text-slate-700">
+                  <strong>Ocorrências / Observações do Plantão:</strong>
+                  <p className="mt-0.5 text-slate-600">{p.ocorrencias_plantao}</p>
+                </div>
+              </div>
+            ))}
+
+            {historicoPassagens.length === 0 && (
+              <p className="text-xs text-slate-500 italic text-center py-4">Nenhuma troca de posto registrada.</p>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* MODAL NOVO CADASTRO COM OCR */}
-      {modalCadastro && (
+      {/* MODAL CADASTRAR PONTO (EXCLUSIVO NÍVEL 0 COM GPS) */}
+      {modalNovoPonto && eNivel0 && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setModalCadastro(false)} className="absolute top-4 right-4 text-slate-400 p-1">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button onClick={() => setModalNovoPonto(false)} className="absolute top-4 right-4 text-slate-400 p-1">
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Briefcase className="w-5 h-5 text-emerald-600" /> Cadastrar Prestador / Obra
+              <Plus className="w-5 h-5 text-emerald-600" /> Cadastrar Ponto de Ronda (Nível 0)
             </h3>
 
-            {/* Leitor OCR de Documentos */}
-            <div className="bg-slate-900 text-white p-3.5 rounded-xl space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
-                  <Scan className="w-4 h-4" /> Leitura OCR de Documento (RG/CPF/CNH)
-                </span>
-                {processandoOcr && <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />}
-              </div>
-              <p className="text-[11px] text-slate-300">
-                Tire foto do documento para preencher o nome e número automaticamente (mesmo se a foto estiver na vertical).
-              </p>
-
-              <label className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition w-full">
-                <Camera className="w-4 h-4" /> Carregar Foto do Documento
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={processarDocumentoOCR}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            <form onSubmit={handleCadastrar} className="space-y-3">
+            <form onSubmit={cadastrarPonto} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome Completo do Profissional *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Ponto *</label>
                 <input
                   type="text"
                   required
-                  value={nomeProfissional}
-                  onChange={(e) => setNomeProfissional(e.target.value)}
-                  placeholder="Ex: Carlos Silva"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  value={nomePonto}
+                  onChange={(e) => setNomePonto(e.target.value)}
+                  placeholder="Ex: Bloco A - Entrada Social"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Empresa / Prestadora</label>
-                  <input
-                    type="text"
-                    value={empresa}
-                    onChange={(e) => setEmpresa(e.target.value)}
-                    placeholder="Ex: ClimaTech Ar Condicionado"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">CPF / RG *</label>
-                  <input
-                    type="text"
-                    required
-                    value={documento}
-                    onChange={(e) => setDocumento(e.target.value)}
-                    placeholder="000.000.000-00"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                  />
-                </div>
-              </div>
-
-              {/* Opção para serviço no próprio condomínio */}
-              <div className="bg-purple-50 p-3 rounded-xl border border-purple-200 flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-purple-950 block">Serviço Prestado ao Condomínio?</span>
-                  <span className="text-[10px] text-purple-700">Manutenção predial, elevadores, jardinagem, etc.</span>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Código QR Code / Tag NFC *</label>
                 <input
-                  type="checkbox"
-                  checked={atendeCondominio}
-                  onChange={(e) => setAtendeCondominio(e.target.checked)}
-                  className="w-5 h-5 rounded accent-purple-600 cursor-pointer"
+                  type="text"
+                  required
+                  value={codigoTag}
+                  onChange={(e) => setCodigoTag(e.target.value)}
+                  placeholder="Ex: QR-BL-A"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase"
                 />
               </div>
 
-              {!atendeCondominio && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco *</label>
-                    <input
-                      type="text"
-                      required={!atendeCondominio}
-                      value={blocoDestino}
-                      onChange={(e) => setBlocoDestino(e.target.value)}
-                      placeholder="Ex: A"
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Apto *</label>
-                    <input
-                      type="text"
-                      required={!atendeCondominio}
-                      value={unidadeDestino}
-                      onChange={(e) => setUnidadeDestino(e.target.value)}
-                      placeholder="Ex: 102"
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                    />
-                  </div>
-                </div>
-              )}
-
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tipo de Serviço</label>
-                <select
-                  value={tipoServico}
-                  onChange={(e) => setTipoServico(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                >
-                  <option value="Manutenção / Reforma">Manutenção / Reforma</option>
-                  <option value="Serviço Predial Condomínio">Serviço Predial Condomínio</option>
-                  <option value="Entrega de Móveis">Entrega de Móveis</option>
-                  <option value="Assistência Técnica">Assistência Técnica</option>
-                </select>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Descrição / Localização</label>
+                <input
+                  type="text"
+                  value={descricaoPonto}
+                  onChange={(e) => setDescricaoPonto(e.target.value)}
+                  placeholder="Ex: Afixado na porta de acesso da portaria"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações / Horários</label>
-                <textarea
-                  rows="2"
-                  value={observacoes}
-                  onChange={(e) => setObservacoes(e.target.value)}
-                  placeholder="Instruções específicas para a guarita..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
-                ></textarea>
+              {/* Captura Obrigatória de GPS do Ponto */}
+              <div className="bg-slate-50 p-3.5 border border-slate-200 rounded-xl space-y-2">
+                <span className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1">
+                  <MapPin className="w-4 h-4 text-emerald-600" /> Coordenadas Físicas (GPS) *
+                </span>
+                <p className="text-[11px] text-slate-500">
+                  Esteja presencialmente no local do ponto para gravar as coordenadas do QR Code.
+                </p>
+
+                {coordsNovoPonto ? (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-lg text-xs font-mono">
+                    ✓ Lat: {coordsNovoPonto.lat.toFixed(6)}, Lng: {coordsNovoPonto.lng.toFixed(6)}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={capturarGPSNovoPonto}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition"
+                  >
+                    <Navigation className="w-4 h-4 text-emerald-400" /> Capturar Posição Atual (GPS)
+                  </button>
+                )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setModalCadastro(false)}
-                  className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs"
+                  onClick={() => setModalNovoPonto(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase shadow-sm"
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase"
                 >
-                  {loading ? 'Salvando...' : 'Salvar Cadastro'}
+                  {loading ? 'Salvando...' : 'Salvar Ponto'}
                 </button>
               </div>
             </form>
@@ -559,51 +923,160 @@ export default function PrestadoresObras({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL LIBERAR ENTRADA */}
-      {modalAcesso && prestadorSelecionado && (
+      {/* MODAL REGISTRAR / VALIDAR PONTO (COM VALIDAÇÃO DE DISTÂNCIA GPS) */}
+      {modalRegistrarPonto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalAcesso(false)} className="absolute top-4 right-4 text-slate-400 p-1">
+            <button onClick={() => setModalRegistrarPonto(null)} className="absolute top-4 right-4 text-slate-400 p-1">
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <LogIn className="w-5 h-5 text-emerald-600" /> Liberar Entrada na Portaria
+              <QrCode className="w-5 h-5 text-emerald-600" /> Validar: {modalRegistrarPonto.nome_ponto}
             </h3>
 
-            <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-1">
-              <p><strong>Profissional:</strong> {prestadorSelecionado.nome_profissional}</p>
-              <p><strong>Empresa:</strong> {prestadorSelecionado.empresa || 'Autônomo'}</p>
-              <p><strong>Destino:</strong> {prestadorSelecionado.atende_condominio ? 'Condomínio (Área Comum)' : `Bloco ${prestadorSelecionado.bloco} - Apto ${prestadorSelecionado.unidade}`}</p>
-            </div>
-
-            <form onSubmit={registrarEntrada} className="space-y-3">
+            <form onSubmit={confirmarLeituraPonto} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Crachá Atribuído</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Digite ou Leitura do Código QR / Tag *</label>
                 <input
                   type="text"
                   required
-                  value={cracha}
-                  onChange={(e) => setCracha(e.target.value)}
-                  placeholder="Ex: Crachá Nº 12"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  value={codigoLido}
+                  onChange={(e) => setCodigoLido(e.target.value)}
+                  placeholder={`Código esperado: ${modalRegistrarPonto.codigo_tag}`}
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações do Ronda</label>
+                <input
+                  type="text"
+                  value={observacaoPonto}
+                  onChange={(e) => setObservacaoPonto(e.target.value)}
+                  placeholder="Ex: Lâmpada queimada no corredor ou Tudo em ordem"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Foto da Evidência (Opcional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => uploadFoto(e.target.files[0])}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+                />
+                {uploadingFoto && <p className="text-[10px] text-blue-600 font-bold mt-1">Enviando imagem...</p>}
+                {fotoPontoUrl && <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ Foto anexada!</p>}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setModalAcesso(false)}
-                  className="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs"
+                  onClick={() => setModalRegistrarPonto(null)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || uploadingFoto}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase"
+                >
+                  {loading ? 'Validando...' : 'Confirmar Leitura'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ASSUMIR POSTO - AUTENTICAÇÃO COM LOGIN E SENHA */}
+      {modalAssumirPosto && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <button onClick={() => setModalAssumirPosto(false)} className="absolute top-4 right-4 text-slate-400 p-1">
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
+              <Lock className="w-5 h-5 text-emerald-600" /> Autenticar e Assumir Posto
+            </h3>
+
+            <form onSubmit={efetivarAssumirPosto} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Operador Sainte (Saindo)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={operadorRondaAtual}
+                  className="w-full p-3 bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Selecionar Novo Ronda (Entrante) *</label>
+                <div className="relative">
+                  <select
+                    required
+                    value={operadorSelecionadoId}
+                    onChange={(e) => setOperadorSelecionadoId(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 appearance-none pl-9"
+                  >
+                    <option value="">-- Selecione seu Nome --</option>
+                    {listaOperadores.map((op) => (
+                      <option key={op.id} value={op.id}>
+                        {op.nome} ({op.login})
+                      </option>
+                    ))}
+                  </select>
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Senha do Operador *</label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={senhaLoginEntrante}
+                    onChange={(e) => setSenhaLoginEntrante(e.target.value)}
+                    placeholder="Digite sua senha de acesso"
+                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium pl-9"
+                  />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ocorrências e Alterações do Plantão *</label>
+                <textarea
+                  rows="3"
+                  required
+                  value={ocorrenciasPlantao}
+                  onChange={(e) => setOcorrenciasPlantao(e.target.value)}
+                  placeholder="Ex: Plantão tranquilo, sem alterações ou avarias."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalAssumirPosto(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase shadow-sm"
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase"
                 >
-                  {loading ? 'Registrando...' : 'Confirmar Entrada'}
+                  {loading ? 'Autenticando...' : 'Confirmar Troca'}
                 </button>
               </div>
             </form>
