@@ -20,8 +20,7 @@ import {
   ArrowRightLeft,
   VideoOff,
   Check,
-  Building2,
-  Image as ImageIcon
+  Building2
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
@@ -499,7 +498,7 @@ export default function Rondas({ usuarioLogado }) {
       setMensagem({ tipo: 'sucesso', texto: 'Ponto cadastrado e vinculado ao setor com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
@@ -1049,7 +1048,7 @@ export default function Rondas({ usuarioLogado }) {
                   Foto de Evidência / Local
                 </label>
                 
-                {/* Input nativo escondido */}
+                {/* Input nativo escondido para abrir a câmera diretamente */}
                 <input
                   ref={inputFotoRef}
                   type="file"
@@ -1059,7 +1058,6 @@ export default function Rondas({ usuarioLogado }) {
                   className="hidden"
                 />
 
-                {/* Botão Bonito e Customizado */}
                 <button
                   type="button"
                   onClick={() => inputFotoRef.current?.click()}
