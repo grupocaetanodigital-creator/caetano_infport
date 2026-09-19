@@ -11,25 +11,16 @@ import {
   X, 
   Plus, 
   Camera, 
-  Navigation, 
-  Clock, 
   Flag,
   AlertTriangle,
   MessageCircle,
   ExternalLink,
   UserCheck,
   History,
-  Timer,
   ArrowRightLeft,
-  Lock,
-  User,
-  Radio,
   VideoOff,
-  ChevronDown,
-  ChevronRight,
   Check,
-  Building2,
-  FolderTree
+  Building2
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
@@ -72,7 +63,7 @@ export default function Rondas({ usuarioLogado }) {
   const [historicoRondas, setHistoricoRondas] = useState([]);
   const [historicoPassagens, setHistoricoPassagens] = useState([]);
 
-  // Checklist dos 9 Setores
+  // Estrutura do Checklist dos 9 Setores
   const setoresChecklist = [
     {
       id: 'SETOR_A',
@@ -81,7 +72,7 @@ export default function Rondas({ usuarioLogado }) {
         '1º Portões de pedestres e de veículos (funcionamento e fechos)',
         '2º Sistema de CFTV (câmeras e monitoramento)',
         '3º Interfonia da Guarita',
-        '4º Salão de Festas ao lado da guarita (iluminação, limpeza, portas, fechaduras e conservação)'
+        '4º Salão de Festas ao lado da guarita (iluminação, limpeza, portas e fechos)'
       ]
     },
     {
@@ -98,38 +89,38 @@ export default function Rondas({ usuarioLogado }) {
       id: 'SETOR_C',
       titulo: 'SETOR C: HALL & ELEVADORES — TORRE A',
       itens: [
-        '9º Torre A - Corredor 1-6 (1 Elevador Social + 1 Elevador Serviço): Atendimento Térreo ao 16º',
-        '10º Torre A - Corredor 7-10 (1 Elevador Social + 1 Elevador Serviço): Atendimento Térreo ao 16º',
-        '11º Quadro de Avisos exclusivo da Torre A (conferência visual no hall)'
+        '9º Torre A - Corredor 1-6 (1 Elevador Social + 1 Elevador Serviço)',
+        '10º Torre A - Corredor 7-10 (1 Elevador Social + 1 Elevador Serviço)',
+        '11º Quadro de Avisos exclusivo da Torre A'
       ]
     },
     {
       id: 'SETOR_D',
       titulo: 'SETOR D: HALL & ELEVADORES — TORRE B',
       itens: [
-        '12º Torre B - Corredor 1-6 (1 Elevador Social + 1 Elevador Serviço): Atendimento -2 ao 16º (teste nos andares e subsolos)',
-        '13º Torre B - Corredor 7-10 (1 Elevador Social + 1 Elevador Serviço): Atendimento Térreo ao 16º',
+        '12º Torre B - Corredor 1-6 (1 Elevador Social + 1 Elevador Serviço)',
+        '13º Torre B - Corredor 7-10 (1 Elevador Social + 1 Elevador Serviço)',
         '14º Mercadinho da Torre B (acesso, iluminação e limpeza)'
       ]
     },
     {
       id: 'SETOR_E',
-      titulo: 'SETOR E: PASSARELA INTER-TORRES, HALL DO ELEVADOR & ACESSOS',
+      titulo: 'SETOR E: PASSARELA INTER-TORRES & ELEVADOR DA GARAGEM',
       itens: [
-        '15º Passarela inter-torres de acesso ao hall dos elevadores dos estacionamentos (-1 ao -3)',
-        '16º Elevador Exclusivo do Estacionamento (Atendimento Térreo ao -3: botoeira, iluminação, interfone e portas)',
+        '15º Passarela inter-torres de acesso aos elevadores (-1 ao -3)',
+        '16º Elevador Exclusivo do Estacionamento (botoeira, iluminação e portas)',
         '17º Quadro de Avisos no hall do elevador',
-        '18º Escadaria 1 da Garagem (Térreo ao -3 junto ao elevador: iluminação, corrimãos e desobstrução)'
+        '18º Escadaria 1 da Garagem (Térreo ao -3)'
       ]
     },
     {
       id: 'SETOR_F',
       titulo: 'SETOR F: ESTACIONAMENTOS (-1, -2, -3) & ESCADARIA DE EMERGÊNCIA',
       itens: [
-        '19º Estacionamento -1 (iluminação geral/emergência, sinalização de vagas, tubulações, extintores e portões)',
-        '20º Estacionamento -2 (iluminação, ausência de vazamentos, extintores de incêndio e portas corta-fogo)',
-        '21º Estacionamento -3 (poço de esgotamento/bombas de ralo, umidade/poças, iluminação de emergência e rotas de fuga)',
-        '22º Escadaria 2 da Garagem (-1 ao -3: iluminação, corrimãos e desobstrução)'
+        '19º Estacionamento -1 (iluminação, sinalização, tubulações e extintores)',
+        '20º Estacionamento -2 (iluminação, ausência de vazamentos e portas corta-fogo)',
+        '21º Estacionamento -3 (poço de esgotamento/bombas, umidade e rotas de fuga)',
+        '22º Escadaria 2 da Garagem (-1 ao -3)'
       ]
     },
     {
@@ -137,45 +128,36 @@ export default function Rondas({ usuarioLogado }) {
       titulo: 'SETOR G: ÁREAS DE LAZER EXTERNAS',
       itens: [
         '23º Playground (conservação dos brinquedos)',
-        '24º Piscina (fechamento do portão de acesso e estado do deck)',
+        '24º Piscina (portão de acesso e deck)',
         '25º Quadra Poliesportiva (iluminação, redes e estado geral)',
         '26º Churrasqueira 2 (pia, grelhas e limpeza geral)'
       ]
     },
     {
       id: 'SETOR_H',
-      titulo: 'SETOR H: RONDA ANDAR POR ANDAR & INCÊNDIO — TORRE A (16 ANDARES)',
-      subtitulo: '(Térreo: 8 aptos | 1º ao 16º: 10 aptos por andar)',
+      titulo: 'SETOR H: INCÊNDIO & HALLS — TORRE A',
       itens: [
-        'Torre A - Corredores (1-6 e 7-10)',
-        'Torre A - 3 Portas (Divisórias/Escada)',
-        'Torre A - Porta Corta-Fogo & Pressurização',
-        'Torre A - Caixa de Hidrante & Mangueira',
-        'Torre A - Extintores (pressão/validade)',
-        'Torre A - Alarme/Sensores de fumaça',
-        'Torre A - Iluminação de emergência',
-        'Torre A - Desobstrução dos halls'
+        'Torre A - Corredores e portas divisórias',
+        'Torre A - Porta Corta-Fogo e Pressurização',
+        'Torre A - Caixa de Hidrante e Mangueira',
+        'Torre A - Extintores (pressão e validade)',
+        'Torre A - Sensores de fumaça e Iluminação de emergência'
       ]
     },
     {
       id: 'SETOR_I',
-      titulo: 'SETOR I: RONDA ANDAR POR ANDAR & INCÊNDIO — TORRE B (16 ANDARES + 2 SUBSOLOS)',
-      subtitulo: '(-2 e -1: 5 aptos cada | Térreo: 8 aptos | 1º ao 16º: 10 aptos por andar)',
+      titulo: 'SETOR I: INCÊNDIO & HALLS — TORRE B',
       itens: [
-        'Torre B - Corredores (1-6 e 7-10)',
-        'Torre B - 3 Portas (Divisórias/Escada)',
-        'Torre B - Porta Corta-Fogo & Pressurização',
-        'Torre B - Caixa de Hidrante & Mangueira',
-        'Torre B - Extintores (pressão/validade)',
-        'Torre B - Alarme/Sensores de fumaça',
-        'Torre B - Iluminação de emergência',
-        'Torre B - Desobstrução dos halls'
+        'Torre B - Corredores e portas divisórias',
+        'Torre B - Porta Corta-Fogo e Pressurização',
+        'Torre B - Caixa de Hidrante e Mangueira',
+        'Torre B - Extintores (pressão e validade)',
+        'Torre B - Sensores de fumaça e Iluminação de emergência'
       ]
     }
   ];
 
   const [respostasChecklist, setRespostasChecklist] = useState({});
-  const [setorAberto, setSetorAberto] = useState('SETOR_A');
 
   // Modais
   const [modalNovoPonto, setModalNovoPonto] = useState(false);
@@ -195,7 +177,6 @@ export default function Rondas({ usuarioLogado }) {
   const [observacaoPonto, setObservacaoPonto] = useState('');
   const [fotoPontoUrl, setFotoPontoUrl] = useState('');
   const [coords, setCoords] = useState(null);
-  const [temProblema, setTemProblema] = useState(false);
 
   // Scanner Câmera
   const [lendoQrCamera, setLendoQrCamera] = useState(false);
@@ -349,7 +330,7 @@ export default function Rondas({ usuarioLogado }) {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => setMensagem({ tipo: 'erro', texto: 'Não foi possível capturar a geolocalização GPS do aparelho.' }),
+        () => setMensagem({ tipo: 'erro', texto: 'Não foi possível capturar o GPS do aparelho.' }),
         { enableHighAccuracy: true, timeout: 10000 }
       );
     }
@@ -360,7 +341,7 @@ export default function Rondas({ usuarioLogado }) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setCoordsNovoPonto({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setMensagem({ tipo: 'sucesso', texto: 'Coordenadas GPS capturadas para o novo ponto!' });
+          setMensagem({ tipo: 'sucesso', texto: 'GPS capturado para o novo ponto!' });
         },
         (err) => setMensagem({ tipo: 'erro', texto: 'Erro ao capturar GPS: ' + err.message }),
         { enableHighAccuracy: true, timeout: 10000 }
@@ -389,7 +370,7 @@ export default function Rondas({ usuarioLogado }) {
         .getPublicUrl(fileName);
 
       setFotoPontoUrl(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto de evidência anexada!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Foto anexada com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao enviar foto: ' + err.message });
     } finally {
@@ -445,7 +426,7 @@ export default function Rondas({ usuarioLogado }) {
   const validarSemCameraFallback = () => {
     if (modalRegistrarPonto?.codigo_tag) {
       setCodigoLido(modalRegistrarPonto.codigo_tag.toUpperCase());
-      setMensagem({ tipo: 'sucesso', texto: 'Código do ponto autoconfirmado.' });
+      setMensagem({ tipo: 'sucesso', texto: 'Código da Tag confirmado.' });
     }
   };
 
@@ -454,7 +435,6 @@ export default function Rondas({ usuarioLogado }) {
     setCodigoLido('');
     setObservacaoPonto('');
     setFotoPontoUrl('');
-    setTemProblema(false);
     setLendoQrCamera(false);
     capturarGPS();
   };
@@ -462,16 +442,6 @@ export default function Rondas({ usuarioLogado }) {
   const fecharModalRegistroPonto = () => {
     pararCameraQr();
     setModalRegistrarPonto(null);
-  };
-
-  const alternarProblema = () => {
-    const novoStatus = !temProblema;
-    setTemProblema(novoStatus);
-    if (novoStatus && !observacaoPonto.startsWith('[PROBLEMA / AVARIA]')) {
-      setObservacaoPonto('[PROBLEMA / AVARIA]: ' + observacaoPonto);
-    } else if (!novoStatus && observacaoPonto.startsWith('[PROBLEMA / AVARIA]: ')) {
-      setObservacaoPonto(observacaoPonto.replace('[PROBLEMA / AVARIA]: ', ''));
-    }
   };
 
   const handleAtualizarChecklist = (itemNome, status) => {
@@ -573,7 +543,7 @@ export default function Rondas({ usuarioLogado }) {
     e.preventDefault();
 
     if (!codigoLido) {
-      setMensagem({ tipo: 'erro', texto: 'Acione a câmera e leia o QR Code do ponto para validar.' });
+      setMensagem({ tipo: 'erro', texto: 'Leia o QR Code do ponto para validar.' });
       return;
     }
 
@@ -606,11 +576,6 @@ export default function Rondas({ usuarioLogado }) {
       }
     }
 
-    if (temProblema && !fotoPontoUrl) {
-      setMensagem({ tipo: 'erro', texto: 'Ao relatar um problema/avaria, anexe uma foto como evidência.' });
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -624,7 +589,7 @@ export default function Rondas({ usuarioLogado }) {
           latitude: coords.lat,
           longitude: coords.lng,
           foto_evidencia_url: fotoPontoUrl.trim() || '',
-          observacao: observacaoPonto.trim() || (temProblema ? '[PROBLEMA REGISTRADO]' : 'Ponto verificado em ordem.')
+          observacao: observacaoPonto.trim() || 'Ponto verificado e checklist realizado.'
         }]);
 
       if (error) throw error;
@@ -665,8 +630,8 @@ export default function Rondas({ usuarioLogado }) {
       `📊 Status: ${statusFinal.toUpperCase()} (${registrosRonda.length}/${pontos.length})\n\n` +
       `✅ *PONTOS VALIDADOS:*\n${lidosNomes || 'Nenhum'}\n\n` +
       (zeradosNomes ? `⚠️ *PONTOS ZERADOS / NÃO VISITADOS:*\n${zeradosNomes}\n\n` : '') +
-      (itensComAvaria ? `🚨 *AVARIAS NO CHECKLIST DOS SETORES:*\n${itensComAvaria}\n\n` : '') +
-      (fotosEvidencias ? `📸 *EVIDÊNCIAS DE FOTOS:*\n${fotosEvidencias}\n` : '');
+      (itensComAvaria ? `🚨 *AVARIAS REGISTRADAS NO CHECKLIST:*\n${itensComAvaria}\n\n` : '') +
+      (fotosEvidencias ? `📸 *EVIDÊNCIAS FOTOGRÁFICAS:*\n${fotosEvidencias}\n` : '');
 
     try {
       const { error } = await supabase
@@ -774,7 +739,7 @@ export default function Rondas({ usuarioLogado }) {
             <ShieldCheck className="w-5 h-5 text-emerald-400" /> Controle de Rondas Patrimoniais
           </h3>
           <p className="text-xs text-slate-300">
-            Validação por Câmera QR Code com GPS e temporizador global de 15 minutos.
+            Validação por QR Code com Checklist do Setor, Foto e GPS.
           </p>
         </div>
 
@@ -871,11 +836,11 @@ export default function Rondas({ usuarioLogado }) {
           {pontosZerados.length > 0 && (
             <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-300 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              <span>Ainda restam <strong>{pontosZerados.length} ponto(s) zerados</strong>.</span>
+              <span>Ainda restam <strong>{pontosZerados.length} ponto(s) zerados</strong>. Clique em "Validar Ponto" para realizar o checklist e leitura.</span>
             </div>
           )}
 
-          {/* GRID DE PONTOS */}
+          {/* GRID DE PONTOS DA RONDA */}
           <div>
             <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3">Pontos Cadastrados no Posto:</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -904,7 +869,6 @@ export default function Rondas({ usuarioLogado }) {
 
                       <h4 className="font-bold text-white text-xs mt-2">{ponto.nome_ponto}</h4>
                       
-                      {/* ETIQUETA DO SETOR VINCULADO */}
                       <span className="inline-block bg-slate-800 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded mt-1 truncate max-w-full">
                         🏢 {getNomeSetor(ponto.setor_id)}
                       </span>
@@ -933,98 +897,32 @@ export default function Rondas({ usuarioLogado }) {
               })}
             </div>
           </div>
-
-          {/* CHECKLIST COMPLETO DOS 9 SETORES */}
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-extrabold uppercase text-emerald-400 tracking-wider flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-emerald-400" /> Checklist de Vistoria Patrimonial (9 Setores)
-              </h4>
-              <span className="text-[10px] text-slate-400 uppercase font-mono">Setores A ao I</span>
-            </div>
-
-            <div className="space-y-2">
-              {setoresChecklist.map((setor) => {
-                const estaAberto = setorAberto === setor.id;
-
-                return (
-                  <div key={setor.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setSetorAberto(estaAberto ? null : setor.id)}
-                      className="w-full p-3 flex items-center justify-between text-left hover:bg-slate-800/80 transition"
-                    >
-                      <div>
-                        <span className="font-bold text-xs text-white block">{setor.titulo}</span>
-                        {setor.subtitulo && (
-                          <span className="text-[10px] text-slate-400 block">{setor.subtitulo}</span>
-                        )}
-                      </div>
-                      {estaAberto ? <ChevronDown className="w-4 h-4 text-emerald-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
-                    </button>
-
-                    {estaAberto && (
-                      <div className="p-3 bg-slate-950 border-t border-slate-800/80 space-y-2.5">
-                        {setor.itens.map((item, idx) => {
-                          const statusAtual = respostasChecklist[item] || 'ok';
-
-                          return (
-                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 bg-slate-900/60 rounded-lg border border-slate-800">
-                              <span className="text-xs text-slate-200 font-medium">{item}</span>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAtualizarChecklist(item, 'ok')}
-                                  className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition ${
-                                    statusAtual === 'ok'
-                                      ? 'bg-emerald-600 text-white'
-                                      : 'bg-slate-800 text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  <Check className="w-3.5 h-3.5" /> OK
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleAtualizarChecklist(item, 'avaria')}
-                                  className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition ${
-                                    statusAtual === 'avaria'
-                                      ? 'bg-red-600 text-white'
-                                      : 'bg-slate-800 text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  <AlertTriangle className="w-3.5 h-3.5" /> Avaria
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
         </div>
       )}
 
-      {/* MODAL DE VALIDAÇÃO DO PONTO POR CÂMERA */}
+      {/* MODAL DE VALIDAÇÃO DO PONTO (QR CODE + CHECKLIST DO SETOR + FOTO + OBS) */}
       {modalRegistrarPonto && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            
+            {/* Cabeçalho do Modal */}
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-emerald-600" /> Validar: {modalRegistrarPonto.nome_ponto}
-              </h3>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <QrCode className="w-5 h-5 text-emerald-600" /> {modalRegistrarPonto.nome_ponto}
+                </h3>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 block w-fit mt-0.5">
+                  🏢 {getNomeSetor(modalRegistrarPonto.setor_id)}
+                </span>
+              </div>
               <button onClick={fecharModalRegistroPonto} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
+              
+              {/* 1. SEÇÃO DO QR CODE */}
               <div className="bg-slate-900 text-white p-3.5 rounded-xl text-center space-y-3">
                 <span className="text-[11px] text-slate-300 font-medium block">
                   CÓDIGO ESPERADO: <strong className="text-emerald-400 font-mono">{modalRegistrarPonto.codigo_tag}</strong>
@@ -1070,56 +968,98 @@ export default function Rondas({ usuarioLogado }) {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={alternarProblema}
-                className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border transition ${
-                  temProblema ? 'bg-red-50 text-red-700 border-red-300' : 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-              >
-                <AlertTriangle className="w-4 h-4" />
-                {temProblema ? 'Avaria Sinalizada (Foto Obrigatória)' : 'Relatar Avaria neste Ponto'}
-              </button>
+              {/* 2. CHECKLIST EXCLUSIVO DO SETOR VINCULADO */}
+              {(() => {
+                const setorDoPonto = setoresChecklist.find(s => s.id === (modalRegistrarPonto.setor_id || 'SETOR_A')) || setoresChecklist[0];
+                
+                return (
+                  <div className="bg-slate-100 p-3.5 rounded-xl space-y-2.5 border border-slate-200">
+                    <h4 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-emerald-600" />
+                      Checklist do {setorDoPonto.titulo}
+                    </h4>
 
-              {temProblema && (
-                <div className="space-y-2 bg-red-50 p-3 rounded-xl border border-red-200">
-                  <label className="block text-xs font-bold text-red-800">
-                    Foto de Evidência da Avaria:
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => uploadFoto(e.target.files[0])}
-                    className="w-full text-xs text-slate-600"
-                  />
-                  {uploadingFoto && <p className="text-[10px] text-red-600 font-bold">Enviando foto...</p>}
-                  {fotoPontoUrl && (
-                    <img src={fotoPontoUrl} alt="Evidência" className="w-full h-24 object-cover rounded-lg border border-red-300 mt-2" />
-                  )}
-                </div>
-              )}
+                    <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                      {setorDoPonto.itens.map((item, idx) => {
+                        const statusAtual = respostasChecklist[item] || 'ok';
 
+                        return (
+                          <div key={idx} className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
+                            <span className="font-medium text-slate-700 text-[11px] leading-tight">{item}</span>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleAtualizarChecklist(item, 'ok')}
+                                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition ${
+                                  statusAtual === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                              >
+                                <Check className="w-3 h-3" /> OK
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAtualizarChecklist(item, 'avaria')}
+                                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition ${
+                                  statusAtual === 'avaria'
+                                    ? 'bg-red-600 text-white shadow-sm'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3 h-3" /> Avaria
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 3. BOTÃO / CAMPO DE FOTO DE EVIDÊNCIA */}
+              <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-blue-600" /> Foto de Evidência / Local
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => uploadFoto(e.target.files[0])}
+                  className="w-full text-xs text-slate-600 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-white hover:file:bg-slate-700 cursor-pointer"
+                />
+                {uploadingFoto && <p className="text-[10px] text-blue-600 font-bold">Enviando foto...</p>}
+                {fotoPontoUrl && (
+                  <img src={fotoPontoUrl} alt="Evidência" className="w-full h-28 object-cover rounded-xl border border-emerald-500 mt-2 shadow-sm" />
+                )}
+              </div>
+
+              {/* 4. ESPAÇO PARA OBSERVAÇÕES */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Observações Gerais:
+                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                  Observações / Ocorrências do Ponto
                 </label>
                 <textarea
                   rows="2"
                   value={observacaoPonto}
                   onChange={(e) => setObservacaoPonto(e.target.value)}
-                  placeholder="Descreva detalhes ou observações..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none"
+                  placeholder="Descreva observações ou avarias do ponto..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 ></textarea>
               </div>
 
+              {/* 5. BOTÃO DE CONFIRMAÇÃO */}
               <button
                 type="button"
                 onClick={confirmarLeituraPonto}
                 disabled={loading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-xs uppercase transition shadow-md"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl text-xs uppercase transition shadow-md flex items-center justify-center gap-2"
               >
-                {loading ? 'Salvando Validação...' : 'Confirmar e Validar Ponto'}
+                {loading ? 'Salvando Validação...' : 'Confirmar e Salvar Ponto'}
               </button>
             </div>
           </div>
@@ -1235,7 +1175,7 @@ export default function Rondas({ usuarioLogado }) {
                 <ArrowRightLeft className="w-5 h-5 text-blue-600" /> Assumir Posto / Troca de Plantão
               </h3>
               <button onClick={() => setModalAssumirPosto(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-slate-600" />
               </button>
             </div>
 
