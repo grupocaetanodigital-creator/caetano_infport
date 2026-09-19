@@ -270,7 +270,10 @@ export default function App() {
       <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
         
         {/* COMPONENTE DE ALERTA GLOBAL DE RONDA */}
-        <AlertaRondaGlobal onNavegarRondas={() => mudarModulo('rondas')} />
+        <AlertaRondaGlobal 
+          onNavegarRondas={() => mudarModulo('rondas')} 
+          usuarioLogado={operadorContextoGlobal} 
+        />
 
         {/* ESTILOS DE CORRIGIR TEXTOS */}
         <style>{`
