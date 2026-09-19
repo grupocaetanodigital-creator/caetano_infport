@@ -1,3 +1,4 @@
+// Pasta: src/App.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from './services/supabase';
 import Cadastros from './pages/Cadastros';
@@ -11,6 +12,7 @@ import Ocorrencias from './pages/Ocorrencias';
 import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
+import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { 
   ShieldCheck, 
   Lock, 
@@ -46,8 +48,8 @@ export default function App() {
   const [condominioAtivoId, setCondominioAtivoId] = useState('');
 
   // Controles de Navegação Responsiva
-  const [menuAberto, setMenuAberto] = useState(true); // Sidebar Desktop
-  const [drawerMobileAberto, setDrawerMobileAberto] = useState(false); // Menu Gaveta Mobile
+  const [menuAberto, setMenuAberto] = useState(true);
+  const [drawerMobileAberto, setDrawerMobileAberto] = useState(false);
 
   // Feature Flags / Parametrização Dinâmica de Módulos
   const [featureFlags, setFeatureFlags] = useState({
@@ -66,26 +68,21 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
-  // Perfil de Acesso:
-  // Admin (Nível 0)
+  // Perfil de Acesso
   const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
-  // Master / Síndico / Admin têm acesso ao Módulo 11 (Configurações)
   const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
 
   // Gerenciamento do Histórico e Botão Voltar do Dispositivo / PWA
   useEffect(() => {
     if (!operador) return;
 
-    // Inicializa o estado base da pilha do histórico
     window.history.replaceState({ modulo: moduloAtual }, '');
 
     const handlePopState = (event) => {
-      // Se o usuário apertar voltar e estiver em um sub-módulo, retorna para o dashboard em vez de sair do app
       if (moduloAtual !== 'dashboard') {
         setModuloAtual('dashboard');
         window.history.pushState({ modulo: 'dashboard' }, '');
       } else {
-        // Se já estiver na dashboard e apertar voltar novamente, permite comportamento padrão ou mantêm na home
         window.history.pushState({ modulo: 'dashboard' }, '');
       }
     };
@@ -96,7 +93,6 @@ export default function App() {
     };
   }, [operador, moduloAtual]);
 
-  // Função customizada para mudar de tela e atualizar o histórico do navegador de forma segura
   const mudarModulo = (novoModulo) => {
     setModuloAtual(novoModulo);
     setDrawerMobileAberto(false);
@@ -252,7 +248,6 @@ export default function App() {
       : (condominio?.nome || 'Condomínio Geral')
   } : null;
 
-  // Grade de Módulos Ativos para a Home / Dashboard Mobile
   const modulosDisponiveis = [
     { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: featureFlags.mod03_gestao_encomendas, cor: 'bg-blue-50 text-blue-600 border-blue-200' },
     { id: 'custodia', titulo: 'Custódia Itens', icone: Shield, flag: featureFlags.mod03_gestao_encomendas, cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
@@ -274,7 +269,10 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
         
-        {/* REGRAS DE ESTILO GLOBAL PARA FORÇAR NAVEGADORES E DISPOSITIVOS A RENDERIZAR TEXTOS ESCUROS E VÍVIDOS */}
+        {/* COMPONENTE DE ALERTA GLOBAL DE RONDA */}
+        <AlertaRondaGlobal onNavegarRondas={() => mudarModulo('rondas')} />
+
+        {/* ESTILOS DE CORRIGIR TEXTOS */}
         <style>{`
           input, select, textarea {
             color: #0f172a !important;
@@ -317,7 +315,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* SIDEBAR VERTICAL (Telas Médias/Grandes e Tablets) */}
+        {/* SIDEBAR VERTICAL */}
         <aside className={`hidden md:flex bg-slate-900 text-white flex-col justify-between transition-all duration-300 z-30 ${
           menuAberto ? 'w-64' : 'w-20'
         } shrink-0 min-h-screen sticky top-0`}>
@@ -346,7 +344,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Seletor Multi-Tenant Admin no Desktop */}
             {eAdmin && menuAberto && (
               <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
                 <label className="block text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
@@ -365,7 +362,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Menu de Ícones Lateral */}
             <nav className="p-3 space-y-1.5 overflow-y-auto max-h-[calc(100vh-200px)]">
               <button
                 onClick={() => mudarModulo('dashboard')}
@@ -423,7 +419,7 @@ export default function App() {
           </div>
         </aside>
 
-        {/* DRAWER / MENU DESLIZANTE PARA TELAS MÓVEIS */}
+        {/* DRAWER MOBILE */}
         {drawerMobileAberto && (
           <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex justify-end md:hidden">
             <div className="w-4/5 max-w-xs bg-slate-900 h-full flex flex-col justify-between p-4 shadow-2xl border-l border-slate-800 animate-in slide-in-from-right duration-200">
@@ -500,7 +496,6 @@ export default function App() {
         {/* ÁREA DE CONTEÚDO PRINCIPAL DO APLICATIVO */}
         <div className="flex-1 flex flex-col min-w-0">
           
-          {/* Cabeçalho do Módulo para Navegação Fácil */}
           {moduloAtual !== 'dashboard' && (
             <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm">
               <button 
@@ -516,14 +511,11 @@ export default function App() {
             </div>
           )}
 
-          {/* Renderização das Telas dos Módulos */}
           <main className="flex-1 p-3 sm:p-6 overflow-y-auto text-slate-900">
             
-            {/* TELA DASHBOARD / GRADE DE ICONES ESTILO APP MÓVEL */}
             {moduloAtual === 'dashboard' && (
               <div className="max-w-4xl mx-auto space-y-4">
                 
-                {/* Banner de Operador Fixo */}
                 <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex items-center justify-between border border-slate-800">
                   <div className="space-y-1">
                     <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-md border border-emerald-800">
@@ -541,7 +533,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Grade 3xN de Ícones Grandes */}
                 <div>
                   <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600 mb-3 px-1">
                     Módulos Operacionais
@@ -570,7 +561,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Telas dos Módulos Específicos */}
             {moduloAtual === 'encomendas' && featureFlags.mod03_gestao_encomendas && (
               <Encomendas usuarioLogado={operadorContextoGlobal} />
             )}
@@ -611,7 +601,7 @@ export default function App() {
 
         </div>
 
-        {/* BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM BAR - ESTILO APP CELULAR) */}
+        {/* BARRA DE NAVEGAÇÃO INFERIOR FIXA MOBILE */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-300 flex justify-around items-center h-16 z-40 px-1 shadow-2xl">
           <button
             onClick={() => mudarModulo('dashboard')}
@@ -675,7 +665,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
       
-      {/* REGRAS DE ESTILO GLOBAL PARA FORÇAR NAVEGADORES E DISPOSITIVOS A RENDERIZAR TEXTOS ESCUROS E VÍVIDOS NA TELA DE LOGIN */}
       <style>{`
         input, select, textarea {
           color: #0f172a !important;
@@ -745,9 +734,9 @@ export default function App() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200 shadow-md active:scale-[0.98] disabled:opacity-50 text-base mt-2"
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl transition text-sm sm:text-base uppercase tracking-wider shadow-md disabled:opacity-50"
           >
-            {loading ? 'Entrando...' : 'Entrar no Sistema'}
+            {loading ? 'Autenticando...' : 'Entrar no Sistema'}
           </button>
         </form>
       </div>
