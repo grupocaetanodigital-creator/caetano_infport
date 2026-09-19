@@ -385,7 +385,7 @@ export default function Rondas({ usuarioLogado }) {
       setMensagem({ tipo: 'sucesso', texto: 'Foto de evidência anexada!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao enviar foto: ' + err.message });
-    } finally {
+    } fontally {
       setUploadingFoto(false);
     }
   };
@@ -919,7 +919,7 @@ export default function Rondas({ usuarioLogado }) {
             </div>
           </div>
 
-          {/* NOVO CHECKLIST COMPLETO DOS 9 SETORES */}
+          {/* CHECKLIST COMPLETO DOS 9 SETORES */}
           <div className="pt-4 border-t border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-extrabold uppercase text-emerald-400 tracking-wider flex items-center gap-2">
