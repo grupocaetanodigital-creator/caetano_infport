@@ -1,3 +1,4 @@
+// Pasta: src/pages/Configuracoes.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { 
@@ -19,14 +20,24 @@ import {
   Building2, 
   Users, 
   Wrench, 
-  Shield 
+  Shield,
+  Database,
+  Download,
+  Building,
+  RefreshCw,
+  FileJson
 } from 'lucide-react';
 
-export default function Configuracoes({ usuarioLogado }) {
-  const [abaAtiva, setAbaAtiva] = useState('flags'); // 'flags', 'templates', 'emergencia'
+export default function Configuracoes({ usuarioLogado, onConfigSalva }) {
+  const [abaAtiva, setAbaAtiva] = useState('flags'); // 'flags', 'templates', 'emergencia', 'backup'
   const [loading, setLoading] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
   const [modalEmergenciaAberto, setModalEmergenciaAberto] = useState(false);
+
+  // Lista de Condomínios para Seleção do Backup
+  const [listaCondominios, setListaCondominios] = useState([]);
+  const [condominioBackupId, setCondominioBackupId] = useState(usuarioLogado?.condominio_id || '');
 
   // 1. Estados da Parametrização & Feature Flags
   const [config, setConfig] = useState({
@@ -63,13 +74,35 @@ export default function Configuracoes({ usuarioLogado }) {
     exibir_menu_flutuante: true
   });
 
+  const eAdmin = usuarioLogado?.perfil === 'admin' || usuarioLogado?.nivel_acesso === 0 || Number(usuarioLogado?.nivel) === 0;
+
   useEffect(() => {
+    carregarCondominios();
     if (usuarioLogado?.condominio_id) {
       carregarConfiguracoes();
       carregarTemplates();
       carregarContatosEmergencia();
     }
   }, [usuarioLogado]);
+
+  // Carregar Lista Completa de Condomínios
+  const carregarCondominios = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('condominios')
+        .select('*')
+        .order('nome', { ascending: true });
+
+      if (error) throw error;
+      setListaCondominios(data || []);
+
+      if (!condominioBackupId && data && data.length > 0) {
+        setCondominioBackupId(data[0].id);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar lista de condomínios:', err);
+    }
+  };
 
   // Carregar Dados da Tabela configuracoes
   const carregarConfiguracoes = async () => {
@@ -153,6 +186,7 @@ export default function Configuracoes({ usuarioLogado }) {
 
       if (error) throw error;
       setMensagem({ tipo: 'sucesso', texto: 'Parametrização e regras salvas com sucesso!' });
+      if (onConfigSalva) onConfigSalva();
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar parametrização: ' + err.message });
     } finally {
@@ -268,6 +302,114 @@ export default function Configuracoes({ usuarioLogado }) {
     window.open(`https://wa.me/${num.replace(/\D/g, '')}?text=${encodeURIComponent(textoPanico)}`, '_blank');
   };
 
+  // EXPORTAÇÃO E GERADOR DE BACKUP COMPLETO POR CONDOMÍNIO
+  const gerarBackupCondominio = async () => {
+    setExportando(true);
+    setMensagem({ tipo: 'sucesso', texto: 'Iniciando extração e montagem das tabelas do backup...' });
+
+    try {
+      const targetCondoId = condominioBackupId;
+      const condoObj = listaCondominios.find(c => c.id === targetCondoId);
+      const condoNome = condoObj ? condoObj.nome.replace(/[^a-zA-Z0-9]/g, '_') : 'TODOS_OS_CONDOMINIOS';
+
+      const buscarTabela = async (tabela) => {
+        let query = supabase.from(tabela).select('*');
+        if (targetCondoId && targetCondoId !== 'TODOS') {
+          query = query.eq('condominio_id', targetCondoId);
+        }
+        const { data, error } = await query;
+        if (error) console.warn(`Aviso ao buscar tabela ${tabela}:`, error.message);
+        return data || [];
+      };
+
+      const [
+        condominiosData,
+        operadoresData,
+        moradoresData,
+        encomendasData,
+        custodiaData,
+        materiaisData,
+        chavesData,
+        manutencaoData,
+        rondasPontosData,
+        rondasExecucaoData,
+        rondasRegistrosData,
+        passagemPostoData,
+        ocorrenciasData,
+        prestadoresData,
+        configuracoesData,
+        templatesData,
+        agendaData
+      ] = await Promise.all([
+        targetCondoId && targetCondoId !== 'TODOS' 
+          ? supabase.from('condominios').select('*').eq('id', targetCondoId).then(r => r.data || [])
+          : supabase.from('condominios').select('*').then(r => r.data || []),
+        buscarTabela('operadores'),
+        buscarTabela('moradores'),
+        buscarTabela('encomendas'),
+        buscarTabela('custodia_itens'),
+        buscarTabela('materiais'),
+        buscarTabela('chaves'),
+        buscarTabela('manutencao_os'),
+        buscarTabela('rondas_pontos'),
+        buscarTabela('rondas_execucao'),
+        buscarTabela('rondas_registros'),
+        buscarTabela('rondas_passagem_posto'),
+        buscarTabela('ocorrencias'),
+        buscarTabela('prestadores_obras'),
+        buscarTabela('configuracoes'),
+        buscarTabela('templates_whatsapp'),
+        buscarTabela('agenda_emergencia')
+      ]);
+
+      const estruturaBackup = {
+        meta: {
+          sistema: 'INFPORT 1.0',
+          versao_backup: '1.0.0',
+          data_exportacao: new Date().toISOString(),
+          usuario_solicitante: usuarioLogado?.login || 'ADMIN',
+          condominio_id: targetCondoId || 'GLOBAL',
+          condominio_nome: condoObj?.nome || 'TODOS OS CONDOMÍNIOS'
+        },
+        tabelas: {
+          condominios: condominiosData,
+          operadores: operadoresData,
+          moradores: moradoresData,
+          encomendas: encomendasData,
+          custodia_itens: custodiaData,
+          materiais: materiaisData,
+          chaves: chavesData,
+          manutencao_os: manutencaoData,
+          rondas_pontos: rondasPontosData,
+          rondas_execucao: rondasExecucaoData,
+          rondas_registros: rondasRegistrosData,
+          rondas_passagem_posto: passagemPostoData,
+          ocorrencias: ocorrenciasData,
+          prestadores_obras: prestadoresData,
+          configuracoes: configuracoesData,
+          templates_whatsapp: templatesData,
+          agenda_emergencia: agendaData
+        }
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(estruturaBackup, null, 2));
+      const downloadAnchor = document.createElement('a');
+      const dataHoje = new Date().toISOString().split('T')[0];
+
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `BACKUP_INFPORT_${condoNome}_${dataHoje}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      setMensagem({ tipo: 'sucesso', texto: `Backup do condomínio "${condoObj?.nome || 'Visão Global'}" baixado com sucesso!` });
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao gerar backup: ' + err.message });
+    } finally {
+      setExportando(false);
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       {/* Cabeçalho Principal do Módulo 11 */}
@@ -277,7 +419,7 @@ export default function Configuracoes({ usuarioLogado }) {
             <Settings className="w-3.5 h-3.5" /> Módulo 11 - Configurações & Regras
           </span>
           <h3 className="font-bold text-lg mt-1">Painel Administrador Master & Parametrização</h3>
-          <p className="text-xs text-slate-300">Feature Flags, Motor de Templates WhatsApp e Agenda de Emergência.</p>
+          <p className="text-xs text-slate-300">Feature Flags, Motor de Templates WhatsApp, Agenda e Backup JSON.</p>
         </div>
 
         {/* Botão Fixo de Emergência / Pânico Flutuante */}
@@ -300,14 +442,14 @@ export default function Configuracoes({ usuarioLogado }) {
       )}
 
       {/* Menu de Abas Internas do Módulo 11 */}
-      <div className="flex border-b border-slate-200 gap-2 bg-white p-2 rounded-xl shadow-sm">
+      <div className="flex flex-wrap border-b border-slate-200 gap-2 bg-white p-2 rounded-xl shadow-sm">
         <button
           onClick={() => setAbaAtiva('flags')}
           className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 transition ${
             abaAtiva === 'flags' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <Sliders className="w-4 h-4" /> 11.1 Parametrização (Feature Flags)
+          <Sliders className="w-4 h-4" /> 11.1 Parametrização
         </button>
 
         <button
@@ -316,7 +458,7 @@ export default function Configuracoes({ usuarioLogado }) {
             abaAtiva === 'templates' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <MessageSquare className="w-4 h-4" /> 11.2 Templates de WhatsApp
+          <MessageSquare className="w-4 h-4" /> 11.2 Templates WhatsApp
         </button>
 
         <button
@@ -325,7 +467,16 @@ export default function Configuracoes({ usuarioLogado }) {
             abaAtiva === 'emergencia' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <PhoneCall className="w-4 h-4" /> 11.3 Agenda de Emergência & Escala
+          <PhoneCall className="w-4 h-4" /> 11.3 Agenda & Escala
+        </button>
+
+        <button
+          onClick={() => setAbaAtiva('backup')}
+          className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 transition ${
+            abaAtiva === 'backup' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Database className="w-4 h-4 text-blue-400" /> 11.4 Backup JSON
         </button>
       </div>
 
@@ -511,7 +662,6 @@ export default function Configuracoes({ usuarioLogado }) {
       {/* ABA 11.3: AGENDA DE EMERGÊNCIA & ESCALA */}
       {abaAtiva === 'emergencia' && (
         <div className="space-y-6">
-          {/* Form para adicionar novo contato */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h4 className="font-bold text-slate-900 text-sm border-b pb-3 flex items-center gap-2">
               <Plus className="w-4 h-4 text-emerald-600" /> Cadastrar Contato de Emergência ou Escala
@@ -579,7 +729,6 @@ export default function Configuracoes({ usuarioLogado }) {
             </form>
           </div>
 
-          {/* Lista de Contatos por Categoria */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {contatos.map((c) => (
               <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -621,7 +770,63 @@ export default function Configuracoes({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL FLUTUANTE DE EMERGÊNCIA & ESCALA DA GUARITA (11.3) */}
+      {/* ABA 11.4: EXPORTAÇÃO E BACKUP DE DADOS JSON */}
+      {abaAtiva === 'backup' && (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 border-b pb-3">
+              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                <Database className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-base">Gerador de Backup em JSON por Condomínio</h4>
+                <p className="text-xs text-slate-500">
+                  Exporte o histórico completo de cadastros, moradores, encomendas, chaves, materiais, rondas e ocorrências.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="sm:col-span-2 space-y-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-slate-500" /> Selecione o Condomínio para Exportar
+                </label>
+                <select
+                  value={condominioBackupId}
+                  onChange={(e) => setCondominioBackupId(e.target.value)}
+                  className="w-full text-xs font-bold p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  {eAdmin && <option value="TODOS">🏢 Todos os Condomínios (Visão Global)</option>}
+                  {listaCondominios.map((c) => (
+                    <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={gerarBackupCondominio}
+                disabled={exportando}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition uppercase shadow-md disabled:opacity-50"
+              >
+                {exportando ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {exportando ? 'Exportando Dados...' : 'Baixar Backup (JSON)'}
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
+              <strong className="block font-bold">ℹ️ Estrutura do arquivo gerado:</strong>
+              <p>O arquivo JSON conterá dados consolidados das seguintes tabelas: <code className="font-mono bg-amber-100 px-1 rounded">condominios</code>, <code className="font-mono bg-amber-100 px-1 rounded">operadores</code>, <code className="font-mono bg-amber-100 px-1 rounded">moradores</code>, <code className="font-mono bg-amber-100 px-1 rounded">encomendas</code>, <code className="font-mono bg-amber-100 px-1 rounded">custodia_itens</code>, <code className="font-mono bg-amber-100 px-1 rounded">materiais</code>, <code className="font-mono bg-amber-100 px-1 rounded">chaves</code>, <code className="font-mono bg-amber-100 px-1 rounded">manutencao_os</code>, <code className="font-mono bg-amber-100 px-1 rounded">rondas</code>, <code className="font-mono bg-amber-100 px-1 rounded">ocorrencias</code>, <code className="font-mono bg-amber-100 px-1 rounded">prestadores_obras</code>, <code className="font-mono bg-amber-100 px-1 rounded">configuracoes</code> e <code className="font-mono bg-amber-100 px-1 rounded">agenda_emergencia</code>.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FLUTUANTE DE EMERGÊNCIA & ESCALA DA GUARITA */}
       {modalEmergenciaAberto && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl relative">
@@ -638,7 +843,6 @@ export default function Configuracoes({ usuarioLogado }) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto p-1">
-              {/* Órgãos Públicos Fixos */}
               <div className="bg-red-50 p-3 rounded-xl border border-red-200 flex justify-between items-center">
                 <div>
                   <strong className="block text-red-950 text-xs">Polícia Militar (190)</strong>
@@ -659,7 +863,6 @@ export default function Configuracoes({ usuarioLogado }) {
                 </a>
               </div>
 
-              {/* Contatos Dinâmicos Cadastrados na Agenda */}
               {contatos.map((item) => (
                 <div key={item.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center">
                   <div>
