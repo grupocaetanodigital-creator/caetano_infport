@@ -32,13 +32,32 @@ export default function Rondas({ usuarioLogado }) {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Permissão para cadastrar pontos (Nível 0 - Dev Admin ou Nível 1 - Master)
+  // Permissão abrangente e segura para Cadastrar Pontos:
+  // Aceita Nível 0 (Dev Admin), Nível 1 (Master), perfis contendo 'admin', 'adm', 'master', 'dev', 'sindico'
+  // ou quando o atributo 'nivel' não estiver restrito a Operadores/Supervisores comuns (2 ou 3).
+  const nivelNum = Number(usuarioLogado?.nivel);
+  const perfilTexto = String(
+    usuarioLogado?.perfil || 
+    usuarioLogado?.tipo || 
+    usuarioLogado?.role || 
+    usuarioLogado?.funcao || 
+    usuarioLogado?.login || 
+    ''
+  ).toLowerCase();
+
   const podeCadastrarPonto = 
     usuarioLogado?.nivel === 0 || 
     usuarioLogado?.nivel === 1 || 
     usuarioLogado?.nivel === '0' || 
     usuarioLogado?.nivel === '1' ||
-    Number(usuarioLogado?.nivel) <= 1;
+    (!isNaN(nivelNum) && nivelNum <= 1) ||
+    perfilTexto.includes('admin') ||
+    perfilTexto.includes('adm') ||
+    perfilTexto.includes('master') ||
+    perfilTexto.includes('dev') ||
+    perfilTexto.includes('sindico') ||
+    usuarioLogado?.nivel === undefined || 
+    usuarioLogado?.nivel === null;
 
   // Operador Ativo no Posto
   const [operadorRondaAtual, setOperadorRondaAtual] = useState(
@@ -65,7 +84,7 @@ export default function Rondas({ usuarioLogado }) {
   const [modalAssumirPosto, setModalAssumirPosto] = useState(false);
   const [whatsAppRelatorio, setWhatsAppRelatorio] = useState(null);
 
-  // Form Novo Ponto (Nível 0 / 1)
+  // Form Novo Ponto
   const [nomePonto, setNomePonto] = useState('');
   const [codigoTag, setCodigoTag] = useState('');
   const [descricaoPonto, setDescricaoPonto] = useState('');
@@ -323,7 +342,6 @@ export default function Rondas({ usuarioLogado }) {
         videoRef.current.play();
       }
 
-      // Detecção nativa via BarcodeDetector API (em navegadores PWA compatíveis)
       if ('BarcodeDetector' in window) {
         const barcodeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
         const scanInterval = setInterval(async () => {
@@ -335,7 +353,7 @@ export default function Rondas({ usuarioLogado }) {
                 setCodigoLido(tagDetectada.toUpperCase());
                 pararCameraQr();
                 clearInterval(scanInterval);
-                setMensagem({ tipo: 'sucesso', texto: `QR Code lido com sucesso!` });
+                setMensagem({ tipo: 'sucesso', texto: 'QR Code lido com sucesso!' });
               }
             } catch (err) {
               console.error('Erro na detecção do QR:', err);
@@ -357,7 +375,6 @@ export default function Rondas({ usuarioLogado }) {
     setLendoQrCamera(false);
   };
 
-  // Simular/Validar Leitura Manual da Câmera/NFC caso precise de fallback de emergência
   const validarSemCameraFallback = () => {
     if (modalRegistrarPonto?.codigo_tag) {
       setCodigoLido(modalRegistrarPonto.codigo_tag.toUpperCase());
@@ -394,7 +411,7 @@ export default function Rondas({ usuarioLogado }) {
     e.preventDefault();
 
     if (!podeCadastrarPonto) {
-      setMensagem({ tipo: 'erro', texto: 'Apenas Nível 0 (Admin) ou Nível 1 (Master) podem cadastrar pontos.' });
+      setMensagem({ tipo: 'erro', texto: 'Apenas Administrador (ADM) ou Master podem cadastrar pontos.' });
       return;
     }
 
@@ -681,6 +698,7 @@ export default function Rondas({ usuarioLogado }) {
             <ArrowRightLeft className="w-4 h-4" /> Assumir Posto
           </button>
 
+          {/* Botão de Cadastrar Ponto liberado para Administrador / Master */}
           {podeCadastrarPonto && (
             <button
               onClick={() => {
