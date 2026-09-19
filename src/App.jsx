@@ -269,12 +269,6 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans pb-16 md:pb-0 text-slate-900 antialiased" style={{ colorScheme: 'light' }}>
         
-        {/* COMPONENTE DE ALERTA GLOBAL DE RONDA ATUALIZADO */}
-        <AlertaRondaGlobal 
-          onNavegarRondas={() => mudarModulo('rondas')} 
-          usuarioLogado={operadorContextoGlobal} 
-        />
-
         {/* ESTILOS DE CORRIGIR TEXTOS */}
         <style>{`
           input, select, textarea {
@@ -294,31 +288,8 @@ export default function App() {
             color: #0f172a !important;
           }
         `}</style>
-        
-        {/* CABEÇALHO COMPACTO EXCLUSIVO MOBILE */}
-        <header className="md:hidden bg-slate-900 text-white p-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <ShieldCheck className="w-7 h-7 text-emerald-400 shrink-0" />
-            <div className="truncate">
-              <h1 className="font-bold text-base leading-tight">INFPORT 1.0</h1>
-              <p className="text-xs text-slate-300 truncate max-w-[190px]">
-                {operadorContextoGlobal.condominio_nome}
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDrawerMobileAberto(true)}
-              className="p-2 text-slate-200 bg-slate-800 active:bg-slate-700 rounded-xl transition"
-              title="Menu Principal"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          </div>
-        </header>
-
-        {/* SIDEBAR VERTICAL */}
+        {/* SIDEBAR VERTICAL (DESKTOP) */}
         <aside className={`hidden md:flex bg-slate-900 text-white flex-col justify-between transition-all duration-300 z-30 ${
           menuAberto ? 'w-64' : 'w-20'
         } shrink-0 min-h-screen sticky top-0`}>
@@ -499,6 +470,35 @@ export default function App() {
         {/* ÁREA DE CONTEÚDO PRINCIPAL DO APLICATIVO */}
         <div className="flex-1 flex flex-col min-w-0">
           
+          {/* COMPONENTE DE ALERTA GLOBAL DE RONDA (AQUI DENTRO FIXA CORRETAMENTE NO CELULAR E NO PC) */}
+          <AlertaRondaGlobal 
+            onNavegarRondas={() => mudarModulo('rondas')} 
+            usuarioLogado={operadorContextoGlobal} 
+          />
+
+          {/* CABEÇALHO COMPACTO EXCLUSIVO MOBILE */}
+          <header className="md:hidden bg-slate-900 text-white p-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <ShieldCheck className="w-7 h-7 text-emerald-400 shrink-0" />
+              <div className="truncate">
+                <h1 className="font-bold text-base leading-tight">INFPORT 1.0</h1>
+                <p className="text-xs text-slate-300 truncate max-w-[190px]">
+                  {operadorContextoGlobal.condominio_nome}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDrawerMobileAberto(true)}
+                className="p-2 text-slate-200 bg-slate-800 active:bg-slate-700 rounded-xl transition"
+                title="Menu Principal"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            </div>
+          </header>
+
           {moduloAtual !== 'dashboard' && (
             <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm">
               <button 
