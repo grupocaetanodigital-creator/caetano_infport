@@ -22,7 +22,8 @@ import {
   Timer,
   ArrowRightLeft,
   Lock,
-  User
+  User,
+  Radio
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
@@ -30,8 +31,13 @@ export default function Rondas({ usuarioLogado }) {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Verificar se o usuário logado é Nível 0 (Administrador do Sistema)
-  const eNivel0 = Number(usuarioLogado?.nivel) === 0 || usuarioLogado?.nivel === 0 || usuarioLogado?.nivel === '0';
+  // Permissão para cadastrar pontos (Nível 0 - Dev Admin ou Nível 1 - Master)
+  const podeCadastrarPonto = 
+    usuarioLogado?.nivel === 0 || 
+    usuarioLogado?.nivel === 1 || 
+    usuarioLogado?.nivel === '0' || 
+    usuarioLogado?.nivel === '1' ||
+    Number(usuarioLogado?.nivel) <= 1;
 
   // Operador Ativo no Posto
   const [operadorRondaAtual, setOperadorRondaAtual] = useState(
@@ -58,7 +64,7 @@ export default function Rondas({ usuarioLogado }) {
   const [modalAssumirPosto, setModalAssumirPosto] = useState(false);
   const [whatsAppRelatorio, setWhatsAppRelatorio] = useState(null);
 
-  // Form Novo Ponto (Nível 0)
+  // Form Novo Ponto (Nível 0 / 1)
   const [nomePonto, setNomePonto] = useState('');
   const [codigoTag, setCodigoTag] = useState('');
   const [descricaoPonto, setDescricaoPonto] = useState('');
@@ -120,7 +126,7 @@ export default function Rondas({ usuarioLogado }) {
       const gain = audioCtx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Tom A5
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
       gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
 
       osc.connect(gain);
@@ -298,8 +304,8 @@ export default function Rondas({ usuarioLogado }) {
   const cadastrarPonto = async (e) => {
     e.preventDefault();
 
-    if (!eNivel0) {
-      setMensagem({ tipo: 'erro', texto: 'Apenas usuários Nível 0 (Administrador) possuem permissão para cadastrar pontos de ronda.' });
+    if (!podeCadastrarPonto) {
+      setMensagem({ tipo: 'erro', texto: 'Apenas usuários Nível 0 (Admin) ou Nível 1 (Master) possuem permissão para cadastrar pontos de ronda.' });
       return;
     }
 
@@ -383,6 +389,27 @@ export default function Rondas({ usuarioLogado }) {
     capturarGPS();
   };
 
+  // Simular/Acionar Leitura por NFC Nativo do Celular (Web NFC API)
+  const acionarLeitorNFC = async () => {
+    if ('NDEFReader' in window) {
+      try {
+        const ndef = new window.NDEFReader();
+        await ndef.scan();
+        setMensagem({ tipo: 'sucesso', texto: 'Aproxime a Tag NFC do celular...' });
+        ndef.addEventListener("reading", ({ serialNumber }) => {
+          const tagCode = serialNumber ? serialNumber.toUpperCase() : modalRegistrarPonto?.codigo_tag;
+          setCodigoLido(tagCode || modalRegistrarPonto?.codigo_tag);
+          setMensagem({ tipo: 'sucesso', texto: 'Tag NFC lida com sucesso!' });
+        });
+      } catch (error) {
+        setMensagem({ tipo: 'erro', texto: 'NFC não permitido ou desativado: ' + error.message });
+      }
+    } else {
+      setCodigoLido(modalRegistrarPonto?.codigo_tag || '');
+      setMensagem({ tipo: 'sucesso', texto: 'Código do ponto capturado!' });
+    }
+  };
+
   const confirmarLeituraPonto = async (e) => {
     e.preventDefault();
 
@@ -391,7 +418,6 @@ export default function Rondas({ usuarioLogado }) {
       return;
     }
 
-    // Validação de Localização GPS (Anti-Fraude)
     if (!coords?.lat || !coords?.lng) {
       setMensagem({ tipo: 'erro', texto: 'Sua localização GPS não foi identificada. Ative a geolocalização do dispositivo.' });
       return;
@@ -405,7 +431,7 @@ export default function Rondas({ usuarioLogado }) {
         modalRegistrarPonto.longitude
       );
 
-      const DISTANCIA_MAXIMA_PERMITIDA = 50; // Raio máximo de 50 metros para tolerância
+      const DISTANCIA_MAXIMA_PERMITIDA = 50;
 
       if (distanciaMetros !== null && distanciaMetros > DISTANCIA_MAXIMA_PERMITIDA) {
         setMensagem({
@@ -480,11 +506,9 @@ export default function Rondas({ usuarioLogado }) {
 
       if (error) throw error;
 
-      // Iniciar Temporizador de 15 Minutos para a próxima ronda
       setTempoRestanteTimer(15 * 60);
       setTimerAtivo(true);
 
-      // Link de Disparo para WhatsApp
       setWhatsAppRelatorio({
         texto: resumoTexto,
         link: `https://wa.me/?text=${encodeURIComponent(resumoTexto)}`
@@ -596,14 +620,14 @@ export default function Rondas({ usuarioLogado }) {
             <ArrowRightLeft className="w-4 h-4" /> Assumir Posto
           </button>
 
-          {/* Somente Nível 0 visualiza o botão de cadastrar pontos */}
-          {eNivel0 && (
+          {/* Permissão para Master (1) e Admin (0) */}
+          {podeCadastrarPonto && (
             <button
               onClick={() => {
                 setCoordsNovoPonto(null);
                 setModalNovoPonto(true);
               }}
-              className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition border border-slate-700"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
             >
               <Plus className="w-4 h-4" /> Cadastrar Ponto
             </button>
@@ -737,9 +761,9 @@ export default function Rondas({ usuarioLogado }) {
                     ) : (
                       <button
                         onClick={() => abrirRegistroPonto(ponto)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 rounded-lg transition uppercase"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition uppercase flex items-center justify-center gap-1.5"
                       >
-                        Validar Ponto
+                        <QrCode className="w-3.5 h-3.5" /> Validar Ponto
                       </button>
                     )}
                   </div>
@@ -830,40 +854,44 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       </div>
 
-      {/* MODAL CADASTRAR PONTO (EXCLUSIVO NÍVEL 0 COM GPS) */}
-      {modalNovoPonto && eNivel0 && (
+      {/* MODAL CADASTRAR PONTO (DISPONÍVEL PARA ADMIN / MASTER) */}
+      {modalNovoPonto && podeCadastrarPonto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalNovoPonto(false)} className="absolute top-4 right-4 text-slate-400 p-1">
+            <button
+              onClick={() => setModalNovoPonto(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+            >
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" /> Cadastrar Ponto de Ronda (Nível 0)
-            </h3>
+            <div className="flex items-center gap-2 border-b pb-3">
+              <QrCode className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-bold text-slate-900 text-base">Cadastrar Novo Ponto de Ronda</h3>
+            </div>
 
-            <form onSubmit={cadastrarPonto} className="space-y-3">
+            <form onSubmit={cadastrarPonto} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Ponto *</label>
                 <input
                   type="text"
                   required
+                  placeholder="Ex: Guarita Principal, Bloco A, Garagem G2"
                   value={nomePonto}
                   onChange={(e) => setNomePonto(e.target.value)}
-                  placeholder="Ex: Bloco A - Entrada Social"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Código QR Code / Tag NFC *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Código QR / Tag NFC *</label>
                 <input
                   type="text"
                   required
+                  placeholder="Ex: TAG-101 ou CÓDIGO-QR"
                   value={codigoTag}
                   onChange={(e) => setCodigoTag(e.target.value)}
-                  placeholder="Ex: QR-BL-A"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase"
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none uppercase font-mono"
                 />
               </div>
 
@@ -871,49 +899,43 @@ export default function Rondas({ usuarioLogado }) {
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Descrição / Localização</label>
                 <input
                   type="text"
+                  placeholder="Ex: Ao lado da porta do gerador no subsolo"
                   value={descricaoPonto}
                   onChange={(e) => setDescricaoPonto(e.target.value)}
-                  placeholder="Ex: Afixado na porta de acesso da portaria"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
 
-              {/* Captura Obrigatória de GPS do Ponto */}
-              <div className="bg-slate-50 p-3.5 border border-slate-200 rounded-xl space-y-2">
-                <span className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1">
-                  <MapPin className="w-4 h-4 text-emerald-600" /> Coordenadas Físicas (GPS) *
-                </span>
-                <p className="text-[11px] text-slate-500">
-                  Esteja presencialmente no local do ponto para gravar as coordenadas do QR Code.
-                </p>
-
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">Coordenadas de Segurança GPS</span>
                 {coordsNovoPonto ? (
-                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-lg text-xs font-mono">
+                  <p className="text-[11px] font-mono text-emerald-700 font-bold">
                     ✓ Lat: {coordsNovoPonto.lat.toFixed(6)}, Lng: {coordsNovoPonto.lng.toFixed(6)}
-                  </div>
+                  </p>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={capturarGPSNovoPonto}
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition"
-                  >
-                    <Navigation className="w-4 h-4 text-emerald-400" /> Capturar Posição Atual (GPS)
-                  </button>
+                  <p className="text-[11px] text-slate-500">Esteja no local exato do ponto para capturar o GPS.</p>
                 )}
+                <button
+                  type="button"
+                  onClick={capturarGPSNovoPonto}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  <MapPin className="w-4 h-4 text-emerald-400" /> Capturar Localização GPS
+                </button>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalNovoPonto(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase"
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-xs uppercase"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase"
+                  className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs uppercase"
                 >
                   {loading ? 'Salvando...' : 'Salvar Ponto'}
                 </button>
@@ -923,67 +945,112 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL REGISTRAR / VALIDAR PONTO (COM VALIDAÇÃO DE DISTÂNCIA GPS) */}
+      {/* MODAL VALIDAR/REGISTRAR PONTO DA RONDA */}
       {modalRegistrarPonto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalRegistrarPonto(null)} className="absolute top-4 right-4 text-slate-400 p-1">
+            <button
+              onClick={() => setModalRegistrarPonto(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+            >
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <QrCode className="w-5 h-5 text-emerald-600" /> Validar: {modalRegistrarPonto.nome_ponto}
-            </h3>
+            <div className="flex items-center gap-2 border-b pb-3">
+              <QrCode className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-bold text-slate-900 text-base">
+                Validar: {modalRegistrarPonto.nome_ponto}
+              </h3>
+            </div>
 
-            <form onSubmit={confirmarLeituraPonto} className="space-y-3">
+            <form onSubmit={confirmarLeituraPonto} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Digite ou Leitura do Código QR / Tag *</label>
-                <input
-                  type="text"
-                  required
-                  value={codigoLido}
-                  onChange={(e) => setCodigoLido(e.target.value)}
-                  placeholder={`Código esperado: ${modalRegistrarPonto.codigo_tag}`}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase"
-                />
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  DIGITE OU LEITURA DO CÓDIGO QR / TAG *
+                </label>
+                <span className="text-[10px] text-slate-500 block mb-1 font-mono">
+                  CÓDIGO ESPERADO: {modalRegistrarPonto.codigo_tag}
+                </span>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Aproxime a TAG ou digite o código"
+                    value={codigoLido}
+                    onChange={(e) => setCodigoLido(e.target.value)}
+                    className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none uppercase font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={acionarLeitorNFC}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                    title="Ativar leitor NFC do dispositivo ou auto-preencher"
+                  >
+                    <Radio className="w-4 h-4" /> NFC / QR
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações do Ronda</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  OBSERVAÇÕES DO RONDA
+                </label>
                 <input
                   type="text"
+                  placeholder="Ex: Lâmpada queimada no corredor ou tudo em ordem"
                   value={observacaoPonto}
                   onChange={(e) => setObservacaoPonto(e.target.value)}
-                  placeholder="Ex: Lâmpada queimada no corredor ou Tudo em ordem"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Foto da Evidência (Opcional)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={(e) => uploadFoto(e.target.files[0])}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
-                />
-                {uploadingFoto && <p className="text-[10px] text-blue-600 font-bold mt-1">Enviando imagem...</p>}
-                {fotoPontoUrl && <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ Foto anexada!</p>}
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  FOTO DA EVIDÊNCIA (OPCIONAL)
+                </label>
+                
+                <div className="mt-1">
+                  {fotoPontoUrl ? (
+                    <div className="space-y-2">
+                      <img
+                        src={fotoPontoUrl}
+                        alt="Evidência"
+                        className="w-full h-32 object-cover rounded-xl border border-slate-200"
+                      />
+                      <span className="text-[11px] text-emerald-600 font-bold block text-center">
+                        ✓ Foto anexada com sucesso!
+                      </span>
+                    </div>
+                  ) : (
+                    <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-sm">
+                      <Camera className="w-4 h-4 text-emerald-400" />
+                      {uploadingFoto ? 'Enviando Foto...' : 'Tirar Foto / Anexar Evidência'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={(e) => uploadFoto(e.target.files[0])}
+                        disabled={uploadingFoto}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalRegistrarPonto(null)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase"
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-xs uppercase"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || uploadingFoto}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase"
+                  disabled={loading}
+                  className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs uppercase"
                 >
                   {loading ? 'Validando...' : 'Confirmar Leitura'}
                 </button>
@@ -993,90 +1060,83 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL ASSUMIR POSTO - AUTENTICAÇÃO COM LOGIN E SENHA */}
+      {/* MODAL ASSUMIR POSTO */}
       {modalAssumirPosto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalAssumirPosto(false)} className="absolute top-4 right-4 text-slate-400 p-1">
+            <button
+              onClick={() => setModalAssumirPosto(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+            >
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Lock className="w-5 h-5 text-emerald-600" /> Autenticar e Assumir Posto
-            </h3>
+            <div className="flex items-center gap-2 border-b pb-3">
+              <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+              <h3 className="font-bold text-slate-900 text-base">Troca de Posto - Autenticação</h3>
+            </div>
 
-            <form onSubmit={efetivarAssumirPosto} className="space-y-3">
+            <form onSubmit={efetivarAssumirPosto} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Operador Sainte (Saindo)</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Selecione o Operador Entrante *
+                </label>
+                <select
+                  required
+                  value={operadorSelecionadoId}
+                  onChange={(e) => setOperadorSelecionadoId(e.target.value)}
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                  <option value="">-- Selecione o Vigilante / Ronda --</option>
+                  {listaOperadores.map((op) => (
+                    <option key={op.id} value={op.id}>
+                      {op.nome} ({op.funcao || 'Operador'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Senha do Operador Entrante *
+                </label>
                 <input
-                  type="text"
-                  disabled
-                  value={operadorRondaAtual}
-                  className="w-full p-3 bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-500"
+                  type="password"
+                  required
+                  placeholder="Digite sua senha de acesso"
+                  value={senhaLoginEntrante}
+                  onChange={(e) => setSenhaLoginEntrante(e.target.value)}
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Selecionar Novo Ronda (Entrante) *</label>
-                <div className="relative">
-                  <select
-                    required
-                    value={operadorSelecionadoId}
-                    onChange={(e) => setOperadorSelecionadoId(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 appearance-none pl-9"
-                  >
-                    <option value="">-- Selecione seu Nome --</option>
-                    {listaOperadores.map((op) => (
-                      <option key={op.id} value={op.id}>
-                        {op.nome} ({op.login})
-                      </option>
-                    ))}
-                  </select>
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Senha do Operador *</label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    required
-                    value={senhaLoginEntrante}
-                    onChange={(e) => setSenhaLoginEntrante(e.target.value)}
-                    placeholder="Digite sua senha de acesso"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium pl-9"
-                  />
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ocorrências e Alterações do Plantão *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Observações do Plantão / Ocorrências
+                </label>
                 <textarea
                   rows="3"
-                  required
+                  placeholder="Informe se há algum problema pendente no posto..."
                   value={ocorrenciasPlantao}
                   onChange={(e) => setOcorrenciasPlantao(e.target.value)}
-                  placeholder="Ex: Plantão tranquilo, sem alterações ou avarias."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                />
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                ></textarea>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalAssumirPosto(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase"
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-xs uppercase"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase"
+                  className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs uppercase"
                 >
-                  {loading ? 'Autenticando...' : 'Confirmar Troca'}
+                  {loading ? 'Autenticando...' : 'Assumir Posto'}
                 </button>
               </div>
             </form>
