@@ -20,7 +20,8 @@ import {
   ArrowRightLeft,
   VideoOff,
   Check,
-  Building2
+  Building2,
+  Trash2
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
@@ -202,9 +203,19 @@ export default function Rondas({ usuarioLogado }) {
     };
   }, []);
 
-  const getNomeSetor = (setorId) => {
-    const s = setoresChecklist.find(item => item.id === setorId);
-    return s ? s.titulo : (setorId || 'Setor Geral');
+  // Localiza o setor pelo id (ex: 'SETOR_B') ou título completo
+  const getObjetoSetor = (setorIdOuTitulo) => {
+    if (!setorIdOuTitulo) return setoresChecklist[0];
+    return (
+      setoresChecklist.find(
+        (item) => item.id === setorIdOuTitulo || item.titulo === setorIdOuTitulo
+      ) || setoresChecklist[0]
+    );
+  };
+
+  const getNomeSetor = (setorIdOuTitulo) => {
+    const s = getObjetoSetor(setorIdOuTitulo);
+    return s ? s.titulo : 'Setor Geral';
   };
 
   const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
@@ -503,6 +514,29 @@ export default function Rondas({ usuarioLogado }) {
     }
   };
 
+  const excluirPonto = async (pontoId) => {
+    if (!podeCadastrarPonto) return;
+    if (!window.confirm('Tem certeza que deseja excluir este ponto de ronda?')) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('rondas_pontos')
+        .delete()
+        .eq('id', pontoId)
+        .eq('condominio_id', usuarioLogado.condominio_id);
+
+      if (error) throw error;
+
+      setMensagem({ tipo: 'sucesso', texto: 'Ponto removido com sucesso!' });
+      carregarPontos();
+    } catch (err) {
+      setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const iniciarRonda = async () => {
     if (pontos.length === 0) {
       setMensagem({ tipo: 'erro', texto: 'Cadastre ao menos um ponto antes de iniciar.' });
@@ -625,7 +659,7 @@ export default function Rondas({ usuarioLogado }) {
     const lidosNomes = registrosRonda.map(r => {
       const nomePontoStr = r.rondas_pontos?.nome_ponto || 'Ponto';
       const horaStr = new Date(r.data_hora).toLocaleTimeString('pt-BR');
-      const obsStr = r.observacao ? `\n   📝 Observação: ${r.observacao}` : '';
+      const obsStr = r.observacao ? `\n    📝 Observação: ${r.observacao}` : '';
       return `• *${nomePontoStr}* (${horaStr})${obsStr}`;
     }).join('\n\n');
 
@@ -891,26 +925,38 @@ export default function Rondas({ usuarioLogado }) {
 
                       <h4 className="font-bold text-white text-xs mt-2">{ponto.nome_ponto}</h4>
                       
-                      <span className="inline-block bg-slate-800 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded mt-1 truncate max-w-full">
-                        🏢 {getNomeSetor(ponto.setor_id)}
+                      <span className="inline-block bg-slate-800 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded mt-1">
+                        {getNomeSetor(ponto.setor_id)}
                       </span>
 
                       {ponto.localizacao_descricao && (
-                        <p className="text-[10px] text-slate-400 mt-1">{ponto.localizacao_descricao}</p>
+                        <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
+                          {ponto.localizacao_descricao}
+                        </p>
                       )}
                     </div>
 
-                    <div className="mt-3 pt-2 border-t border-slate-800">
+                    <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
                       {lido ? (
-                        <span className="text-[10px] text-emerald-400 font-bold block">
-                          ✓ Lido às {new Date(reg?.data_hora).toLocaleTimeString('pt-BR')}
-                        </span>
+                        <div className="text-[10px] text-emerald-400 font-medium">
+                          Validado às {new Date(reg?.data_hora).toLocaleTimeString('pt-BR')}
+                        </div>
                       ) : (
                         <button
                           onClick={() => abrirRegistroPonto(ponto)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition uppercase flex items-center justify-center gap-1.5"
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5"
                         >
                           <QrCode className="w-3.5 h-3.5" /> Validar Ponto
+                        </button>
+                      )}
+
+                      {podeCadastrarPonto && (
+                        <button
+                          onClick={() => excluirPonto(ponto.id)}
+                          className="ml-2 text-slate-500 hover:text-red-400 p-1 rounded transition"
+                          title="Excluir Ponto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -922,389 +968,442 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL DE VALIDAÇÃO DO PONTO (QR CODE + CHECKLIST DO SETOR + BOTÃO FOTO + OBS) */}
-      {modalRegistrarPonto && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            
-            {/* Cabeçalho do Modal */}
-            <div className="flex justify-between items-center border-b pb-3">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <QrCode className="w-5 h-5 text-emerald-600" /> {modalRegistrarPonto.nome_ponto}
-                </h3>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 block w-fit mt-0.5">
-                  🏢 {getNomeSetor(modalRegistrarPonto.setor_id)}
-                </span>
-              </div>
-              <button onClick={fecharModalRegistroPonto} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              
-              {/* 1. SEÇÃO DO QR CODE */}
-              <div className="bg-slate-900 text-white p-3.5 rounded-xl text-center space-y-3">
-                <span className="text-[11px] text-slate-300 font-medium block">
-                  CÓDIGO ESPERADO: <strong className="text-emerald-400 font-mono">{modalRegistrarPonto.codigo_tag}</strong>
-                </span>
-
-                {lendoQrCamera ? (
-                  <div className="space-y-2">
-                    <div className="relative rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center border border-emerald-500">
-                      <video ref={videoRef} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 border-2 border-dashed border-emerald-400 opacity-60 pointer-events-none m-6 rounded-lg"></div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={pararCameraQr}
-                      className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2 rounded-lg transition flex items-center justify-center gap-1.5"
-                    >
-                      <VideoOff className="w-4 h-4" /> Cancelar Câmera
-                    </button>
-                  </div>
-                ) : codigoLido ? (
-                  <div className="bg-emerald-950/80 border border-emerald-500/50 p-2.5 rounded-lg flex items-center justify-center gap-2 text-emerald-300 text-xs font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>QR Code Lido: <strong className="font-mono text-white">{codigoLido}</strong></span>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={iniciarCameraQr}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 transition uppercase shadow-md"
-                    >
-                      <Camera className="w-4 h-4" /> Activar Câmera para Ler QR Code
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={validarSemCameraFallback}
-                      className="text-[11px] text-slate-400 hover:text-slate-200 underline block mx-auto"
-                    >
-                      Autoconfirmar Código Tag (Leitura Direta)
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* 2. CHECKLIST EXCLUSIVO DO SETOR VINCULADO */}
-              {(() => {
-                const setorDoPonto = setoresChecklist.find(s => s.id === (modalRegistrarPonto.setor_id || 'SETOR_A')) || setoresChecklist[0];
-                
-                return (
-                  <div className="bg-slate-100 p-3.5 rounded-xl space-y-2.5 border border-slate-200">
-                    <h4 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
-                      <Building2 className="w-4 h-4 text-emerald-600" />
-                      Checklist do {setorDoPonto.titulo}
-                    </h4>
-
-                    <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                      {setorDoPonto.itens.map((item, idx) => {
-                        const statusAtual = respostasChecklist[item] || 'ok';
-
-                        return (
-                          <div key={idx} className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
-                            <span className="font-medium text-slate-700 text-[11px] leading-tight">{item}</span>
-
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleAtualizarChecklist(item, 'ok')}
-                                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition ${
-                                  statusAtual === 'ok'
-                                    ? 'bg-emerald-600 text-white shadow-sm'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                }`}
-                              >
-                                <Check className="w-3 h-3" /> OK
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleAtualizarChecklist(item, 'avaria')}
-                                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition ${
-                                  statusAtual === 'avaria'
-                                    ? 'bg-red-600 text-white shadow-sm'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                }`}
-                              >
-                                <AlertTriangle className="w-3 h-3" /> Avaria
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 3. BOTÃO CUSTOMIZADO PARA TIRAR FOTO DO LOCAL */}
-              <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
-                  Foto de Evidência / Local
-                </label>
-                
-                {/* Input nativo escondido para abrir a câmera diretamente */}
-                <input
-                  ref={inputFotoRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={(e) => uploadFoto(e.target.files[0])}
-                  className="hidden"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => inputFotoRef.current?.click()}
-                  disabled={uploadingFoto}
-                  className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition uppercase shadow-sm"
-                >
-                  <Camera className="w-4 h-4" />
-                  {uploadingFoto ? 'Enviando Foto...' : fotoPontoUrl ? 'Tirar Outra Foto' : 'Tirar Foto do Local'}
-                </button>
-
-                {fotoPontoUrl && (
-                  <div className="mt-2 relative rounded-xl overflow-hidden border-2 border-emerald-500">
-                    <img src={fotoPontoUrl} alt="Evidência" className="w-full h-32 object-cover" />
-                    <span className="absolute bottom-2 right-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
-                      ✓ Foto Anexada
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* 4. ESPAÇO PARA OBSERVAÇÕES */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
-                  Observações / Ocorrências do Ponto
-                </label>
-                <textarea
-                  rows="2"
-                  value={observacaoPonto}
-                  onChange={(e) => setObservacaoPonto(e.target.value)}
-                  placeholder="Descreva observações ou avarias do ponto..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                ></textarea>
-              </div>
-
-              {/* 5. BOTÃO DE CONFIRMAÇÃO */}
-              <button
-                type="button"
-                onClick={confirmarLeituraPonto}
-                disabled={loading}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl text-xs uppercase transition shadow-md flex items-center justify-center gap-2"
-              >
-                {loading ? 'Salvando Validação...' : 'Confirmar e Salvar Ponto'}
-              </button>
-            </div>
+      {/* LISTA DE PONTOS CADASTRADOS (FORA DA RONDA) */}
+      {!rondaAtiva && (
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-emerald-600" /> Pontos de Ronda Cadastrados ({pontos.length})
+            </h4>
           </div>
+
+          {pontos.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">
+              Nenhum ponto de ronda cadastrado ainda. Clique em "Cadastrar Ponto" para adicionar.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {pontos.map((p) => (
+                <div key={p.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-mono bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">
+                      {p.codigo_tag}
+                    </span>
+                    <h5 className="font-bold text-slate-800 text-xs mt-1">{p.nome_ponto}</h5>
+                    <span className="text-[10px] text-emerald-700 font-medium block mt-0.5">
+                      {getNomeSetor(p.setor_id)}
+                    </span>
+                    {p.localizacao_descricao && (
+                      <p className="text-[11px] text-slate-500 mt-1">{p.localizacao_descricao}</p>
+                    )}
+                  </div>
+                  {podeCadastrarPonto && (
+                    <button
+                      onClick={() => excluirPonto(p.id)}
+                      className="text-slate-400 hover:text-red-600 p-1 transition"
+                      title="Excluir Ponto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* MODAL CADASTRAR PONTO */}
+      {/* MODAL: CADASTRAR NOVO PONTO */}
       {modalNovoPonto && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-100">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h4 className="font-bold text-slate-800 text-base flex items-center gap-2">
                 <Plus className="w-5 h-5 text-emerald-600" /> Cadastrar Ponto de Ronda
-              </h3>
+              </h4>
               <button onClick={() => setModalNovoPonto(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={cadastrarPonto} className="space-y-3">
+            <form onSubmit={cadastrarPonto} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Setor do Ponto
                 </label>
                 <select
                   value={setorPonto}
                   onChange={(e) => setSetorPonto(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  {setoresChecklist.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.titulo}
+                  {setoresChecklist.map((setor) => (
+                    <option key={setor.id} value={setor.id}>
+                      {setor.titulo}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Nome do Ponto
                 </label>
                 <input
                   type="text"
-                  required
+                  placeholder="Ex: Guarita Principal, Portão da Garagem..."
                   value={nomePonto}
                   onChange={(e) => setNomePonto(e.target.value)}
-                  placeholder="Ex: Guarita Principal, Subsolo -1, Salão de Festas"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Código da Tag / QR Code
                 </label>
                 <input
                   type="text"
-                  required
+                  placeholder="Ex: TAG-001 ou código do QR Code"
                   value={codigoTag}
                   onChange={(e) => setCodigoTag(e.target.value)}
-                  placeholder="Ex: TAG-GUARITA-01"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold uppercase font-mono"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
-                  Descrição do Local
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Descrição do Local / Instruções
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  placeholder="Instruções para o ronda ao passar por aqui..."
                   value={descricaoPonto}
                   onChange={(e) => setDescricaoPonto(e.target.value)}
-                  placeholder="Ex: Ao lado da porta da expedição de encomendas"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                  rows={2}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
-              <div className="bg-slate-100 p-3 rounded-xl space-y-2">
+              <div>
                 <button
                   type="button"
                   onClick={capturarGPSNovoPonto}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition ${
+                    coordsNovoPonto
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-slate-900 text-white border-slate-800 hover:bg-slate-800'
+                  }`}
                 >
-                  <MapPin className="w-4 h-4 text-emerald-400" /> Capture GPS do Local
+                  <MapPin className="w-4 h-4" />
+                  {coordsNovoPonto ? `GPS Capturado (${coordsNovoPonto.lat.toFixed(4)}, ${coordsNovoPonto.lng.toFixed(4)})` : 'Capturar GPS do Local'}
                 </button>
-
-                {coordsNovoPonto && (
-                  <p className="text-[10px] text-emerald-700 font-bold text-center font-mono">
-                    ✓ GPS Capturado: {coordsNovoPonto.lat.toFixed(5)}, {coordsNovoPonto.lng.toFixed(5)}
-                  </p>
-                )}
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs uppercase transition shadow-md"
-              >
-                {loading ? 'Salvando...' : 'Salvar Ponto'}
-              </button>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs transition uppercase shadow-md"
+                >
+                  {loading ? 'Salvando...' : 'Salvar Ponto'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL ASSUMIR POSTO */}
-      {modalAssumirPosto && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-blue-600" /> Assumir Posto / Troca de Plantão
-              </h3>
-              <button onClick={() => setModalAssumirPosto(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5 text-slate-600" />
+      {/* MODAL: VALIDAR PONTO DA RONDA */}
+      {modalRegistrarPonto && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl my-8 border border-slate-100">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-md mb-1">
+                  {getNomeSetor(modalRegistrarPonto.setor_id)}
+                </span>
+                <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <QrCode className="w-5 h-5 text-emerald-600" /> {modalRegistrarPonto.nome_ponto}
+                </h4>
+              </div>
+              <button onClick={fecharModalRegistroPonto} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={efetivarAssumirPosto} className="space-y-3">
+            {/* LEITURA DE QR CODE */}
+            <div className="bg-slate-950 p-4 rounded-2xl text-center space-y-3 border border-slate-800">
+              <span className="text-[11px] font-mono text-emerald-400 tracking-wider block uppercase">
+                Código Esperado: {modalRegistrarPonto.codigo_tag}
+              </span>
+
+              {lendoQrCamera ? (
+                <div className="relative rounded-xl overflow-hidden bg-black max-h-52 flex justify-center items-center">
+                  <video ref={videoRef} className="w-full h-48 object-cover" />
+                  <button
+                    onClick={pararCameraQr}
+                    className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full"
+                  >
+                    <VideoOff className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={iniciarCameraQr}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 uppercase shadow-sm"
+                  >
+                    <Camera className="w-4 h-4" /> Activar Câmera para Ler QR Code
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={validarSemCameraFallback}
+                    className="text-xs text-slate-400 hover:text-white underline transition block mx-auto"
+                  >
+                    Autoconfirmar Código Tag (Leitura Direta)
+                  </button>
+                </div>
+              )}
+
+              {codigoLido && (
+                <div className="bg-emerald-950/80 border border-emerald-600/50 p-2 rounded-xl text-emerald-300 text-xs font-mono font-bold flex items-center justify-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-400" /> Tag Confirmada: {codigoLido}
+                </div>
+              )}
+            </div>
+
+            {/* CHECKLIST DINÂMICO DO SETOR */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <h5 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Checklist do {getNomeSetor(modalRegistrarPonto.setor_id)}
+              </h5>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {getObjetoSetor(modalRegistrarPonto.setor_id).itens.map((item, idx) => {
+                  const status = respostasChecklist[item] || 'ok';
+                  return (
+                    <div key={idx} className="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-sm">
+                      <span className="text-xs text-slate-700 font-medium">{item}</span>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleAtualizarChecklist(item, 'ok')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                            status === 'ok' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                        >
+                          <Check className="w-3 h-3" /> OK
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAtualizarChecklist(item, 'avaria')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                            status === 'avaria' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                        >
+                          <AlertTriangle className="w-3 h-3" /> Avaria
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* FOTO E EVIDÊNCIA */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Foto de Evidência / Local
+              </label>
+
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={inputFotoRef}
+                onChange={(e) => uploadFoto(e.target.files[0])}
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                onClick={() => inputFotoRef.current?.click()}
+                disabled={uploadingFoto}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-2 uppercase shadow-sm"
+              >
+                <Camera className="w-4 h-4" /> {uploadingFoto ? 'Enviando...' : 'Tirar Foto do Local'}
+              </button>
+
+              {fotoPontoUrl && (
+                <div className="mt-2 relative rounded-xl overflow-hidden border border-slate-300">
+                  <img src={fotoPontoUrl} alt="Evidência Ponto" className="w-full h-32 object-cover" />
+                </div>
+              )}
+            </div>
+
+            {/* OBSERVAÇÃO */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Observações / Ocorrências do Ponto
+              </label>
+              <textarea
+                placeholder="Descreva observações ou avarias do ponto..."
+                value={observacaoPonto}
+                onChange={(e) => setObservacaoPonto(e.target.value)}
+                rows={2}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={confirmarLeituraPonto}
+              disabled={loading}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl text-xs transition uppercase shadow-md"
+            >
+              {loading ? 'Validando...' : 'Confirmar e Salvar Ponto'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASSUMIR POSTO */}
+      {modalAssumirPosto && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-100">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h4 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-blue-600" /> Assumir Posto de Ronda
+              </h4>
+              <button onClick={() => setModalAssumirPosto(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={efetivarAssumirPosto} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Operador Entrante
                 </label>
                 <select
-                  required
                   value={operadorSelecionadoId}
                   onChange={(e) => setOperadorSelecionadoId(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 >
-                  <option value="">-- Selecione o Operador --</option>
+                  <option value="">Selecione o operador...</option>
                   {listaOperadores.map((op) => (
-                    <option key={op.id} value={op.id}>{op.nome} ({op.login})</option>
+                    <option key={op.id} value={op.id}>
+                      {op.nome} ({op.funcao || 'Operador'})
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
-                  Senha do Entrante
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Senha do Operador Entrante
                 </label>
                 <input
                   type="password"
-                  required
+                  placeholder="Digite sua senha..."
                   value={senhaLoginEntrante}
                   onChange={(e) => setSenhaLoginEntrante(e.target.value)}
-                  placeholder="Digite sua senha de acesso"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
-                  Ocorrências do Plantão
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Ocorrências do Plantão / Passagem
                 </label>
                 <textarea
-                  rows="3"
+                  placeholder="Relate aqui pendências ou avisos do plantão..."
                   value={ocorrenciasPlantao}
                   onChange={(e) => setOcorrenciasPlantao(e.target.value)}
-                  placeholder="Relate alterações ou informe 'Sem alterações'..."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
-                ></textarea>
+                  rows={3}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs uppercase transition shadow-md"
-              >
-                {loading ? 'Validando...' : 'Efetivar Troca de Posto'}
-              </button>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs transition uppercase shadow-md"
+                >
+                  {loading ? 'Verificando...' : 'Confirmar Passagem de Posto'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* HISTÓRICO DE RONDAS */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-          <History className="w-5 h-5 text-slate-600" /> Histórico de Rondas Anteriores
-        </h3>
+      {/* HISTÓRICOS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Histórico de Rondas */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <History className="w-4 h-4 text-emerald-600" /> Histórico de Rondas Anteriores
+          </h4>
 
-        {historicoRondas.length === 0 ? (
-          <p className="text-xs text-slate-500 font-medium">Nenhuma ronda finalizada recentemente.</p>
-        ) : (
-          <div className="space-y-2">
-            {historicoRondas.map((h) => (
-              <div key={h.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold space-y-1">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-900">{h.operador_nome}</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+          {historicoRondas.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">Nenhum histórico registrado.</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {historicoRondas.map((h) => (
+                <div key={h.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold text-slate-800">{h.operador_nome}</span>
+                    <p className="text-[11px] text-slate-500">
+                      {new Date(h.data_inicio).toLocaleString('pt-BR')} — {h.pontos_lidos}/{h.pontos_totais} Pontos
+                    </p>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                     h.status === 'Concluída' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                   }`}>
                     {h.status}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  {new Date(h.data_inicio).toLocaleString('pt-BR')} — {h.pontos_lidos}/{h.pontos_totais} Pontos
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
 
+        {/* Histórico de Passagens de Posto */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <ArrowRightLeft className="w-4 h-4 text-blue-600" /> Passagens de Posto Recentes
+          </h4>
+
+          {historicoPassagens.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">Nenhuma troca de posto registrada.</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {historicoPassagens.map((p) => (
+                <div key={p.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-700 font-medium">
+                    <span>Sainte: <strong>{p.operador_sainte}</strong></span>
+                    <span>Entrante: <strong>{p.operador_entrante}</strong></span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">{new Date(p.data_hora).toLocaleString('pt-BR')}</p>
+                  {p.ocorrencias_plantao && (
+                    <p className="text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-200">
+                      {p.ocorrencias_plantao}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
