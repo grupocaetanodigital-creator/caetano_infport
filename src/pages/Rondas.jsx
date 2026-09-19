@@ -20,13 +20,16 @@ import {
   ArrowRightLeft,
   VideoOff,
   Check,
-  Building2
+  Building2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
+
+  const inputFotoRef = useRef(null);
 
   const nivelNum = Number(usuarioLogado?.nivel);
   const perfilTexto = String(
@@ -370,7 +373,7 @@ export default function Rondas({ usuarioLogado }) {
         .getPublicUrl(fileName);
 
       setFotoPontoUrl(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto anexada com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada e enviada com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao enviar foto: ' + err.message });
     } finally {
@@ -496,7 +499,7 @@ export default function Rondas({ usuarioLogado }) {
       setMensagem({ tipo: 'sucesso', texto: 'Ponto cadastrado e vinculado ao setor com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
-    } finally {
+    } fontally {
       setLoading(false);
     }
   };
@@ -557,6 +560,7 @@ export default function Rondas({ usuarioLogado }) {
       return;
     }
 
+    let textoAlertaForaArea = '';
     if (modalRegistrarPonto.latitude && modalRegistrarPonto.longitude) {
       const distanciaMetros = calcularDistanciaMetros(
         coords.lat,
@@ -568,17 +572,18 @@ export default function Rondas({ usuarioLogado }) {
       const DISTANCIA_MAXIMA = 50;
 
       if (distanciaMetros !== null && distanciaMetros > DISTANCIA_MAXIMA) {
-        setMensagem({
-          tipo: 'erro',
-          texto: `Local divergente! Você está a ${distanciaMetros}m do ponto (Máximo permitido: ${DISTANCIA_MAXIMA}m).`
-        });
-        return;
+        textoAlertaForaArea = `🚨 [TENTATIVA FORA DA ÁREA DESIGNADA: ${distanciaMetros}m de distância]`;
       }
     }
 
     setLoading(true);
 
     try {
+      const observacaoFinal = [
+        textoAlertaForaArea,
+        observacaoPonto.trim()
+      ].filter(Boolean).join(' - ') || 'Ponto verificado e checklist realizado.';
+
       const { error } = await supabase
         .from('rondas_registros')
         .insert([{
@@ -589,14 +594,19 @@ export default function Rondas({ usuarioLogado }) {
           latitude: coords.lat,
           longitude: coords.lng,
           foto_evidencia_url: fotoPontoUrl.trim() || '',
-          observacao: observacaoPonto.trim() || 'Ponto verificado e checklist realizado.'
+          observacao: observacaoFinal
         }]);
 
       if (error) throw error;
 
       fecharModalRegistroPonto();
       carregarRegistrosRonda(rondaAtiva.id);
-      setMensagem({ tipo: 'sucesso', texto: `Ponto "${modalRegistrarPonto.nome_ponto}" validado com sucesso!` });
+      
+      if (textoAlertaForaArea) {
+        setMensagem({ tipo: 'erro', texto: `Ponto validado com alerta de localização divergente (${textoAlertaForaArea})!` });
+      } else {
+        setMensagem({ tipo: 'sucesso', texto: `Ponto "${modalRegistrarPonto.nome_ponto}" validado com sucesso!` });
+      }
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
@@ -613,22 +623,35 @@ export default function Rondas({ usuarioLogado }) {
     const todosLidos = pontos.every(p => pontosLidosIds.includes(p.id));
     const statusFinal = todosLidos ? 'Concluída' : 'Incompleta';
 
-    const lidosNomes = registrosRonda.map(r => `• ${r.rondas_pontos?.nome_ponto || 'Ponto'} (${new Date(r.data_hora).toLocaleTimeString('pt-BR')}) ${r.observacao ? `- ${r.observacao}` : ''}`).join('\n');
-    const zeradosNomes = pontos.filter(p => !pontosLidosIds.includes(p.id)).map(p => `• ${p.nome_ponto}`).join('\n');
-    const fotosEvidencias = registrosRonda.filter(r => r.foto_evidencia_url).map(r => `📷 ${r.rondas_pontos?.nome_ponto}: ${r.foto_evidencia_url}`).join('\n');
+    const lidosNomes = registrosRonda.map(r => {
+      const nomePontoStr = r.rondas_pontos?.nome_ponto || 'Ponto';
+      const horaStr = new Date(r.data_hora).toLocaleTimeString('pt-BR');
+      const obsStr = r.observacao ? `\n   📝 Observação: ${r.observacao}` : '';
+      return `• *${nomePontoStr}* (${horaStr})${obsStr}`;
+    }).join('\n\n');
 
-    // Resumo dos Itens do Checklist
+    const zeradosNomes = pontos.filter(p => !pontosLidosIds.includes(p.id)).map(p => `• ${p.nome_ponto}`).join('\n');
+    const fotosEvidencias = registrosRonda.filter(r => r.foto_evidencia_url).map(r => `📷 *${r.rondas_pontos?.nome_ponto}*:\n${r.foto_evidencia_url}`).join('\n\n');
+
+    const alertasForaArea = registrosRonda
+      .filter(r => r.observacao && r.observacao.includes('TENTATIVA FORA DA ÁREA'))
+      .map(r => `🚨 *${r.rondas_pontos?.nome_ponto}*: ${r.observacao}`)
+      .join('\n');
+
     const itensComAvaria = Object.entries(respostasChecklist)
       .filter(([_, status]) => status === 'avaria')
       .map(([item]) => `⚠️ ${item}`)
       .join('\n');
 
     const resumoTexto = `🛡️ *RELATÓRIO PATRIMONIAL DE RONDA*\n` +
-      `👤 Ronda: ${operadorRondaAtual}\n` +
-      `⏱️ Início: ${new Date(rondaAtiva.data_inicio).toLocaleString('pt-BR')}\n` +
-      `🏁 Fim: ${dataFim.toLocaleString('pt-BR')}\n` +
-      `📊 Status: ${statusFinal.toUpperCase()} (${registrosRonda.length}/${pontos.length})\n\n` +
-      `✅ *PONTOS VALIDADOS:*\n${lidosNomes || 'Nenhum'}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n` +
+      `👤 *Ronda/Operador:* ${operadorRondaAtual}\n` +
+      `⏱️ *Início:* ${new Date(rondaAtiva.data_inicio).toLocaleString('pt-BR')}\n` +
+      `🏁 *Fim:* ${dataFim.toLocaleString('pt-BR')}\n` +
+      `📊 *Status:* ${statusFinal.toUpperCase()} (${registrosRonda.length}/${pontos.length})\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `✅ *PONTOS VALIDADOS COM OBSERVAÇÕES:*\n${lidosNomes || 'Nenhum'}\n\n` +
+      (alertasForaArea ? `🚨 *ALERTAS DE VALIDAÇÃO FORA DA ÁREA:*\n${alertasForaArea}\n\n` : '') +
       (zeradosNomes ? `⚠️ *PONTOS ZERADOS / NÃO VISITADOS:*\n${zeradosNomes}\n\n` : '') +
       (itensComAvaria ? `🚨 *AVARIAS REGISTRADAS NO CHECKLIST:*\n${itensComAvaria}\n\n` : '') +
       (fotosEvidencias ? `📸 *EVIDÊNCIAS FOTOGRÁFICAS:*\n${fotosEvidencias}\n` : '');
@@ -792,8 +815,8 @@ export default function Rondas({ usuarioLogado }) {
           <div className="flex items-center gap-3">
             <MessageCircle className="w-8 h-8 text-emerald-600 flex-shrink-0" />
             <div>
-              <strong className="font-bold text-emerald-900 text-sm">Relatório de Ronda Gerado!</strong>
-              <p className="text-xs text-emerald-700">Dispare os detalhes e evidências no grupo do condomínio.</p>
+              <strong className="font-bold text-emerald-900 text-sm">Relatório Detalhado Gerado!</strong>
+              <p className="text-xs text-emerald-700">Envie o relatório completo com observações e fotos no grupo.</p>
             </div>
           </div>
           <a
@@ -802,7 +825,7 @@ export default function Rondas({ usuarioLogado }) {
             rel="noreferrer"
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md"
           >
-            <MessageCircle className="w-4 h-4" /> Enviar no Grupo <ExternalLink className="w-3.5 h-3.5" />
+            <MessageCircle className="w-4 h-4" /> Enviar no WhatsApp <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
       )}
@@ -900,7 +923,7 @@ export default function Rondas({ usuarioLogado }) {
         </div>
       )}
 
-      {/* MODAL DE VALIDAÇÃO DO PONTO (QR CODE + CHECKLIST DO SETOR + FOTO + OBS) */}
+      {/* MODAL DE VALIDAÇÃO DO PONTO (QR CODE + CHECKLIST DO SETOR + BOTÃO FOTO + OBS) */}
       {modalRegistrarPonto && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
@@ -1020,21 +1043,40 @@ export default function Rondas({ usuarioLogado }) {
                 );
               })()}
 
-              {/* 3. BOTÃO / CAMPO DE FOTO DE EVIDÊNCIA */}
+              {/* 3. BOTÃO CUSTOMIZADO PARA TIRAR FOTO DO LOCAL */}
               <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
-                  <Camera className="w-4 h-4 text-blue-600" /> Foto de Evidência / Local
+                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                  Foto de Evidência / Local
                 </label>
+                
+                {/* Input nativo escondido */}
                 <input
+                  ref={inputFotoRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
                   onChange={(e) => uploadFoto(e.target.files[0])}
-                  className="w-full text-xs text-slate-600 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-white hover:file:bg-slate-700 cursor-pointer"
+                  className="hidden"
                 />
-                {uploadingFoto && <p className="text-[10px] text-blue-600 font-bold">Enviando foto...</p>}
+
+                {/* Botão Bonito e Customizado */}
+                <button
+                  type="button"
+                  onClick={() => inputFotoRef.current?.click()}
+                  disabled={uploadingFoto}
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition uppercase shadow-sm"
+                >
+                  <Camera className="w-4 h-4" />
+                  {uploadingFoto ? 'Enviando Foto...' : fotoPontoUrl ? 'Tirar Outra Foto' : 'Tirar Foto do Local'}
+                </button>
+
                 {fotoPontoUrl && (
-                  <img src={fotoPontoUrl} alt="Evidência" className="w-full h-28 object-cover rounded-xl border border-emerald-500 mt-2 shadow-sm" />
+                  <div className="mt-2 relative rounded-xl overflow-hidden border-2 border-emerald-500">
+                    <img src={fotoPontoUrl} alt="Evidência" className="w-full h-32 object-cover" />
+                    <span className="absolute bottom-2 right-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
+                      ✓ Foto Anexada
+                    </span>
+                  </div>
                 )}
               </div>
 
