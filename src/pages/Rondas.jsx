@@ -28,7 +28,8 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
-  Building2
+  Building2,
+  FolderTree
 } from 'lucide-react';
 
 export default function Rondas({ usuarioLogado }) {
@@ -186,6 +187,7 @@ export default function Rondas({ usuarioLogado }) {
   const [nomePonto, setNomePonto] = useState('');
   const [codigoTag, setCodigoTag] = useState('');
   const [descricaoPonto, setDescricaoPonto] = useState('');
+  const [setorPonto, setSetorPonto] = useState('SETOR_A');
   const [coordsNovoPonto, setCoordsNovoPonto] = useState(null);
 
   // Form Leitura de Ponto
@@ -216,6 +218,11 @@ export default function Rondas({ usuarioLogado }) {
       pararCameraQr();
     };
   }, []);
+
+  const getNomeSetor = (setorId) => {
+    const s = setoresChecklist.find(item => item.id === setorId);
+    return s ? s.titulo : (setorId || 'Setor Geral');
+  };
 
   const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
     if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
@@ -502,6 +509,7 @@ export default function Rondas({ usuarioLogado }) {
           nome_ponto: nomePonto.trim(),
           codigo_tag: codigoTag.trim().toUpperCase(),
           localizacao_descricao: descricaoPonto.trim(),
+          setor_id: setorPonto,
           latitude: coordsNovoPonto.lat,
           longitude: coordsNovoPonto.lng
         }]);
@@ -511,10 +519,11 @@ export default function Rondas({ usuarioLogado }) {
       setNomePonto('');
       setCodigoTag('');
       setDescricaoPonto('');
+      setSetorPonto('SETOR_A');
       setCoordsNovoPonto(null);
       setModalNovoPonto(false);
       carregarPontos();
-      setMensagem({ tipo: 'sucesso', texto: 'Ponto cadastrado com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Ponto cadastrado e vinculado ao setor com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
@@ -882,20 +891,26 @@ export default function Rondas({ usuarioLogado }) {
                     }`}
                   >
                     <div>
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center gap-1">
                         <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
                           {ponto.codigo_tag}
                         </span>
                         {lido ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                         ) : (
-                          <QrCode className="w-5 h-5 text-slate-500" />
+                          <QrCode className="w-5 h-5 text-slate-500 shrink-0" />
                         )}
                       </div>
 
                       <h4 className="font-bold text-white text-xs mt-2">{ponto.nome_ponto}</h4>
+                      
+                      {/* ETIQUETA DO SETOR VINCULADO */}
+                      <span className="inline-block bg-slate-800 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded mt-1 truncate max-w-full">
+                        🏢 {getNomeSetor(ponto.setor_id)}
+                      </span>
+
                       {ponto.localizacao_descricao && (
-                        <p className="text-[10px] text-slate-400 mt-0.5">{ponto.localizacao_descricao}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{ponto.localizacao_descricao}</p>
                       )}
                     </div>
 
@@ -1125,6 +1140,23 @@ export default function Rondas({ usuarioLogado }) {
             </div>
 
             <form onSubmit={cadastrarPonto} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
+                  Setor do Ponto
+                </label>
+                <select
+                  value={setorPonto}
+                  onChange={(e) => setSetorPonto(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                >
+                  {setoresChecklist.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.titulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase mb-1">
                   Nome do Ponto
