@@ -62,7 +62,32 @@ export default function PrestadoresObras({ usuarioLogado }) {
     }
   };
 
-  // Leitura de Documentos via OCR
+  // Função para carregar e rotacionar a imagem no Canvas para tratar fotos tiradas na vertical
+  const processarImagemCanvas = (fileSource, angulo = 0) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (angulo === 90 || angulo === 270) {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((angulo * Math.PI) / 180);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      };
+      img.src = URL.createObjectURL(fileSource);
+    });
+  };
+
+  // Leitura de Documentos via OCR com Rotação Inteligente
   const processarDocumentoOCR = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -71,61 +96,87 @@ export default function PrestadoresObras({ usuarioLogado }) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      // Carregamento dinâmico do Tesseract OCR 100% gratuito no navegador
       if (!window.Tesseract) {
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
           script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
           script.onload = resolve;
-          script.onerror = () => reject(new Error('Não foi possível carregar a biblioteca de OCR. Verifique sua conexão.'));
+          script.onerror = () => reject(new Error('Erro ao carregar a biblioteca Tesseract.js.'));
           document.head.appendChild(script);
         });
       }
 
-      // Execução direta e simplificada do OCR no Tesseract v5
-      const ret = await window.Tesseract.recognize(file, 'por');
-      const textoLido = ret?.data?.text || '';
+      const angulosTeste = [0, 90, 270];
+      let textoLidoMelhor = '';
+      let cpfEncontrado = null;
+      let rgEncontrado = null;
 
-      if (!textoLido.trim()) {
-        throw new Error('Nenhum texto legível foi identificado na foto do documento.');
+      // Executa tentativas de OCR variando os ângulos caso a imagem esteja virada
+      for (const angulo of angulosTeste) {
+        const imgData = await processarImagemCanvas(file, angulo);
+        const ret = await window.Tesseract.recognize(imgData, 'por');
+        const txt = ret?.data?.text || '';
+
+        const cpfMatch = txt.match(/\d{3}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?\d{2}/) || txt.match(/\d{11}/);
+        const rgMatch = txt.match(/\d{1,2}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?[\dX|x]/i);
+
+        if (cpfMatch || rgMatch) {
+          textoLidoMelhor = txt;
+          if (cpfMatch) cpfEncontrado = cpfMatch[0].replace(/[^\d]/g, '');
+          if (rgMatch) rgEncontrado = rgMatch[0].replace(/\s/g, '');
+          break; // Interrompe se já encontrou o documento no ângulo testado
+        }
+
+        if (!textoLidoMelhor) {
+          textoLidoMelhor = txt;
+        }
       }
 
-      // Extração de CPF ou RG com expressões regulares flexíveis
-      const cpfMatch = textoLido.match(/\d{3}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?\d{2}/) || textoLido.match(/\d{11}/);
-      const rgMatch = textoLido.match(/\d{1,2}[\s.]?\d{3}[\s.]?\d{3}[\s.-]?[\dX|x]/i);
-
-      if (cpfMatch) {
-        setDocumento(cpfMatch[0].replace(/\s/g, ''));
-      } else if (rgMatch) {
-        setDocumento(rgMatch[0].replace(/\s/g, ''));
+      // Aplica máscara e preenche o documento
+      let docFinal = '';
+      if (cpfEncontrado && cpfEncontrado.length === 11) {
+        docFinal = cpfEncontrado.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        setDocumento(docFinal);
+      } else if (rgEncontrado) {
+        docFinal = rgEncontrado;
+        setDocumento(rgEncontrado);
       }
 
-      // Termos comuns em documentos a serem ignorados para não preencher como nome
+      // Termos de cabeçalho e labels de RG / CNH a serem ignorados
       const palavrasIgnoradas = [
-        'REPUBLICA', 'FEDERATIVA', 'BRASIL', 'CARTEIRA', 'IDENTIDADE',
+        'REPUBLICA', 'FEDERATIVA', 'BRASIL', 'CARTEIRA', 'HABILITACAO', 'IDENTIDADE',
         'REGISTRO', 'GERAL', 'MINISTERIO', 'FAZENDA', 'RECEITA', 'FEDERAL',
-        'VALIDA', 'TODO', 'TERRITORIO', 'NACIONAL', 'CPF', 'NOME', 'DOC', 'ESTADO'
+        'VALIDA', 'TERRITORIO', 'NACIONAL', 'CPF', 'NOME', 'SOBRENOME', 'DRIVER',
+        'LICENSE', 'PERMISO', 'CONDUCCION', 'SECRETARIA', 'INFRAESTRUTURA', 'TRANSITO',
+        'FILIACAO', 'NACIONALIDADE', 'BRASILEIRO', 'ASSINATURA', 'PORTADOR', 'EMISSAO', 'DOC'
       ];
 
-      // Busca pela linha provável do nome do profissional
-      const linhas = textoLido.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+      // Busca linha provável do nome completo
+      const linhas = textoLidoMelhor.split('\n').map(l => l.trim()).filter(l => l.length > 3);
       const linhaNome = linhas.find(linha => {
         const linhaUpper = linha.toUpperCase();
         const temNumero = /\d/.test(linha);
-        const ehPalavraChave = palavrasIgnoradas.some(p => linhaUpper.includes(p));
-        return !temNumero && !ehPalavraChave && linha.length >= 6;
+        const ehIgnorada = palavrasIgnoradas.some(p => linhaUpper.includes(p));
+        return !temNumero && !ehIgnorada && linha.length >= 6;
       });
 
       if (linhaNome) {
-        setNomeProfissional(linhaNome);
+        const nomeFormatado = linhaNome.replace(/[^a-zA-LÁ-ÿ\s]/g, '').replace(/\s+/g, ' ').trim();
+        if (nomeFormatado.length >= 5) {
+          setNomeProfissional(nomeFormatado);
+        }
       }
 
-      setMensagem({ tipo: 'sucesso', texto: 'OCR concluído com sucesso! Verifique os dados extraídos.' });
+      if (docFinal || linhaNome) {
+        setMensagem({ tipo: 'sucesso', texto: 'OCR concluído com sucesso! Confira os dados e clique em "Salvar Cadastro".' });
+      } else {
+        setMensagem({ tipo: 'erro', texto: 'Não foi possível identificar dados legíveis no documento. Tente tirar uma foto mais nítida ou preencha manualmente.' });
+      }
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Falha na leitura do documento: ' + err.message });
     } finally {
       setProcessandoOcr(false);
-      e.target.value = ''; // Permite selecionar a mesma imagem novamente se necessário
+      e.target.value = '';
     }
   };
 
@@ -162,7 +213,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
       setBlocoDestino('');
       setAtendeCondominio(false);
       setObservacoes('');
-      carregarPrestadores();
+      await carregarPrestadores();
       setMensagem({ tipo: 'sucesso', texto: 'Prestador / Obra cadastrado com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao cadastrar: ' + err.message });
@@ -191,7 +242,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
       setModalAcesso(false);
       setPrestadorSelecionado(null);
       setCracha('');
-      carregarPrestadores();
+      await carregarPrestadores();
       setMensagem({ tipo: 'sucesso', texto: 'Entrada registrada com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao registrar entrada: ' + err.message });
@@ -212,7 +263,7 @@ export default function PrestadoresObras({ usuarioLogado }) {
         .eq('id', id);
 
       if (error) throw error;
-      carregarPrestadores();
+      await carregarPrestadores();
       setMensagem({ tipo: 'sucesso', texto: 'Saída registrada e crachá devolvido!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao registrar saída: ' + err.message });
@@ -364,12 +415,12 @@ export default function PrestadoresObras({ usuarioLogado }) {
             <div className="bg-slate-900 text-white p-3.5 rounded-xl space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
-                  <Scan className="w-4 h-4" /> Leitura OCR de Documento (RG/CPF)
+                  <Scan className="w-4 h-4" /> Leitura OCR de Documento (RG/CPF/CNH)
                 </span>
                 {processandoOcr && <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />}
               </div>
               <p className="text-[11px] text-slate-300">
-                Tire foto do documento para preencher o nome e número automaticamente.
+                Tire foto do documento para preencher o nome e número automaticamente (mesmo se a foto estiver na vertical).
               </p>
 
               <label className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition w-full">
