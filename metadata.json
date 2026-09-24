@@ -1,0 +1,6 @@
+{
+  "name": "INFPORT 1.0 - Sistema Integrado de Portaria",
+  "description": "Sistema integrado de portaria, controle de acesso, rondas patrimoniais, encomendas, custódia e assistente de organização do Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
