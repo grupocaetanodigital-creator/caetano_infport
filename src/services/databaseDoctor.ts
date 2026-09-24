@@ -384,3 +384,238 @@ WHERE table_schema = 'public'
 ORDER BY table_name;
 `;
 }
+
+export interface CondominioConfigDiagnostic {
+  condominioId: string;
+  condominioNome: string;
+  configId?: string | null;
+  status: 'integra' | 'ausente' | 'corrompida';
+  detalhesStatus: string;
+  featureFlags: {
+    mod02_gestao_encomendas: boolean;
+    mod03_custodia_itens: boolean;
+    mod04_materiais_posto: boolean;
+    mod05_quadro_chaves: boolean;
+    mod06_gestao_manutencao: boolean;
+    mod07_gestao_ronda: boolean;
+    mod08_livro_ocorrencias: boolean;
+    mod09_passagem_posto: boolean;
+    mod10_prestadores_servico: boolean;
+  };
+  chavesFaltantes: string[];
+}
+
+export const REQUIRED_MODULE_KEYS = [
+  'mod02_gestao_encomendas',
+  'mod03_custodia_itens',
+  'mod04_materiais_posto',
+  'mod05_quadro_chaves',
+  'mod06_gestao_manutencao',
+  'mod07_gestao_ronda',
+  'mod08_livro_ocorrencias',
+  'mod09_passagem_posto',
+  'mod10_prestadores_servico'
+] as const;
+
+/**
+ * Executa verificação de integridade das configurações de módulos
+ * para cada condomínio cadastrado na tabela condominios.
+ */
+export async function auditCondominiosConfigs(): Promise<CondominioConfigDiagnostic[]> {
+  try {
+    const { data: condominios, error: condErr } = await supabase
+      .from('condominios')
+      .select('id, nome')
+      .order('nome', { ascending: true });
+
+    if (condErr) throw condErr;
+    if (!condominios || condominios.length === 0) return [];
+
+    const { data: configs, error: cfgErr } = await supabase
+      .from('configuracoes')
+      .select('*');
+
+    if (cfgErr) {
+      console.warn('Aviso ao consultar configuracoes:', cfgErr.message);
+    }
+
+    const listaDiagnosticos: CondominioConfigDiagnostic[] = condominios.map((condo) => {
+      const cfg = configs?.find((c) => c.condominio_id === condo.id);
+
+      if (!cfg) {
+        return {
+          condominioId: condo.id,
+          condominioNome: condo.nome || 'Condomínio Sem Nome',
+          configId: null,
+          status: 'ausente',
+          detalhesStatus: 'Nenhum registro encontrado na tabela configuracoes.',
+          featureFlags: {
+            mod02_gestao_encomendas: true,
+            mod03_custodia_itens: true,
+            mod04_materiais_posto: true,
+            mod05_quadro_chaves: true,
+            mod06_gestao_manutencao: true,
+            mod07_gestao_ronda: true,
+            mod08_livro_ocorrencias: true,
+            mod09_passagem_posto: true,
+            mod10_prestadores_servico: true
+          },
+          chavesFaltantes: [...REQUIRED_MODULE_KEYS]
+        };
+      }
+
+      const flagsJson = typeof cfg.feature_flags === 'object' && cfg.feature_flags !== null 
+        ? cfg.feature_flags 
+        : {};
+
+      const chavesFaltantes: string[] = [];
+      const resolvedFlags: any = {};
+
+      REQUIRED_MODULE_KEYS.forEach((key) => {
+        const valColuna = cfg[key];
+        const valJson = flagsJson[key];
+
+        if (typeof valColuna === 'boolean') {
+          resolvedFlags[key] = valColuna;
+        } else if (typeof valJson === 'boolean') {
+          resolvedFlags[key] = valJson;
+        } else {
+          chavesFaltantes.push(key);
+          resolvedFlags[key] = true; // valor padrão
+        }
+      });
+
+      let status: 'integra' | 'ausente' | 'corrompida' = 'integra';
+      let detalhesStatus = 'Configuração completa e íntegra (9/9 módulos parametrizados)';
+
+      if (chavesFaltantes.length > 0 || !cfg.feature_flags || typeof cfg.feature_flags !== 'object') {
+        status = 'corrompida';
+        detalhesStatus = chavesFaltantes.length > 0 
+          ? `Faltam ${chavesFaltantes.length} chave(s) de módulos: ${chavesFaltantes.join(', ')}`
+          : 'Campo feature_flags nulo ou não formatado como JSON';
+      }
+
+      return {
+        condominioId: condo.id,
+        condominioNome: condo.nome || 'Condomínio Sem Nome',
+        configId: cfg.id,
+        status,
+        detalhesStatus,
+        featureFlags: resolvedFlags,
+        chavesFaltantes
+      };
+    });
+
+    return listaDiagnosticos;
+  } catch (err) {
+    console.error('Erro na auditoria de configurações de condomínios:', err);
+    return [];
+  }
+}
+
+/**
+ * Corrige ou restaura a configuração íntegra de um condomínio específico.
+ */
+export async function repairCondominioConfig(
+  condominioId: string, 
+  currentDiag?: CondominioConfigDiagnostic
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const defaultFlags = {
+      mod02_gestao_encomendas: currentDiag?.featureFlags?.mod02_gestao_encomendas ?? true,
+      mod03_custodia_itens: currentDiag?.featureFlags?.mod03_custodia_itens ?? true,
+      mod04_materiais_posto: currentDiag?.featureFlags?.mod04_materiais_posto ?? true,
+      mod05_quadro_chaves: currentDiag?.featureFlags?.mod05_quadro_chaves ?? true,
+      mod06_gestao_manutencao: currentDiag?.featureFlags?.mod06_gestao_manutencao ?? true,
+      mod07_gestao_ronda: currentDiag?.featureFlags?.mod07_gestao_ronda ?? true,
+      mod08_livro_ocorrencias: currentDiag?.featureFlags?.mod08_livro_ocorrencias ?? true,
+      mod09_passagem_posto: currentDiag?.featureFlags?.mod09_passagem_posto ?? true,
+      mod10_prestadores_servico: currentDiag?.featureFlags?.mod10_prestadores_servico ?? true
+    };
+
+    // Atualiza imediatamente cache local do navegador
+    localStorage.setItem(`infport_flags_${condominioId}`, JSON.stringify(defaultFlags));
+
+    const fullPayload: any = {
+      condominio_id: condominioId,
+      feature_flags: defaultFlags,
+      ...defaultFlags
+    };
+
+    let saved = false;
+
+    // Verifica se já existe registro
+    const { data: existing } = await supabase
+      .from('configuracoes')
+      .select('id')
+      .eq('condominio_id', condominioId)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from('configuracoes')
+        .update(fullPayload)
+        .eq('id', existing.id);
+      if (!error) saved = true;
+    } else {
+      const { error } = await supabase
+        .from('configuracoes')
+        .insert([fullPayload]);
+      if (!error) saved = true;
+    }
+
+    // Fallback caso colunas individuais específicas não estejam no cache do Supabase
+    if (!saved) {
+      const fallbackPayload = {
+        condominio_id: condominioId,
+        feature_flags: defaultFlags
+      };
+
+      if (existing?.id) {
+        const { error: fbErr } = await supabase
+          .from('configuracoes')
+          .update(fallbackPayload)
+          .eq('id', existing.id);
+        if (fbErr) throw fbErr;
+      } else {
+        const { error: fbErr } = await supabase
+          .from('configuracoes')
+          .insert([fallbackPayload]);
+        if (fbErr) throw fbErr;
+      }
+    }
+
+    // Dispara evento em tempo real para sincronização com o App
+    window.dispatchEvent(new CustomEvent('modulos_atualizados', {
+      detail: { condominio_id: condominioId, flags: defaultFlags }
+    }));
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Erro ao reparar configuração' };
+  }
+}
+
+/**
+ * Corrige em lote todas as configurações ausentes ou corrompidas de condomínios.
+ */
+export async function repairAllCondominiosConfigs(): Promise<{ totalRepaired: number; totalErrors: number; errors: string[] }> {
+  const diagnostics = await auditCondominiosConfigs();
+  const needingRepair = diagnostics.filter((d) => d.status !== 'integra');
+
+  let totalRepaired = 0;
+  let totalErrors = 0;
+  const errors: string[] = [];
+
+  for (const diag of needingRepair) {
+    const res = await repairCondominioConfig(diag.condominioId, diag);
+    if (res.success) {
+      totalRepaired++;
+    } else {
+      totalErrors++;
+      if (res.error) errors.push(`${diag.condominioNome}: ${res.error}`);
+    }
+  }
+
+  return { totalRepaired, totalErrors, errors };
+}

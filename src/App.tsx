@@ -12,7 +12,6 @@ import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
-import SupabaseDoctorModal from './components/SupabaseDoctorModal';
 import { 
   ShieldCheck, 
   Lock, 
@@ -49,7 +48,6 @@ export default function App() {
 
   const [menuAberto, setMenuAberto] = useState(true);
   const [drawerMobileAberto, setDrawerMobileAberto] = useState(false);
-  const [doctorModalAberto, setDoctorModalAberto] = useState(false);
 
   const [featureFlags, setFeatureFlags] = useState({
     mod02_gestao_encomendas: true,
@@ -349,23 +347,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Atalho Doctor Supabase */}
-            {menuAberto && (
-              <div className="px-3 pt-3">
-                <button
-                  onClick={() => setDoctorModalAberto(true)}
-                  className="w-full bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-400 border border-emerald-800/80 p-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition shadow-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <Database className="w-4 h-4" /> Arrumar Supabase
-                  </span>
-                  <span className="bg-emerald-500 text-slate-950 px-1.5 py-0.5 rounded text-[10px] font-black">
-                    Doctor
-                  </span>
-                </button>
-              </div>
-            )}
-
             {eAdmin && menuAberto && (
               <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
                 <label className="block text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
@@ -456,18 +437,6 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="pt-3">
-                  <button
-                    onClick={() => {
-                      setDrawerMobileAberto(false);
-                      setDoctorModalAberto(true);
-                    }}
-                    className="w-full bg-emerald-950 text-emerald-400 border border-emerald-800 p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
-                  >
-                    <Database className="w-4 h-4" /> Arrumar Supabase (Doctor)
-                  </button>
-                </div>
-
                 {eAdmin && (
                   <div className="my-3 p-2.5 bg-slate-800 rounded-xl space-y-1">
                     <label className="text-xs font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
@@ -549,13 +518,6 @@ export default function App() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setDoctorModalAberto(true)}
-                className="p-2 text-emerald-400 bg-slate-800 rounded-xl"
-                title="Arrumar Supabase"
-              >
-                <Database className="w-5 h-5" />
-              </button>
-              <button
                 onClick={() => setDrawerMobileAberto(true)}
                 className="p-2 text-slate-200 bg-slate-800 active:bg-slate-700 rounded-xl transition"
                 title="Menu Principal"
@@ -598,13 +560,6 @@ export default function App() {
                       Operador: <strong className="text-white">{operador.nome}</strong>
                     </p>
                   </div>
-                  
-                  <button
-                    onClick={() => setDoctorModalAberto(true)}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition"
-                  >
-                    <Sparkles className="w-4 h-4" /> Arrumar Supabase
-                  </button>
                 </div>
 
                 {/* Grid dos Módulos Operacionais */}
@@ -733,12 +688,6 @@ export default function App() {
           </button>
         </nav>
 
-        {/* MODAL DO DOCTOR SUPABASE */}
-        <SupabaseDoctorModal
-          isOpen={doctorModalAberto}
-          onClose={() => setDoctorModalAberto(false)}
-        />
-
       </div>
     );
   }
@@ -804,22 +753,11 @@ export default function App() {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
-          <span>Sistema PWA Offline & Online</span>
-          <button
-            type="button"
-            onClick={() => setDoctorModalAberto(true)}
-            className="text-emerald-700 hover:underline font-bold flex items-center gap-1"
-          >
-            <Database className="w-3.5 h-3.5" /> Arrumar Supabase
-          </button>
+        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500 font-medium">
+          <span>INFPORT 1.0 — Guarita</span>
+          <span>Sistema Operacional</span>
         </div>
       </div>
-
-      <SupabaseDoctorModal
-        isOpen={doctorModalAberto}
-        onClose={() => setDoctorModalAberto(false)}
-      />
     </div>
   );
 }
