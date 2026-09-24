@@ -49,8 +49,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
 
   const [config, setConfig] = useState<Record<string, any>>({
     id: null,
-    mod02_controle_acesso: true,
-    mod03_gestao_encomendas: true,
+    mod02_gestao_encomendas: true,
+    mod03_custodia_itens: true,
     mod04_materiais_posto: true,
     mod05_quadro_chaves: true,
     mod06_gestao_manutencao: true,
@@ -77,15 +77,69 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   });
 
   const modulosVisual = [
-    { key: 'mod03_gestao_encomendas', titulo: 'Módulo 02 & 03', subtitulo: 'Encomendas & Custódia', desc: 'Controle de recebimento de lotes e guarda de itens.', icon: Package },
-    { key: 'mod04_materiais_posto', titulo: 'Módulo 04', subtitulo: 'Materiais do Posto', desc: 'Inventário de HTs, lanternas e checagem de avarias.', icon: Briefcase },
-    { key: 'mod05_quadro_chaves', titulo: 'Módulo 05', subtitulo: 'Quadro de Chaves', desc: 'Controle de empréstimo e alertas de atraso.', icon: Key },
-    { key: 'mod06_gestao_manutencao', titulo: 'Módulo 06', subtitulo: 'Gestão de Manutenção', desc: 'Chamados, rotinas periódicas e ordens de serviço.', icon: Wrench },
-    { key: 'mod07_gestao_ronda', titulo: 'Módulo 07', subtitulo: 'Gestão de Ronda', desc: 'Rondas via QR Code com geolocalização e cronômetro.', icon: ShieldCheck },
-    { key: 'mod08_livro_ocorrencias', titulo: 'Módulo 08', subtitulo: 'Livro de Ocorrências', desc: 'Registro digital de eventos diários e reclamações.', icon: BookOpen },
-    { key: 'mod09_passagem_posto', titulo: 'Módulo 09', subtitulo: 'Passagem de Posto', desc: 'Troca de turno consolidada com dupla assinatura.', icon: ArrowRightLeft },
-    { key: 'mod10_prestadores_servico', titulo: 'Módulo 10', subtitulo: 'Prestadores de Serviço', desc: 'Controle de acesso, obras e OCR de documentos.', icon: HardHat },
-    { key: 'mod02_controle_acesso', titulo: 'Módulo Base', subtitulo: 'Cadastros Base', desc: 'Moradores, unidades, operadores e condomínios.', icon: Archive }
+    { 
+      key: 'mod02_gestao_encomendas', 
+      moduloNum: '02',
+      titulo: 'Módulo 02 - Encomendas & Triagem RE', 
+      desc: 'Lotes de entregas, leitura de etiquetas e baixa com foto', 
+      icon: Package 
+    },
+    { 
+      key: 'mod03_custodia_itens', 
+      moduloNum: '03',
+      titulo: 'Módulo 03 - Custódia de Itens', 
+      desc: 'Guarda de chaves, envelopes e pertences de terceiros/moradores com alerta de 48h', 
+      icon: Archive 
+    },
+    { 
+      key: 'mod04_materiais_posto', 
+      moduloNum: '04',
+      titulo: 'Módulo 04 - Materiais & Inventário do Posto', 
+      desc: 'Rádios HT, lanternas, bastões e controles da guarita', 
+      icon: Briefcase 
+    },
+    { 
+      key: 'mod05_quadro_chaves', 
+      moduloNum: '05',
+      titulo: 'Módulo 05 - Claviculário Digital de Chaves', 
+      desc: 'Controle de retirada por morador/terceiro com horário limite de devolução', 
+      icon: Key 
+    },
+    { 
+      key: 'mod06_gestao_manutencao', 
+      moduloNum: '06',
+      titulo: 'Módulo 06 - Gestão de Manutenção & OS', 
+      desc: 'Abertura de chamados com foto antes/depois e checklists diário/semanal/mensal', 
+      icon: Wrench 
+    },
+    { 
+      key: 'mod07_gestao_ronda', 
+      moduloNum: '07',
+      titulo: 'Módulo 07 - Ronda Patrimonial (GPS & QR/NFC)', 
+      desc: 'Leitura de pontos georreferenciados e alerta sonoro de próxima ronda', 
+      icon: ShieldCheck 
+    },
+    { 
+      key: 'mod08_livro_ocorrencias', 
+      moduloNum: '08',
+      titulo: 'Módulo 08 - Livro de Ocorrências (Foto & Áudio)', 
+      desc: 'Registro interno do posto com áudio narrado e fluxo de resolução', 
+      icon: BookOpen 
+    },
+    { 
+      key: 'mod09_passagem_posto', 
+      moduloNum: '09',
+      titulo: 'Módulo 09 - Passagem de Posto Auditada', 
+      desc: 'Consolidação de pendências de todos os módulos e dupla validação de PIN', 
+      icon: ArrowRightLeft 
+    },
+    { 
+      key: 'mod10_prestadores_servico', 
+      moduloNum: '10',
+      titulo: 'Módulo 10 - Autorizados (Visitas, Diaristas e Obras)', 
+      desc: 'Pré-autorizações com vigência e entrada com 1 toque sem exigência de docs', 
+      icon: HardHat 
+    }
   ];
 
   useEffect(() => {
@@ -117,6 +171,22 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
 
   const carregarConfiguracoes = async () => {
     try {
+      // 1. Tenta cache do localStorage primeiro para resposta instantânea
+      const cached = localStorage.getItem(`infport_flags_${usuarioLogado.condominio_id}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setConfig(prev => ({
+            ...prev,
+            ...parsed,
+            mod02_gestao_encomendas: parsed.mod02_gestao_encomendas ?? true,
+            mod03_custodia_itens: parsed.mod03_custodia_itens ?? true
+          }));
+        } catch {
+          // ignore
+        }
+      }
+
       const { data, error } = await supabase
         .from('configuracoes')
         .select('*')
@@ -128,10 +198,10 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       if (data) {
         const flagsJson = typeof data.feature_flags === 'object' && data.feature_flags !== null ? data.feature_flags : {};
 
-        setConfig({
+        const novasConfig = {
           id: data.id,
-          mod02_controle_acesso: data.mod02_controle_acesso ?? flagsJson.mod02_controle_acesso ?? true,
-          mod03_gestao_encomendas: data.mod03_gestao_encomendas ?? data.mod02_gestao_encomendas ?? flagsJson.mod03_gestao_encomendas ?? true,
+          mod02_gestao_encomendas: data.mod02_gestao_encomendas ?? flagsJson.mod02_gestao_encomendas ?? true,
+          mod03_custodia_itens: data.mod03_custodia_itens ?? flagsJson.mod03_custodia_itens ?? true,
           mod04_materiais_posto: data.mod04_materiais_posto ?? data.mod04_materials_posto ?? flagsJson.mod04_materiais_posto ?? true,
           mod05_quadro_chaves: data.mod05_quadro_chaves ?? flagsJson.mod05_quadro_chaves ?? true,
           mod06_gestao_manutencao: data.mod06_gestao_manutencao ?? flagsJson.mod06_gestao_manutencao ?? true,
@@ -139,7 +209,10 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
           mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? flagsJson.mod08_livro_ocorrencias ?? true,
           mod09_passagem_posto: data.mod09_passagem_posto ?? flagsJson.mod09_passagem_posto ?? true,
           mod10_prestadores_servico: data.mod10_prestadores_servico ?? flagsJson.mod10_prestadores_servico ?? true
-        });
+        };
+
+        setConfig(novasConfig);
+        localStorage.setItem(`infport_flags_${usuarioLogado.condominio_id}`, JSON.stringify(novasConfig));
       }
     } catch (err) {
       console.error('Erro ao carregar configurações:', err);
@@ -180,62 +253,105 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     setLoading(true);
     setMensagem({ tipo: '', texto: '' });
 
+    const targetCondoId = usuarioLogado?.condominio_id;
+    if (!targetCondoId) {
+      setMensagem({ tipo: 'erro', texto: 'Nenhum condomínio ativo selecionado para salvar.' });
+      setLoading(false);
+      return;
+    }
+
     try {
+      // Objeto com as flags dos módulos perfeitamente isoladas
       const featureFlagsJson = {
-        mod02_controle_acesso: config.mod02_controle_acesso,
-        mod03_gestao_encomendas: config.mod03_gestao_encomendas,
-        mod04_materiais_posto: config.mod04_materiais_posto,
-        mod05_quadro_chaves: config.mod05_quadro_chaves,
-        mod06_gestao_manutencao: config.mod06_gestao_manutencao,
-        mod07_gestao_ronda: config.mod07_gestao_ronda,
-        mod08_livro_ocorrencias: config.mod08_livro_ocorrencias,
-        mod09_passagem_posto: config.mod09_passagem_posto,
-        mod10_prestadores_servico: config.mod10_prestadores_servico,
-        mod02_gestao_encomendas: config.mod03_gestao_encomendas
+        mod02_gestao_encomendas: Boolean(config.mod02_gestao_encomendas),
+        mod03_custodia_itens: Boolean(config.mod03_custodia_itens),
+        mod04_materiais_posto: Boolean(config.mod04_materiais_posto),
+        mod05_quadro_chaves: Boolean(config.mod05_quadro_chaves),
+        mod06_gestao_manutencao: Boolean(config.mod06_gestao_manutencao),
+        mod07_gestao_ronda: Boolean(config.mod07_gestao_ronda),
+        mod08_livro_ocorrencias: Boolean(config.mod08_livro_ocorrencias),
+        mod09_passagem_posto: Boolean(config.mod09_passagem_posto),
+        mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico)
       };
 
-      const payload: any = {
-        condominio_id: usuarioLogado.condominio_id,
-        feature_flags: featureFlagsJson,
-        mod02_controle_acesso: config.mod02_controle_acesso,
-        mod03_gestao_encomendas: config.mod03_gestao_encomendas,
-        mod02_gestao_encomendas: config.mod03_gestao_encomendas,
-        mod04_materiais_posto: config.mod04_materiais_posto,
-        mod05_quadro_chaves: config.mod05_quadro_chaves,
-        mod06_gestao_manutencao: config.mod06_gestao_manutencao,
-        mod07_gestao_ronda: config.mod07_gestao_ronda,
-        mod08_livro_ocorrencias: config.mod08_livro_ocorrencias,
-        mod09_passagem_posto: config.mod09_passagem_posto,
-        mod10_prestadores_servico: config.mod10_prestadores_servico
-      };
+      // Salva imediatamente no localStorage para resposta offline e instantânea
+      localStorage.setItem(`infport_flags_${targetCondoId}`, JSON.stringify(featureFlagsJson));
 
-      let erroOperacao = null;
+      let salvou = false;
 
-      if (config.id) {
-        const { error } = await supabase
-          .from('configuracoes')
-          .update(payload)
-          .eq('id', config.id);
+      // 1. Tenta salvar no Supabase incluindo colunas explícitas
+      try {
+        const payloadCompleto: any = {
+          condominio_id: targetCondoId,
+          feature_flags: featureFlagsJson,
+          mod02_gestao_encomendas: Boolean(config.mod02_gestao_encomendas),
+          mod03_custodia_itens: Boolean(config.mod03_custodia_itens),
+          mod04_materiais_posto: Boolean(config.mod04_materiais_posto),
+          mod05_quadro_chaves: Boolean(config.mod05_quadro_chaves),
+          mod06_gestao_manutencao: Boolean(config.mod06_gestao_manutencao),
+          mod07_gestao_ronda: Boolean(config.mod07_gestao_ronda),
+          mod08_livro_ocorrencias: Boolean(config.mod08_livro_ocorrencias),
+          mod09_passagem_posto: Boolean(config.mod09_passagem_posto),
+          mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico)
+        };
 
-        erroOperacao = error;
-      } else {
-        const { data, error } = await supabase
-          .from('configuracoes')
-          .insert([payload])
-          .select()
-          .single();
+        if (config.id) {
+          const { error } = await supabase
+            .from('configuracoes')
+            .update(payloadCompleto)
+            .eq('id', config.id);
 
-        if (data) setConfig({ ...config, id: data.id });
-        erroOperacao = error;
+          if (!error) salvou = true;
+        } else {
+          const { data, error } = await supabase
+            .from('configuracoes')
+            .upsert([payloadCompleto], { onConflict: 'condominio_id' })
+            .select()
+            .maybeSingle();
+
+          if (!error) {
+            salvou = true;
+            if (data) setConfig((prev: any) => ({ ...prev, id: data.id }));
+          }
+        }
+      } catch {
+        salvou = false;
       }
 
-      if (erroOperacao) throw erroOperacao;
+      // 2. Fallback resiliente: se der erro por coluna específica, salva direto no feature_flags (JSONB)
+      if (!salvou) {
+        const payloadFallback = {
+          condominio_id: targetCondoId,
+          feature_flags: featureFlagsJson
+        };
 
-      localStorage.setItem(`infport_flags_${usuarioLogado.condominio_id}`, JSON.stringify(payload));
+        if (config.id) {
+          const { error: fallbackErr } = await supabase
+            .from('configuracoes')
+            .update(payloadFallback)
+            .eq('id', config.id);
+
+          if (fallbackErr) throw fallbackErr;
+        } else {
+          const { data: fbData, error: fallbackErr } = await supabase
+            .from('configuracoes')
+            .upsert([payloadFallback], { onConflict: 'condominio_id' })
+            .select()
+            .maybeSingle();
+
+          if (fallbackErr) throw fallbackErr;
+          if (fbData) setConfig((prev: any) => ({ ...prev, id: fbData.id }));
+        }
+      }
+
+      // Dispara evento global para atualizar o App em tempo real
+      window.dispatchEvent(new CustomEvent('modulos_atualizados', { 
+        detail: { condominio_id: targetCondoId, flags: featureFlagsJson } 
+      }));
+
       setMensagem({ tipo: 'sucesso', texto: 'Parametrização dos módulos salva com sucesso!' });
-      window.dispatchEvent(new CustomEvent('modulos_atualizados', { detail: payload }));
 
-      if (onConfigSalva) onConfigSalva(payload);
+      if (onConfigSalva) onConfigSalva(featureFlagsJson);
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar parametrização: ' + err.message });
     } finally {
@@ -608,10 +724,19 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
                     </div>
 
                     <div>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${isAtivo ? 'text-emerald-700' : 'text-slate-500'}`}>
-                        {modulo.titulo}
-                      </span>
-                      <h5 className="font-bold text-sm text-slate-900 mt-0.5 leading-tight">{modulo.subtitulo}</h5>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                          isAtivo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          Módulo {modulo.moduloNum}
+                        </span>
+                        <span className={`text-[11px] font-bold ${isAtivo ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {isAtivo ? '● Ativo' : '○ Desativado'}
+                        </span>
+                      </div>
+                      <h5 className="font-bold text-sm text-slate-900 mt-1 leading-tight">
+                        {modulo.titulo.replace(/^Módulo \d+ - /, '')}
+                      </h5>
                       <p className="text-xs text-slate-500 mt-1">{modulo.desc}</p>
                     </div>
                   </div>

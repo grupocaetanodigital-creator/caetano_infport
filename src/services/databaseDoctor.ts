@@ -245,6 +245,19 @@ export function generateMigrationSql(): string {
 
 BEGIN;
 
+-- 0. Garantir colunas de parametrização e JSONB na tabela configuracoes
+ALTER TABLE IF EXISTS configuracoes 
+  ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS mod02_gestao_encomendas BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod03_custodia_itens BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod04_materiais_posto BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod05_quadro_chaves BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod06_gestao_manutencao BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod07_gestao_ronda BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod08_livro_ocorrencias BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
+
 -- 1. Tentativa de cópia segura de materiais (se as colunas existirem, migra; senão, ignora com segurança)
 DO $$
 BEGIN

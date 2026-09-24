@@ -52,8 +52,8 @@ export default function App() {
   const [doctorModalAberto, setDoctorModalAberto] = useState(false);
 
   const [featureFlags, setFeatureFlags] = useState({
-    mod02_controle_acesso: true,
-    mod03_gestao_encomendas: true,
+    mod02_gestao_encomendas: true,
+    mod03_custodia_itens: true,
     mod04_materiais_posto: true,
     mod05_quadro_chaves: true,
     mod06_gestao_manutencao: true,
@@ -113,6 +113,28 @@ export default function App() {
     }
   }, [operador, condominioAtivoId]);
 
+  // Listener para atualização em tempo real quando as flags forem salvas em Configurações
+  useEffect(() => {
+    const handleAtualizacaoModulos = (e: any) => {
+      if (e.detail) {
+        const idAlvo = e.detail.condominio_id;
+        const condoAtual = eAdmin ? (condominioAtivoId || operador?.condominio_id) : operador?.condominio_id;
+        if (!idAlvo || idAlvo === condoAtual) {
+          const novas = e.detail.flags || e.detail;
+          setFeatureFlags(prev => ({
+            ...prev,
+            ...novas
+          }));
+        }
+      }
+    };
+
+    window.addEventListener('modulos_atualizados', handleAtualizacaoModulos);
+    return () => {
+      window.removeEventListener('modulos_atualizados', handleAtualizacaoModulos);
+    };
+  }, [operador?.condominio_id, condominioAtivoId, eAdmin]);
+
   const carregarCondominiosHeader = async () => {
     try {
       const { data, error } = await supabase
@@ -128,8 +150,8 @@ export default function App() {
 
   const resetarFeatureFlagsPadrao = () => {
     setFeatureFlags({
-      mod02_controle_acesso: true,
-      mod03_gestao_encomendas: true,
+      mod02_gestao_encomendas: true,
+      mod03_custodia_itens: true,
       mod04_materiais_posto: true,
       mod05_quadro_chaves: true,
       mod06_gestao_manutencao: true,
@@ -147,6 +169,22 @@ export default function App() {
     }
 
     try {
+      // 1. Tenta carregar do localStorage primeiro para resposta instantânea
+      const cacheLocal = localStorage.getItem(`infport_flags_${condominioId}`);
+      if (cacheLocal) {
+        try {
+          const parsed = JSON.parse(cacheLocal);
+          setFeatureFlags(prev => ({
+            ...prev,
+            ...parsed,
+            mod02_gestao_encomendas: parsed.mod02_gestao_encomendas ?? true,
+            mod03_custodia_itens: parsed.mod03_custodia_itens ?? true
+          }));
+        } catch {
+          // ignore
+        }
+      }
+
       const { data, error } = await supabase
         .from('configuracoes')
         .select('*')
@@ -156,23 +194,29 @@ export default function App() {
       if (error) throw error;
 
       if (data) {
-        setFeatureFlags({
-          mod02_controle_acesso: data.mod02_controle_acesso ?? true,
-          mod03_gestao_encomendas: data.mod03_gestao_encomendas ?? data.mod02_gestao_encomendas ?? true,
-          mod04_materiais_posto: data.mod04_materiais_posto ?? true,
-          mod05_quadro_chaves: data.mod05_quadro_chaves ?? true,
-          mod06_gestao_manutencao: data.mod06_gestao_manutencao ?? true,
-          mod07_gestao_ronda: data.mod07_gestao_ronda ?? true,
-          mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? true,
-          mod09_passagem_posto: data.mod09_passagem_posto ?? true,
-          mod10_prestadores_servico: data.mod10_prestadores_servico ?? true
-        });
+        const ff = (typeof data.feature_flags === 'object' && data.feature_flags !== null) 
+          ? data.feature_flags 
+          : {};
+
+        const novasFlags = {
+          mod02_gestao_encomendas: data.mod02_gestao_encomendas ?? ff.mod02_gestao_encomendas ?? true,
+          mod03_custodia_itens: data.mod03_custodia_itens ?? ff.mod03_custodia_itens ?? true,
+          mod04_materiais_posto: data.mod04_materiais_posto ?? ff.mod04_materiais_posto ?? true,
+          mod05_quadro_chaves: data.mod05_quadro_chaves ?? ff.mod05_quadro_chaves ?? true,
+          mod06_gestao_manutencao: data.mod06_gestao_manutencao ?? ff.mod06_gestao_manutencao ?? true,
+          mod07_gestao_ronda: data.mod07_gestao_ronda ?? ff.mod07_gestao_ronda ?? true,
+          mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? ff.mod08_livro_ocorrencias ?? true,
+          mod09_passagem_posto: data.mod09_passagem_posto ?? ff.mod09_passagem_posto ?? true,
+          mod10_prestadores_servico: data.mod10_prestadores_servico ?? ff.mod10_prestadores_servico ?? true
+        };
+
+        setFeatureFlags(novasFlags);
+        localStorage.setItem(`infport_flags_${condominioId}`, JSON.stringify(novasFlags));
       } else {
         resetarFeatureFlagsPadrao();
       }
     } catch (err) {
       console.error('Erro ao carregar Feature Flags:', err);
-      resetarFeatureFlagsPadrao();
     }
   };
 
@@ -246,17 +290,27 @@ export default function App() {
   } : null;
 
   const modulosDisponiveis = [
-    { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: featureFlags.mod03_gestao_encomendas, cor: 'bg-blue-50 text-blue-600 border-blue-200' },
-    { id: 'custodia', titulo: 'Custódia Itens', icone: Shield, flag: featureFlags.mod03_gestao_encomendas, cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-    { id: 'prestadores', titulo: 'Prestadores & Obras', icone: Briefcase, flag: featureFlags.mod10_prestadores_servico, cor: 'bg-purple-50 text-purple-600 border-purple-200' },
-    { id: 'materiais', titulo: 'Materiais Posto', icone: Radio, flag: featureFlags.mod04_materiais_posto, cor: 'bg-amber-50 text-amber-600 border-amber-200' },
-    { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: featureFlags.mod05_quadro_chaves, cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-    { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: featureFlags.mod06_gestao_manutencao, cor: 'bg-orange-50 text-orange-600 border-orange-200' },
-    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: featureFlags.mod07_gestao_ronda, cor: 'bg-teal-50 text-teal-600 border-teal-200' },
-    { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: featureFlags.mod08_livro_ocorrencias, cor: 'bg-rose-50 text-rose-600 border-rose-200' },
-    { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: featureFlags.mod09_passagem_posto, cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-    { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: featureFlags.mod02_controle_acesso, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
+    { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
+    { id: 'custodia', titulo: 'Custódia Itens', icone: Shield, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { id: 'prestadores', titulo: 'Prestadores & Obras', icone: Briefcase, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-purple-50 text-purple-600 border-purple-200' },
+    { id: 'materiais', titulo: 'Materiais Posto', icone: Radio, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-amber-50 text-amber-600 border-amber-200' },
+    { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+    { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
+    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-teal-50 text-teal-600 border-teal-200' },
+    { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
+    { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+    { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
   ];
+
+  // Se o módulo ativo no momento for desativado nas flags, redireciona para o dashboard
+  useEffect(() => {
+    if (moduloAtual !== 'dashboard' && moduloAtual !== 'configuracoes') {
+      const modAtivo = modulosDisponiveis.find(m => m.id === moduloAtual);
+      if (modAtivo && !modAtivo.flag) {
+        setModuloAtual('dashboard');
+      }
+    }
+  }, [featureFlags, moduloAtual]);
 
   if (podeAcessarConfiguracoes) {
     modulosDisponiveis.push({ id: 'configuracoes', titulo: 'Configurações', icone: Settings, flag: true, cor: 'bg-slate-800 text-white border-slate-900' });
@@ -582,10 +636,10 @@ export default function App() {
               </div>
             )}
 
-            {moduloAtual === 'encomendas' && featureFlags.mod03_gestao_encomendas && (
+            {moduloAtual === 'encomendas' && featureFlags.mod02_gestao_encomendas && (
               <Encomendas usuarioLogado={operadorContextoGlobal} />
             )}
-            {moduloAtual === 'custodia' && featureFlags.mod03_gestao_encomendas && (
+            {moduloAtual === 'custodia' && featureFlags.mod03_custodia_itens && (
               <Custodia usuarioLogado={operadorContextoGlobal} />
             )}
             {moduloAtual === 'materiais' && featureFlags.mod04_materiais_posto && (
@@ -609,7 +663,7 @@ export default function App() {
             {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
               <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
             )}
-            {moduloAtual === 'cadastros' && featureFlags.mod02_controle_acesso && (
+            {moduloAtual === 'cadastros' && (
               <Cadastros usuarioLogado={operadorContextoGlobal} />
             )}
             {moduloAtual === 'configuracoes' && podeAcessarConfiguracoes && (
@@ -634,7 +688,7 @@ export default function App() {
             Início
           </button>
 
-          {featureFlags.mod03_gestao_encomendas && (
+          {featureFlags.mod02_gestao_encomendas && (
             <button
               onClick={() => mudarModulo('encomendas')}
               className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
