@@ -64,6 +64,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [codigoBarras, setCodigoBarras] = useState('');
   const [fotoEtiquetaUrl, setFotoEtiquetaUrl] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  const [locaisArmazenamento, setLocaisArmazenamento] = useState<any[]>([]);
+  const [localArmazenamentoTriagem, setLocalArmazenamentoTriagem] = useState('PRAT-A1 - Prateleira A1 - Caixas Pequenas');
   const [alertaAgrupamento, setAlertaAgrupamento] = useState<any | null>(null);
   const [itemTriadoWhats, setItemTriadoWhats] = useState<any | null>(null);
 
@@ -87,9 +89,67 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     carregarDadosBase();
   }, [etapa, usuarioLogado?.condominio_id]);
 
+  useEffect(() => {
+    const handleAtualizacaoLocais = (e: any) => {
+      if (e.detail?.locais && Array.isArray(e.detail.locais)) {
+        setLocaisArmazenamento(e.detail.locais);
+        const primeiroAtivo = e.detail.locais.find((l: any) => l.ativo);
+        if (primeiroAtivo) setLocalArmazenamentoTriagem(`${primeiroAtivo.codigo} - ${primeiroAtivo.nome}`);
+      }
+    };
+    window.addEventListener('locais_armazenamento_atualizados', handleAtualizacaoLocais);
+    return () => window.removeEventListener('locais_armazenamento_atualizados', handleAtualizacaoLocais);
+  }, []);
+
+  const carregarLocais = async () => {
+    if (!usuarioLogado?.condominio_id) return;
+    try {
+      const cached = localStorage.getItem(`infport_locais_${usuarioLogado.condominio_id}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLocaisArmazenamento(parsed);
+            const primeiroAtivo = parsed.find((l: any) => l.ativo);
+            if (primeiroAtivo) setLocalArmazenamentoTriagem(`${primeiroAtivo.codigo} - ${primeiroAtivo.nome}`);
+          }
+        } catch {}
+      }
+
+      const { data, error } = await supabase
+        .from('locais_armazenamento')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('ativo', true)
+        .order('codigo');
+
+      if (!error && data && data.length > 0) {
+        setLocaisArmazenamento(data);
+        const primeiroAtivo = data[0];
+        setLocalArmazenamentoTriagem(`${primeiroAtivo.codigo} - ${primeiroAtivo.nome}`);
+        return;
+      }
+
+      const { data: configData } = await supabase
+        .from('configuracoes')
+        .select('locais_armazenamento')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .maybeSingle();
+
+      if (configData?.locais_armazenamento && Array.isArray(configData.locais_armazenamento)) {
+        setLocaisArmazenamento(configData.locais_armazenamento);
+        const primeiroAtivo = configData.locais_armazenamento.find((l: any) => l.ativo);
+        if (primeiroAtivo) setLocalArmazenamentoTriagem(`${primeiroAtivo.codigo} - ${primeiroAtivo.nome}`);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar locais:', e);
+    }
+  };
+
   const carregarDadosBase = async () => {
     if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
+    carregarLocais();
     try {
       const inicioDia = new Date();
       inicioDia.setHours(0, 0, 0, 0);

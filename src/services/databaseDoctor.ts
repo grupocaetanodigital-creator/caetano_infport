@@ -248,6 +248,9 @@ BEGIN;
 -- 0. Garantir colunas de parametrização e JSONB na tabela configuracoes
 ALTER TABLE IF EXISTS configuracoes 
   ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS dados_tenant JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS mod02_gestao_encomendas BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod03_custodia_itens BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod04_materiais_posto BOOLEAN DEFAULT true,
@@ -257,6 +260,24 @@ ALTER TABLE IF EXISTS configuracoes
   ADD COLUMN IF NOT EXISTS mod08_livro_ocorrencias BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
+
+-- 0.1 Garantir colunas na tabela condominios (Painel Tenant & Estrutura Física)
+ALTER TABLE IF EXISTS condominios
+  ADD COLUMN IF NOT EXISTS cnpj TEXT,
+  ADD COLUMN IF NOT EXISTS telefone_portaria TEXT,
+  ADD COLUMN IF NOT EXISTS sindico_nome TEXT,
+  ADD COLUMN IF NOT EXISTS sindico_whatsapp TEXT,
+  ADD COLUMN IF NOT EXISTS intervalo_ronda INTEGER DEFAULT 15,
+  ADD COLUMN IF NOT EXISTS tipo_estrutura TEXT DEFAULT 'Blocos (Edifícios Baixos / Conjuntos)',
+  ADD COLUMN IF NOT EXISTS qtd_blocos INTEGER DEFAULT 10,
+  ADD COLUMN IF NOT EXISTS unidades_por_bloco INTEGER DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS nomes_blocos TEXT,
+  ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb;
+
+-- 0.2 Garantir coluna de local_armazenamento na tabela encomendas_itens
+ALTER TABLE IF EXISTS encomendas_itens
+  ADD COLUMN IF NOT EXISTS local_armazenamento TEXT DEFAULT 'Bancada Principal';
 
 -- 1. Tentativa de cópia segura de materiais (se as colunas existirem, migra; senão, ignora com segurança)
 DO $$

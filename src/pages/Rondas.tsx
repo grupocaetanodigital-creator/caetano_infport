@@ -204,10 +204,15 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const [pontoValidadoFisico, setPontoValidadoFisico] = useState(false);
   const [nfcDisponivel, setNfcDisponivel] = useState(false);
   const [nfcLendo, setNfcLendo] = useState(false);
+  const [lendoNfcCadastro, setLendoNfcCadastro] = useState(false);
+  const [lendoQrCadastro, setLendoQrCadastro] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<any>(null);
   const ndefReaderRef = useRef<any>(null);
+  const videoCadastroRef = useRef<HTMLVideoElement | null>(null);
+  const streamCadastroRef = useRef<MediaStream | null>(null);
+  const scanIntervalCadastroRef = useRef<any>(null);
 
   const [operadorSelecionadoId, setOperadorSelecionadoId] = useState('');
   const [senhaLoginEntrante, setSenhaLoginEntrante] = useState('');
@@ -397,40 +402,229 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
     }
   };
 
+  const liberarPontoValido = (tagLimpa: string, pontoAlvo: any, distanciaMetros: number | null) => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+    pararCameraQr();
+    pararLeitorNfc();
+
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate([100, 50, 100]);
+      } catch {
+        // ignore
+      }
+    }
+
+    setCodigoLido(tagLimpa);
+    setPontoValidadoFisico(true);
+
+    const infoDistancia = distanciaMetros !== null 
+      ? `(GPS validado: ${distanciaMetros}m de precisão)` 
+      : '(GPS conferido no local)';
+
+    setMensagem({ 
+      tipo: 'sucesso', 
+      texto: `✅ Placa e Tag do ponto "${pontoAlvo.nome_ponto}" validadas com sucesso no local ${infoDistancia}! Checklist desbloqueado.` 
+    });
+  };
+
   const processarTagLida = (tagLidaBruta: string, pontoAlvo: any) => {
     if (!pontoAlvo) return;
     const tagLimpa = tagLidaBruta.trim().toUpperCase();
     const tagEsperada = pontoAlvo.codigo_tag?.trim().toUpperCase();
 
-    if (tagLimpa === tagEsperada) {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-        scanIntervalRef.current = null;
-      }
-      pararCameraQr();
-      pararLeitorNfc();
-
-      if ('vibrate' in navigator) {
-        try {
-          navigator.vibrate([100, 50, 100]);
-        } catch {
-          // ignore
-        }
-      }
-
-      setCodigoLido(tagLimpa);
-      setPontoValidadoFisico(true);
-      capturarGPS();
-      setMensagem({ 
-        tipo: 'sucesso', 
-        texto: `✅ Placa e QR Code do ponto "${pontoAlvo.nome_ponto}" validados com sucesso no local! Checklist desbloqueado.` 
-      });
-    } else {
+    if (tagLimpa !== tagEsperada) {
       setMensagem({ 
         tipo: 'erro', 
         texto: `🚨 Tag/QR lido (${tagLimpa}) NÃO corresponde a este ponto (${tagEsperada})! Aponte para a placa correta deste ponto.` 
       });
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([200, 100, 200]); } catch {}
+      }
+      return;
     }
+
+    // VERIFICAÇÃO DE PROXIMIDADE GPS OBRIGATÓRIA NO MOMENTO DA LEITURA
+    if (pontoAlvo.latitude && pontoAlvo.longitude) {
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const latAtual = pos.coords.latitude;
+            const lngAtual = pos.coords.longitude;
+            setCoords({ lat: latAtual, lng: lngAtual });
+
+            const distanciaMetros = calcularDistanciaMetros(
+              latAtual,
+              lngAtual,
+              pontoAlvo.latitude,
+              pontoAlvo.longitude
+            );
+
+            const RAIO_MAXIMO_PERMITIDO = 50; // 50 metros de tolerância para o perímetro do ponto físico
+
+            if (distanciaMetros !== null && distanciaMetros > RAIO_MAXIMO_PERMITIDO) {
+              // BLOQUEIO ANTIFRAUDE: O ronda não está no local físico do ponto
+              setPontoValidadoFisico(false);
+              setCodigoLido('');
+              setMensagem({
+                tipo: 'erro',
+                texto: `🚨 BLOQUEIO ANTIFRAUDE: Leitura detectada a ${distanciaMetros} metros de distância do local cadastrado (${pontoAlvo.nome_ponto})! É proibido validar fora do local. Desloque-se até o ponto físico para validar.`
+              });
+              if ('vibrate' in navigator) {
+                try { navigator.vibrate([400, 150, 400]); } catch {}
+              }
+              return;
+            }
+
+            // Validado com sucesso dentro do perímetro
+            liberarPontoValido(tagLimpa, pontoAlvo, distanciaMetros);
+          },
+          (err) => {
+            console.warn('Erro ao obter GPS na leitura:', err);
+            setMensagem({
+              tipo: 'erro',
+              texto: '🚨 GPS OBRIGATÓRIO: Ative a localização no seu celular para comprovar presença física no ponto.'
+            });
+          },
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+        return;
+      }
+    }
+
+    // Se o ponto não possui coordenadas cadastradas previamente
+    capturarGPS();
+    liberarPontoValido(tagLimpa, pontoAlvo, null);
+  };
+
+  const lerTagNfcParaCadastro = async () => {
+    // Captura GPS no local simultaneamente
+    capturarGPSNovoPonto();
+
+    if (typeof window !== 'undefined' && 'NDEFReader' in window) {
+      try {
+        setLendoNfcCadastro(true);
+        setMensagem({ tipo: '', texto: '' });
+        const ndef = new (window as any).NDEFReader();
+        await ndef.scan();
+
+        ndef.onreading = (event: any) => {
+          let tagLida = event.serialNumber || '';
+          if (event.message && event.message.records) {
+            for (const record of event.message.records) {
+              if (record.recordType === 'text') {
+                const textDecoder = new TextDecoder(record.encoding || 'utf-8');
+                tagLida = textDecoder.decode(record.data);
+                break;
+              }
+            }
+          }
+          if (tagLida) {
+            setCodigoTag(tagLida.trim().toUpperCase());
+            setLendoNfcCadastro(false);
+            if ('vibrate' in navigator) {
+              try { navigator.vibrate([100, 50, 100]); } catch {}
+            }
+            capturarGPSNovoPonto();
+            setMensagem({
+              tipo: 'sucesso',
+              texto: `✅ Tag NFC lida com sucesso (${tagLida}) e geolocalização capturada no ponto!`
+            });
+          }
+        };
+
+        ndef.onreadingerror = () => {
+          setMensagem({ tipo: 'erro', texto: 'Falha na leitura da Tag NFC. Aproxime a tag novamente.' });
+          setLendoNfcCadastro(false);
+        };
+      } catch (err: any) {
+        console.error('NFC erro:', err);
+        setLendoNfcCadastro(false);
+        setMensagem({ tipo: 'erro', texto: 'Não foi possível ativar o leitor NFC: ' + err.message });
+      }
+    } else {
+      setMensagem({
+        tipo: 'erro',
+        texto: 'Web NFC não é suportado neste navegador. Use o Google Chrome no Android ou escaneie via QR Code.'
+      });
+    }
+  };
+
+  const iniciarCameraQrCadastro = async () => {
+    capturarGPSNovoPonto();
+    setLendoQrCadastro(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      streamCadastroRef.current = stream;
+      if (videoCadastroRef.current) {
+        videoCadastroRef.current.srcObject = stream;
+        videoCadastroRef.current.setAttribute('playsinline', 'true');
+        await videoCadastroRef.current.play();
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const barcodeDetector = ('BarcodeDetector' in window) 
+        ? new (window as any).BarcodeDetector({ formats: ['qr_code'] }) 
+        : null;
+
+      if (scanIntervalCadastroRef.current) clearInterval(scanIntervalCadastroRef.current);
+
+      scanIntervalCadastroRef.current = setInterval(async () => {
+        if (!videoCadastroRef.current || videoCadastroRef.current.readyState < 2) return;
+        try {
+          let detected: string | null = null;
+          if (barcodeDetector) {
+            try {
+              const codes = await barcodeDetector.detect(videoCadastroRef.current);
+              if (codes && codes.length > 0) detected = codes[0].rawValue;
+            } catch {}
+          }
+          if (!detected && ctx) {
+            canvas.width = videoCadastroRef.current.videoWidth || 640;
+            canvas.height = videoCadastroRef.current.videoHeight || 480;
+            ctx.drawImage(videoCadastroRef.current, 0, 0, canvas.width, canvas.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const qrResult = jsQR(imgData.data, canvas.width, canvas.height);
+            if (qrResult?.data) detected = qrResult.data;
+          }
+          if (detected) {
+            setCodigoTag(detected.trim().toUpperCase());
+            pararCameraQrCadastro();
+            capturarGPSNovoPonto();
+            if ('vibrate' in navigator) {
+              try { navigator.vibrate([100, 50, 100]); } catch {}
+            }
+            setMensagem({
+              tipo: 'sucesso',
+              texto: `✅ QR Code escaneado (${detected}) e coordenadas GPS capturadas no ponto!`
+            });
+          }
+        } catch (e) {
+          console.error('Frame cadastro error:', e);
+        }
+      }, 300);
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao abrir câmera para cadastro: ' + err.message });
+      setLendoQrCadastro(false);
+    }
+  };
+
+  const pararCameraQrCadastro = () => {
+    if (scanIntervalCadastroRef.current) {
+      clearInterval(scanIntervalCadastroRef.current);
+      scanIntervalCadastroRef.current = null;
+    }
+    if (streamCadastroRef.current) {
+      streamCadastroRef.current.getTracks().forEach(t => t.stop());
+      streamCadastroRef.current = null;
+    }
+    setLendoQrCadastro(false);
   };
 
   const iniciarLeitorNfc = async (pontoAlvo: any) => {
@@ -1193,13 +1387,55 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Código da Tag / QR Code</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Código da Tag / Placa Física *
+                </label>
+                
+                {/* Botões de Leitura com 1 Toque */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={lerTagNfcParaCadastro}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
+                      lendoNfcCadastro
+                        ? 'bg-emerald-600 text-white animate-pulse'
+                        : 'bg-slate-900 hover:bg-slate-800 text-white'
+                    }`}
+                  >
+                    <Radio className={`w-3.5 h-3.5 ${lendoNfcCadastro ? 'animate-spin' : ''}`} />
+                    {lendoNfcCadastro ? 'Aproxime a Tag...' : '📡 1 Toque: Tag NFC'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={iniciarCameraQrCadastro}
+                    className="bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    {lendoQrCadastro ? 'Câmera Ativa...' : '📷 1 Toque: Ler QR'}
+                  </button>
+                </div>
+
+                {/* Leitor de Câmera para Cadastro */}
+                {lendoQrCadastro && (
+                  <div className="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border-2 border-blue-500 mb-2">
+                    <video ref={videoCadastroRef} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={pararCameraQrCadastro}
+                      className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full shadow-md"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <input
                   type="text"
-                  placeholder="Ex: TAG-HALL-A1"
+                  placeholder="Ex: TAG-HALL-A1 ou UID do chip NFC"
                   value={codigoTag}
                   onChange={(e) => setCodigoTag(e.target.value)}
-                  className="w-full border rounded-xl p-2.5 text-xs text-slate-800 font-mono uppercase"
+                  className="w-full border rounded-xl p-2.5 text-xs text-slate-800 font-mono uppercase bg-slate-50"
                   required
                 />
               </div>
@@ -1215,20 +1451,49 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                 />
               </div>
 
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-slate-700 block">Localização GPS</span>
-                  <span className="text-[11px] text-slate-500">
-                    {coordsNovoPonto ? `${coordsNovoPonto.lat.toFixed(5)}, ${coordsNovoPonto.lng.toFixed(5)}` : 'Não capturado'}
-                  </span>
+              {/* Caixa de Confirmação de GPS do Local */}
+              <div className={`p-3.5 rounded-xl border flex flex-col gap-2 ${
+                coordsNovoPonto 
+                  ? 'bg-emerald-50/70 border-emerald-300' 
+                  : 'bg-amber-50 border-amber-300'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {coordsNovoPonto ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    )}
+                    <span className="text-xs font-bold text-slate-800 block">
+                      Localização GPS do Ponto (Obrigatória)
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={capturarGPSNovoPonto}
+                    className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-[11px] font-bold px-3 py-1.5 rounded-lg transition shadow-2xs"
+                  >
+                    Atualizar GPS
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={capturarGPSNovoPonto}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-lg transition"
-                >
-                  Capturar GPS
-                </button>
+
+                <div className="text-[11px] text-slate-600">
+                  {coordsNovoPonto ? (
+                    <div className="space-y-0.5">
+                      <p className="font-mono text-emerald-900 font-bold">
+                        📍 Lat: {coordsNovoPonto.lat.toFixed(5)} | Lng: {coordsNovoPonto.lng.toFixed(5)}
+                      </p>
+                      <p className="text-[10px] text-emerald-700">
+                        🛡️ Ponto georreferenciado! Qualquer leitura fora do raio de 50m será bloqueada por antifraude.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-amber-800 font-medium">
+                      ⚠️ Você precisa estar no local físico exato para cadastrar as coordenadas GPS do ponto.
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -1326,6 +1591,25 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                       </button>
                     </div>
                   )}
+
+                  {/* Botão Dedicado de 1 Toque para Leitura Web NFC */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => iniciarLeitorNfc(modalRegistrarPonto)}
+                      className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-sm ${
+                        nfcLendo 
+                          ? 'bg-emerald-600 text-white animate-pulse' 
+                          : 'bg-slate-900 hover:bg-slate-800 text-white'
+                      }`}
+                    >
+                      <Radio className={`w-4 h-4 ${nfcLendo ? 'animate-spin' : ''}`} />
+                      {nfcLendo ? '📡 Leitor NFC Ativo: Encoste a Traseira do Celular na Placa...' : '📡 1 Toque: Ler Tag NFC no Local'}
+                    </button>
+                    <p className="text-[11px] text-slate-500 text-center">
+                      Aproxime o smartphone da Tag NFC instalada na placa do local. O sistema valida o código e o GPS antifraude no mesmo instante.
+                    </p>
+                  </div>
 
                   {/* Fallback de Foto e NFC */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
