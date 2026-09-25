@@ -10,7 +10,8 @@ import {
   Search, 
   Pencil, 
   X, 
-  Wrench
+  Wrench,
+  Trash2
 } from 'lucide-react';
 
 interface MateriaisProps {
@@ -104,6 +105,25 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
     setModalAberto(false);
   };
 
+  const registrarLogMaterial = (tipo: 'ADICAO' | 'ALTERACAO_STATUS' | 'EXCLUSAO', detalhe: any) => {
+    if (!usuarioLogado?.condominio_id) return;
+    const key = `infport_materiais_log_${usuarioLogado.condominio_id}`;
+    try {
+      const raw = localStorage.getItem(key);
+      const logs = raw ? JSON.parse(raw) : [];
+      logs.unshift({
+        id: Date.now().toString(),
+        tipo,
+        detalhe,
+        operador: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria',
+        timestamp: new Date().toISOString()
+      });
+      localStorage.setItem(key, JSON.stringify(logs.slice(0, 50)));
+    } catch (e) {
+      console.warn('Erro ao salvar log de materiais:', e);
+    }
+  };
+
   const salvarMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomeMaterial.trim()) {
@@ -131,12 +151,23 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
           .update(payload)
           .eq('id', idEdicao);
         if (error) throw error;
+        registrarLogMaterial('ALTERACAO_STATUS', {
+          nome: payload.nome,
+          categoria: payload.categoria,
+          estado: payload.estado,
+          observacao: payload.observacao_avaria
+        });
         setMensagem({ tipo: 'sucesso', texto: 'Equipamento atualizado com sucesso!' });
       } else {
         const { error } = await supabase
           .from('materiais_posto')
           .insert([payload]);
         if (error) throw error;
+        registrarLogMaterial('ADICAO', {
+          nome: payload.nome,
+          categoria: payload.categoria,
+          estado: payload.estado
+        });
         setMensagem({ tipo: 'sucesso', texto: 'Equipamento cadastrado com sucesso!' });
       }
 
@@ -144,6 +175,25 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
       carregarMateriais();
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const excluirMaterial = async (id: string, nome: string) => {
+    if (!window.confirm(`Tem certeza que deseja remover o item "${nome}" do inventário do posto?`)) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('materiais_posto')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      registrarLogMaterial('EXCLUSAO', { nome, id });
+      setMensagem({ tipo: 'sucesso', texto: `Equipamento "${nome}" removido do inventário!` });
+      carregarMateriais();
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao excluir equipamento: ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -296,13 +346,22 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
                 Última checagem por: <strong>{m.operador_atualizacao || 'Portaria'}</strong>
               </span>
 
-              <button
-                onClick={() => prepararEdicao(m)}
-                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
-                title="Editar Status / Informar Avaria"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => prepararEdicao(m)}
+                  className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                  title="Editar Status / Informar Avaria"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => excluirMaterial(m.id, m.nome)}
+                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+                  title="Excluir / Baixar Equipamento"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
