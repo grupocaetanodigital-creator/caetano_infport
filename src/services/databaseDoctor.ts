@@ -261,12 +261,16 @@ ALTER TABLE IF EXISTS configuracoes
   ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
 
--- 0.1 Garantir colunas na tabela condominios (Painel Tenant & Estrutura Física)
+-- 0.1 Garantir colunas na tabela condominios (Painel Tenant & Estrutura Física & WhatsApp)
 ALTER TABLE IF EXISTS condominios
   ADD COLUMN IF NOT EXISTS cnpj TEXT,
   ADD COLUMN IF NOT EXISTS telefone_portaria TEXT,
   ADD COLUMN IF NOT EXISTS sindico_nome TEXT,
   ADD COLUMN IF NOT EXISTS sindico_whatsapp TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_grupo_url TEXT,
+  ADD COLUMN IF NOT EXISTS escala_plantao TEXT DEFAULT '06_18',
+  ADD COLUMN IF NOT EXISTS horario_diurno_inicio TEXT DEFAULT '06:00',
+  ADD COLUMN IF NOT EXISTS horario_noturno_inicio TEXT DEFAULT '18:00',
   ADD COLUMN IF NOT EXISTS intervalo_ronda INTEGER DEFAULT 15,
   ADD COLUMN IF NOT EXISTS tipo_estrutura TEXT DEFAULT 'Blocos (Edifícios Baixos / Conjuntos)',
   ADD COLUMN IF NOT EXISTS qtd_blocos INTEGER DEFAULT 10,

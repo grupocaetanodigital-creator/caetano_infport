@@ -12,8 +12,18 @@ import {
   Pencil, 
   X,
   Filter,
-  ShieldCheck
+  ShieldCheck,
+  Clock,
+  MessageCircle,
+  ExternalLink,
+  Phone
 } from 'lucide-react';
+import { 
+  carregarCondominioConfig, 
+  salvarCondominioConfig, 
+  OPCOES_ESCALA, 
+  CondominioConfig 
+} from '../services/condominioService';
 
 interface CadastrosProps {
   usuarioLogado?: any;
@@ -29,6 +39,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [abaAtiva, setAbaAtiva] = useState(eAdmin ? 'condominios' : 'moradores');
 
   const [condominios, setCondominios] = useState<any[]>([]);
+  const [mapaConfigsCondos, setMapaConfigsCondos] = useState<Record<string, CondominioConfig>>({});
   const [operadores, setOperadores] = useState<any[]>([]);
   const [moradores, setMoradores] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -38,6 +49,13 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
   const [nomeCondominio, setNomeCondominio] = useState('');
   const [enderecoCondominio, setEnderecoCondominio] = useState('');
+  const [escalaPlantao, setEscalaPlantao] = useState<'06_18' | '07_19' | '08_20' | 'personalizado'>('06_18');
+  const [horarioDiurnoInicio, setHorarioDiurnoInicio] = useState('06:00');
+  const [horarioNoturnoInicio, setHorarioNoturnoInicio] = useState('18:00');
+  const [whatsappGrupoUrl, setWhatsappGrupoUrl] = useState('');
+  const [telefonePortaria, setTelefonePortaria] = useState('');
+  const [sindicoNome, setSindicoNome] = useState('');
+  const [sindicoWhatsapp, setSindicoWhatsapp] = useState('');
 
   const [nomeOperador, setNomeOperador] = useState('');
   const [loginOperador, setLoginOperador] = useState('');
@@ -61,6 +79,13 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setIdEdicao(null);
     setNomeCondominio('');
     setEnderecoCondominio('');
+    setEscalaPlantao('06_18');
+    setHorarioDiurnoInicio('06:00');
+    setHorarioNoturnoInicio('18:00');
+    setWhatsappGrupoUrl('');
+    setTelefonePortaria('');
+    setSindicoNome('');
+    setSindicoWhatsapp('');
     setNomeOperador('');
     setLoginOperador('');
     setSenhaOperador('');
@@ -84,7 +109,18 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       }
       const { data: conds, error: errCond } = await queryCond;
       if (errCond) throw errCond;
-      setCondominios(conds || []);
+      const listaCondos = conds || [];
+      setCondominios(listaCondos);
+
+      // Carregar configurações de cada condomínio (escala de plantão, grupo whatsapp, etc.)
+      const mapaTemp: Record<string, CondominioConfig> = {};
+      await Promise.all(
+        listaCondos.map(async (c) => {
+          const cfg = await carregarCondominioConfig(c.id);
+          mapaTemp[c.id] = cfg;
+        })
+      );
+      setMapaConfigsCondos(mapaTemp);
 
       if (abaAtiva === 'operadores' && !eOperador) {
         let queryOp = supabase.from('operadores').select('*').order('created_at', { ascending: false });
@@ -144,23 +180,41 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setLoading(true);
 
     try {
+      let targetId = idEdicao;
+      const optEscala = OPCOES_ESCALA.find(o => o.id === escalaPlantao);
+      const escalaLabel = optEscala ? optEscala.label : 'Personalizado';
+
+      const configCondo = {
+        nome: nomeCondominio.trim(),
+        endereco: enderecoCondominio.trim(),
+        escala_plantao: escalaPlantao,
+        escala_label: escalaLabel,
+        horario_diurno_inicio: escalaPlantao === 'personalizado' ? horarioDiurnoInicio : (optEscala?.diurnoInicio || '06:00'),
+        horario_noturno_inicio: escalaPlantao === 'personalizado' ? horarioNoturnoInicio : (optEscala?.noturnoInicio || '18:00'),
+        whatsapp_grupo_url: whatsappGrupoUrl.trim(),
+        telefone_portaria: telefonePortaria.trim(),
+        sindico_nome: sindicoNome.trim(),
+        sindico_whatsapp: sindicoWhatsapp.trim()
+      };
+
       if (idEdicao) {
-        const { error } = await supabase
-          .from('condominios')
-          .update({ nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() })
-          .eq('id', idEdicao);
-        if (error) throw error;
-        setMensagem({ tipo: 'sucesso', texto: 'Condomínio atualizado com sucesso!' });
+        await salvarCondominioConfig(idEdicao, configCondo);
+        setMensagem({ tipo: 'sucesso', texto: 'Condomínio e configurações de plantão/WhatsApp atualizados com sucesso!' });
       } else {
-        const { error } = await supabase.from('condominios').insert([
-          { nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() }
-        ]);
+        const { data: novoCond, error } = await supabase
+          .from('condominios')
+          .insert([{ nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() }])
+          .select()
+          .single();
+
         if (error) throw error;
-        setMensagem({ tipo: 'sucesso', texto: 'Condomínio cadastrado com sucesso!' });
+        targetId = novoCond.id;
+        await salvarCondominioConfig(novoCond.id, configCondo);
+        setMensagem({ tipo: 'sucesso', texto: 'Condomínio e configurações cadastrados com sucesso!' });
       }
 
       limparFormularios();
-      carregarDados();
+      await carregarDados();
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: `Erro ao salvar: ${err.message}` });
     } finally {
@@ -173,6 +227,25 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setIdEdicao(c.id);
     setNomeCondominio(c.nome);
     setEnderecoCondominio(c.endereco || '');
+
+    const cfg = mapaConfigsCondos[c.id];
+    if (cfg) {
+      setEscalaPlantao(cfg.escala_plantao || '06_18');
+      setHorarioDiurnoInicio(cfg.horario_diurno_inicio || '06:00');
+      setHorarioNoturnoInicio(cfg.horario_noturno_inicio || '18:00');
+      setWhatsappGrupoUrl(cfg.whatsapp_grupo_url || '');
+      setTelefonePortaria(cfg.telefone_portaria || '');
+      setSindicoNome(cfg.sindico_nome || '');
+      setSindicoWhatsapp(cfg.sindico_whatsapp || '');
+    } else {
+      setEscalaPlantao('06_18');
+      setHorarioDiurnoInicio('06:00');
+      setHorarioNoturnoInicio('18:00');
+      setWhatsappGrupoUrl('');
+      setTelefonePortaria('');
+      setSindicoNome('');
+      setSindicoWhatsapp('');
+    }
   };
 
   const salvarOperador = async (e: React.FormEvent) => {
@@ -411,7 +484,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             <h3 className="font-bold text-slate-800 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Plus className="w-5 h-5 text-emerald-600" />
-                {idEdicao ? 'Editar Condomínio' : 'Cadastrar Condomínio'}
+                {idEdicao ? 'Editar Condomínio & Configurações' : 'Cadastrar Condomínio'}
               </span>
               {idEdicao && (
                 <button
@@ -423,66 +496,247 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 </button>
               )}
             </h3>
+
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Condomínio</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Condomínio *</label>
               <input
                 type="text"
                 required
                 value={nomeCondominio}
                 onChange={(e) => setNomeCondominio(e.target.value)}
                 placeholder="Ex: Residencial Flores"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm font-medium"
               />
             </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Endereço</label>
               <input
                 type="text"
                 value={enderecoCondominio}
                 onChange={(e) => setEnderecoCondominio(e.target.value)}
-                placeholder="Rua, Número, Bairro"
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+                placeholder="Rua, Número, Bairro, Cidade"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm"
               />
             </div>
+
+            {/* SEÇÃO DE CONFIGURAÇÃO DE PLANTÃO */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <label className="block text-xs font-bold text-slate-900 uppercase flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-emerald-600" />
+                Escala & Horários do Plantão da Guarita *
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Define a janela exata de consolidação das passagens de posto, rondas e entregas de encomendas deste condomínio.
+              </p>
+
+              <div>
+                <select
+                  value={escalaPlantao}
+                  onChange={(e: any) => {
+                    const nova = e.target.value;
+                    setEscalaPlantao(nova);
+                    const opt = OPCOES_ESCALA.find(o => o.id === nova);
+                    if (opt && nova !== 'personalizado') {
+                      setHorarioDiurnoInicio(opt.diurnoInicio);
+                      setHorarioNoturnoInicio(opt.noturnoInicio);
+                    }
+                  }}
+                  className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                >
+                  {OPCOES_ESCALA.map((op) => (
+                    <option key={op.id} value={op.id}>
+                      🕒 {op.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {escalaPlantao === 'personalizado' && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Início Diurno</label>
+                    <input
+                      type="time"
+                      value={horarioDiurnoInicio}
+                      onChange={(e) => setHorarioDiurnoInicio(e.target.value)}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Início Noturno</label>
+                    <input
+                      type="time"
+                      value={horarioNoturnoInicio}
+                      onChange={(e) => setHorarioNoturnoInicio(e.target.value)}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="text-[10px] text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                ✓ Turno 1 (Diurno): <strong>{horarioDiurnoInicio}</strong> às <strong>{horarioNoturnoInicio}</strong> | Turno 2 (Noturno): <strong>{horarioNoturnoInicio}</strong> às <strong>{horarioDiurnoInicio}</strong>
+              </div>
+            </div>
+
+            {/* SEÇÃO DE GRUPO WHATSAPP */}
+            <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-2.5">
+              <label className="block text-xs font-bold text-emerald-950 uppercase flex items-center gap-1.5">
+                <MessageCircle className="w-4 h-4 text-emerald-700" />
+                Link do Grupo de WhatsApp do Condomínio
+              </label>
+              <p className="text-[11px] text-emerald-800">
+                O relatório consolidado de passagem de posto e alertas serão enviados diretamente para este grupo:
+              </p>
+
+              <div className="relative">
+                <input
+                  type="url"
+                  value={whatsappGrupoUrl}
+                  onChange={(e) => setWhatsappGrupoUrl(e.target.value)}
+                  placeholder="https://chat.whatsapp.com/G8AZH67UIPO6xXSwzxROpZ"
+                  className="w-full p-2.5 bg-white border border-emerald-300 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 font-mono"
+                />
+              </div>
+
+              {whatsappGrupoUrl.trim() && (
+                <div className="flex justify-between items-center text-[10px] pt-0.5">
+                  <span className="text-emerald-700 font-medium truncate max-w-[200px]">
+                    Link configurado
+                  </span>
+                  <a
+                    href={whatsappGrupoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 underline"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Testar Link
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* CONTATOS COMPLEMENTARES */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">Contatos de Apoio (Opcional):</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <label className="block text-[10px] text-slate-600 mb-0.5">Telefone Guarita</label>
+                  <input
+                    type="text"
+                    value={telefonePortaria}
+                    onChange={(e) => setTelefonePortaria(e.target.value)}
+                    placeholder="(11) 98888-0000"
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-600 mb-0.5">Nome do Síndico</label>
+                  <input
+                    type="text"
+                    value={sindicoNome}
+                    onChange={(e) => setSindicoNome(e.target.value)}
+                    placeholder="Nome do Síndico"
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition"
+              className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transition text-sm flex items-center justify-center gap-2 shadow-md"
             >
-              {idEdicao ? 'Atualizar Condomínio' : 'Salvar Condomínio'}
+              {loading ? 'Salvando...' : idEdicao ? 'Atualizar Condomínio & Configurações' : 'Salvar Novo Condomínio'}
             </button>
           </form>
 
           <div className="md:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-4">Condomínios Cadastrados ({condominios.length})</h3>
-            <div className="space-y-3">
-              {condominios.map((c) => (
-                <div key={c.id} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-slate-900">{c.nome}</h4>
-                    <p className="text-xs text-slate-500">{c.endereco || 'Sem endereço informado'}</p>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-slate-700" />
+                Condomínios Gerenciados ({condominios.length})
+              </h3>
+              <span className="text-xs text-slate-400">Escalas & Grupos de WhatsApp</span>
+            </div>
+
+            <div className="space-y-3.5">
+              {condominios.map((c) => {
+                const cfg = mapaConfigsCondos[c.id] || {};
+                const temGrupo = !!cfg.whatsapp_grupo_url;
+
+                return (
+                  <div key={c.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:border-slate-300 transition shadow-xs">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-slate-900 text-sm">{c.nome}</h4>
+                        <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                          Ativo
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">{c.endereco || 'Sem endereço informado'}</p>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                        {/* Badge de Horário / Escala */}
+                        <span className="inline-flex items-center gap-1 bg-white border border-slate-200 text-slate-700 font-semibold px-2.5 py-1 rounded-lg text-[11px]">
+                          <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                          Plantão: <strong>{cfg.escala_label || '06:00 às 18:00 / 18:00 às 06:00'}</strong>
+                        </span>
+
+                        {/* Badge de Grupo de WhatsApp */}
+                        {temGrupo ? (
+                          <a
+                            href={cfg.whatsapp_grupo_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold px-2.5 py-1 rounded-lg text-[11px] hover:bg-emerald-100 transition"
+                            title="Abrir Grupo do WhatsApp deste Condomínio"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            Grupo WhatsApp Conectado
+                            <ExternalLink className="w-3 h-3 text-emerald-500" />
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-lg text-[10px]">
+                            ⚠️ Sem Grupo WhatsApp Vinculado
+                          </span>
+                        )}
+
+                        {cfg.telefone_portaria && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                            <Phone className="w-3 h-3" /> {cfg.telefone_portaria}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <button
+                        onClick={() => setCondominioFiltroAdmin(c.id)}
+                        className="px-3 py-1.5 text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg transition"
+                        title="Alternar para este Condomínio"
+                      >
+                        Gerenciar
+                      </button>
+                      <button
+                        onClick={() => prepararEdicaoCondominio(c)}
+                        className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                        title="Editar Condomínio e Escala"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCondominioFiltroAdmin(c.id)}
-                      className="px-2.5 py-1 text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg transition"
-                      title="Alternar para este Condomínio"
-                    >
-                      Gerenciar
-                    </button>
-                    <button
-                      onClick={() => prepararEdicaoCondominio(c)}
-                      className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
-                      title="Editar"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
-                      Ativo
-                    </span>
-                  </div>
+                );
+              })}
+
+              {condominios.length === 0 && (
+                <div className="text-center p-8 text-slate-400 text-xs italic">
+                  Nenhum condomínio cadastrado ainda.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

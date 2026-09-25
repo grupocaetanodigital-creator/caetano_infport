@@ -12,28 +12,38 @@ import {
   FileCheck2, 
   ShieldCheck, 
   Clock, 
-  User,
-  CheckSquare,
-  Square,
-  Key,
-  Radio,
-  Wrench,
-  Package,
-  Box,
-  Footprints,
-  AlertTriangle,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  HardHat,
-  Phone,
-  Calendar,
-  Building,
-  RefreshCw,
-  ExternalLink,
-  ShieldAlert
+  User, 
+  CheckSquare, 
+  Square, 
+  Key, 
+  Radio, 
+  Wrench, 
+  Package, 
+  Box, 
+  Footprints, 
+  AlertTriangle, 
+  ChevronRight, 
+  ChevronDown, 
+  ChevronUp, 
+  Eye, 
+  HardHat, 
+  Phone, 
+  Calendar, 
+  Building, 
+  RefreshCw, 
+  ExternalLink, 
+  ShieldAlert,
+  Copy,
+  Check,
+  Share2,
+  Table
 } from 'lucide-react';
+import { 
+  carregarCondominioConfig, 
+  calcularPlantaoVigente, 
+  CondominioConfig 
+} from '../services/condominioService';
+import TabelasResumoPosto from '../components/TabelasResumoPosto';
 
 interface PassagemPostoProps {
   usuarioLogado?: any;
@@ -225,6 +235,9 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   const [loading, setLoading] = useState(false);
   const [loadingAuditoria, setLoadingAuditoria] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
+  const [condominioConfig, setCondominioConfig] = useState<CondominioConfig | null>(null);
+  const [copiadoTexto, setCopiadoTexto] = useState(false);
+  const [modalCompartilharWhatsApp, setModalCompartilharWhatsApp] = useState<any | null>(null);
 
   const [modalNova, setModalNova] = useState(false);
   const [etapa, setEtapa] = useState(1);
@@ -236,6 +249,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
   // Módulo ativo para visualização detalhada na etapa 1
   const [moduloAtivo, setModuloAtivo] = useState<string>('todos');
+  const [visualizacaoModal, setVisualizacaoModal] = useState<'tabelas' | 'cards'>('tabelas');
 
   // Estado consolidado completo
   const [consolidacao, setConsolidacao] = useState<ConsolidacaoPosto>(estadoInicialConsolidacao);
@@ -255,8 +269,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   });
 
   useEffect(() => {
-    carregarPassagens();
+    if (usuarioLogado?.condominio_id) {
+      carregarPassagens();
+      carregarConfigEConsolidar(usuarioLogado.condominio_id);
+    }
   }, [usuarioLogado?.condominio_id]);
+
+  const carregarConfigEConsolidar = async (condId: string) => {
+    const cfg = await carregarCondominioConfig(condId);
+    setCondominioConfig(cfg);
+    await consolidarModulosPosto(cfg);
+  };
 
   const carregarPassagens = async () => {
     if (!usuarioLogado?.condominio_id) return;
@@ -286,13 +309,19 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     await consolidarModulosPosto();
   };
 
-  const consolidarModulosPosto = async () => {
+  const consolidarModulosPosto = async (cfgParam?: CondominioConfig) => {
     const condId = usuarioLogado?.condominio_id;
     if (!condId) return;
 
     setLoadingAuditoria(true);
     try {
-      // 0. Determinar intervalo do plantão atual (desde a última passagem de posto ou 12h padrão)
+      const cfg = cfgParam || condominioConfig || await carregarCondominioConfig(condId);
+      if (!condominioConfig) setCondominioConfig(cfg);
+
+      // 0. Determinar intervalo do plantão atual com base na escala configurada do condomínio
+      const vig = calcularPlantaoVigente(cfg, new Date());
+      let plantaoInicioDate = vig.inicio;
+
       const { data: ultimasPassagens } = await supabase
         .from('passagens_posto')
         .select('created_at')
@@ -300,11 +329,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         .order('created_at', { ascending: false })
         .limit(1);
 
-      let plantaoInicioDate = new Date(Date.now() - 12 * 60 * 60 * 1000);
       if (ultimasPassagens && ultimasPassagens.length > 0 && ultimasPassagens[0].created_at) {
         const ultData = new Date(ultimasPassagens[0].created_at);
-        // Se a última passagem ocorreu há menos de 48 horas, usamos ela como início do turno
-        if (Date.now() - ultData.getTime() < 48 * 60 * 60 * 1000) {
+        // Se a última passagem ocorreu dentro do turno vigente (após o início do plantão), usamos a passagem
+        if (ultData.getTime() > plantaoInicioDate.getTime() && (Date.now() - ultData.getTime() < 24 * 60 * 60 * 1000)) {
           plantaoInicioDate = ultData;
         }
       }
@@ -709,7 +737,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     }
   };
 
-  const gerarLinkWhatsApp = (item: any) => {
+  const gerarTextoRelatorio = (item: any) => {
     const dataHora = new Date(item.created_at).toLocaleString('pt-BR');
     const c = item.pendencias || {};
     const enc = c.encomendas || {};
@@ -843,8 +871,27 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     }
 
     texto += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n_INFPORT Portaria Digital Inteligente_`;
+    return texto;
+  };
+
+  const gerarLinkWhatsApp = (item: any) => {
+    const texto = gerarTextoRelatorio(item);
     return `https://wa.me/?text=${encodeURIComponent(texto)}`;
   };
+
+  const copiarRelatorioWhatsApp = async (item: any) => {
+    try {
+      const texto = gerarTextoRelatorio(item);
+      await navigator.clipboard.writeText(texto);
+      setCopiadoTexto(true);
+      setTimeout(() => setCopiadoTexto(false), 3000);
+      setMensagem({ tipo: 'sucesso', texto: '✓ Relatório formatado copiado! Cole no grupo do WhatsApp do condomínio.' });
+    } catch (e) {
+      console.warn('Erro ao copiar relatório:', e);
+    }
+  };
+
+  const infoPlantaoVigente = calcularPlantaoVigente(condominioConfig, new Date());
 
   return (
     <div className="space-y-6">
@@ -862,12 +909,109 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
           </p>
         </div>
 
-        <button
-          onClick={abrirNovaPassagem}
-          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md active:scale-95"
-        >
-          <Plus className="w-4 h-4" /> Iniciar Troca de Turno
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {condominioConfig?.whatsapp_grupo_url && (
+            <a
+              href={condominioConfig.whatsapp_grupo_url}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-3 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
+              title="Abrir o Grupo de WhatsApp Oficial deste Condomínio"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Grupo WhatsApp
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+
+          <button
+            onClick={abrirNovaPassagem}
+            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md active:scale-95"
+          >
+            <Plus className="w-4 h-4" /> Iniciar Troca de Turno
+          </button>
+        </div>
+      </div>
+
+      {/* BANNER DE CONFIGURAÇÃO DE PLANTÃO DO CONDOMÍNIO ATIVO */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 shadow-md">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1">
+              <Building className="w-3.5 h-3.5 text-emerald-400" />
+              {condominioConfig?.nome || 'Condomínio'}
+            </span>
+            <span className="text-emerald-400 font-mono text-xs font-bold bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Escala: {condominioConfig?.escala_label || '06:00 às 18:00 / 18:00 às 06:00'}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-200">
+            <strong>{infoPlantaoVigente.labelTurno}</strong> em andamento • Início em {new Date(consolidacao.plantaoInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({consolidacao.plantaoHoras}h decorridas)
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {condominioConfig?.whatsapp_grupo_url ? (
+            <div className="flex items-center gap-2 bg-slate-800/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-slate-300 text-[11px]">Grupo WhatsApp:</span>
+              <a
+                href={condominioConfig.whatsapp_grupo_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 font-bold font-mono text-[11px] underline flex items-center gap-1"
+              >
+                Conectado <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          ) : (
+            <span className="text-[11px] text-amber-300 bg-amber-950/60 border border-amber-500/30 px-3 py-1.5 rounded-xl">
+              ⚠️ Configure o link do grupo de WhatsApp em <strong>Cadastros ➔ Condomínios</strong>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => consolidarModulosPosto()}
+            disabled={loadingAuditoria}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition"
+            title="Recarregar e re-auditar dados de todos os módulos"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingAuditoria ? 'animate-spin text-emerald-400' : ''}`} />
+            {loadingAuditoria ? 'Atualizando...' : 'Recarregar Auditoria'}
+          </button>
+        </div>
+      </div>
+
+      {mensagem.texto && (
+        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+          mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+        }`}>
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+          {mensagem.texto}
+        </div>
+      )}
+
+      {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <Table className="w-5 h-5 text-emerald-600" />
+              Tabelas de Resumo do Plantão para Conferência
+            </h3>
+            <p className="text-xs text-slate-500">
+              Conferência detalhada item a item de Rondas, Encomendas/RE, Chaves fora do quadro, Ocorrências não resolvidas, Custódia, Prestadores e Materiais.
+            </p>
+          </div>
+          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hidden sm:inline-flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> 7 Módulos Sincronizados
+          </span>
+        </div>
+
+        <TabelasResumoPosto consolidacao={consolidacao} />
       </div>
 
       {mensagem.texto && (
@@ -982,14 +1126,13 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     >
                       <Eye className="w-3.5 h-3.5" /> Detalhes
                     </button>
-                    <a
-                      href={gerarLinkWhatsApp(item)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-sm"
+                    <button
+                      onClick={() => setModalCompartilharWhatsApp(item)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition shadow-sm"
+                      title="Opções de Envio para WhatsApp"
                     >
                       <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1056,8 +1199,42 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     </div>
                   )}
 
-                  {/* CARDS RESUMO DE ALTO NÍVEL */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {/* SELETOR DE MODO DE CONFERÊNCIA NO MODAL */}
+                  <div className="flex justify-between items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                    <span className="text-xs font-bold text-slate-700 px-2 flex items-center gap-1.5">
+                      <Table className="w-3.5 h-3.5 text-emerald-600" />
+                      Visualização da Auditoria do Posto:
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setVisualizacaoModal('tabelas')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                          visualizacaoModal === 'tabelas' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Table className="w-3 h-3" /> Tabelas de Resumo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisualizacaoModal('cards')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                          visualizacaoModal === 'cards' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3 h-3" /> Cartões por Módulo
+                      </button>
+                    </div>
+                  </div>
+
+                  {visualizacaoModal === 'tabelas' && (
+                    <TabelasResumoPosto consolidacao={consolidacao} modoConferencia={true} />
+                  )}
+
+                  {visualizacaoModal === 'cards' && (
+                    <>
+                      {/* CARDS RESUMO DE ALTO NÍVEL */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {/* RE / Encomendas */}
                     <button
                       type="button"
@@ -1615,6 +1792,8 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                       </div>
                     )}
                   </div>
+                </>
+              )}
 
                   {/* CHECKLIST FÍSICO DA GUARITA */}
                   <div className="space-y-2 border-t pt-3 bg-white p-4 rounded-xl border">
@@ -1917,14 +2096,108 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
               >
                 Fechar
               </button>
-              <a
-                href={gerarLinkWhatsApp(modalHistoricoDetalhes)}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                onClick={() => setModalCompartilharWhatsApp(modalHistoricoDetalhes)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
               >
-                <MessageCircle className="w-4 h-4" /> Enviar para WhatsApp
-              </a>
+                <MessageCircle className="w-4 h-4" /> Opções do WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DISPARO WHATSAPP COM SUPORTE AO GRUPO DO CONDOMÍNIO */}
+      {modalCompartilharWhatsApp && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl relative max-h-[90vh] flex flex-col">
+            <button 
+              onClick={() => setModalCompartilharWhatsApp(null)} 
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="border-b pb-3 pr-8">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-50 px-2 py-0.5 rounded">
+                Compartilhamento Oficial
+              </span>
+              <h3 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2 mt-1">
+                <MessageCircle className="w-5 h-5 text-emerald-600" /> Disparar para WhatsApp
+              </h3>
+              <p className="text-xs text-slate-500">
+                Relatório consolidado da passagem {modalCompartilharWhatsApp.codigo || ''}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 text-xs pr-1">
+              {condominioConfig?.whatsapp_grupo_url ? (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                  <span className="font-bold text-emerald-950 flex items-center gap-1.5 uppercase text-[11px]">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Grupo de WhatsApp Vinculado a este Condomínio
+                  </span>
+                  <p className="text-slate-600 text-[11px]">
+                    Este condomínio possui grupo oficial configurado. Clique abaixo para copiar o relatório e abrir o grupo diretamente:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      copiarRelatorioWhatsApp(modalCompartilharWhatsApp);
+                      window.open(condominioConfig.whatsapp_grupo_url, '_blank');
+                    }}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-lg text-xs flex items-center justify-center gap-2 shadow-xs transition"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Copiar e Abrir Grupo do Condomínio
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs">
+                  ⚠️ Este condomínio ainda não possui um link de grupo de WhatsApp cadastrado. Você pode configurá-lo na aba <strong>Cadastros ➔ Condomínios</strong>.
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <a
+                  href={gerarLinkWhatsApp(modalCompartilharWhatsApp)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition text-center"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Abrir WhatsApp Web
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => copiarRelatorioWhatsApp(modalCompartilharWhatsApp)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  {copiadoTexto ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiadoTexto ? 'Copiado!' : 'Copiar Texto'}
+                </button>
+              </div>
+
+              <div className="pt-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Prévia da Mensagem:</span>
+                <textarea
+                  readOnly
+                  rows={6}
+                  value={gerarTextoRelatorio(modalCompartilharWhatsApp)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-mono text-slate-700 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalCompartilharWhatsApp(null)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
