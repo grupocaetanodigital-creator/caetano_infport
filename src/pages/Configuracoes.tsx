@@ -26,10 +26,35 @@ import {
   Database,
   Sparkles,
   Copy,
-  Check
+  Check,
+  Boxes,
+  MapPin,
+  Edit3,
+  ToggleLeft,
+  ToggleRight,
+  X
 } from 'lucide-react';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
 import { generateMigrationSql } from '../services/databaseDoctor';
+
+export interface LocalArmazenamento {
+  id: string;
+  codigo: string;
+  nome: string;
+  categoria: string;
+  capacidade: string;
+  observacao: string;
+  ativo: boolean;
+}
+
+export const LOCAIS_ARMAZENAMENTO_PADRAO: LocalArmazenamento[] = [
+  { id: '1', codigo: 'PRAT-A1', nome: 'Prateleira A1 - Caixas Pequenas', categoria: 'Prateleira', capacidade: 'Até 25 pacotes', observacao: 'Volumes leves e encomendas pequenas', ativo: true },
+  { id: '2', codigo: 'PRAT-A2', nome: 'Prateleira A2 - Caixas Médias', categoria: 'Prateleira', capacidade: 'Até 15 pacotes', observacao: 'Volumes médios e caixas padrão', ativo: true },
+  { id: '3', codigo: 'GAV-01', nome: 'Gaveta 01 - Cartas & Envelopes', categoria: 'Gaveta', capacidade: 'Até 60 itens', observacao: 'Correspondências, cartões e documentos', ativo: true },
+  { id: '4', codigo: 'ARM-01', nome: 'Armário Trancado 01', categoria: 'Armário', capacidade: 'Restrito', observacao: 'Itens de valor, eletrônicos e celulares', ativo: true },
+  { id: '5', codigo: 'CHAO-01', nome: 'Chão / Área de Volumosos', categoria: 'Chão / Palete', capacidade: 'Grandes volumes', observacao: 'Eletrodomésticos, TVs e móveis', ativo: true },
+  { id: '6', codigo: 'BANCADA', nome: 'Bancada Principal de Triagem', categoria: 'Bancada', capacidade: 'Saída rápida', observacao: 'Pacotes em trânsito para retirada no dia', ativo: true }
+];
 
 interface ConfiguracoesProps {
   usuarioLogado?: any;
@@ -37,7 +62,7 @@ interface ConfiguracoesProps {
 }
 
 export default function Configuracoes({ usuarioLogado, onConfigSalva }: ConfiguracoesProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'supabase'>('flags');
+  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'supabase' | 'locais_triagem'>('flags');
   const [loading, setLoading] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
@@ -74,6 +99,20 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     telefone_principal: '',
     telefone_whatsapp: '',
     exibir_menu_flutuante: true
+  });
+
+  // Estado para Locais de Triagem & Armazenamento (Tabela)
+  const [locaisArmazenamento, setLocaisArmazenamento] = useState<LocalArmazenamento[]>([]);
+  const [modalLocalAberto, setModalLocalAberto] = useState(false);
+  const [editandoLocalId, setEditandoLocalId] = useState<string | null>(null);
+  const [filtroLocais, setFiltroLocais] = useState('');
+  const [formLocal, setFormLocal] = useState({
+    codigo: '',
+    nome: '',
+    categoria: 'Prateleira',
+    capacidade: 'Até 20 pacotes',
+    observacao: '',
+    ativo: true
   });
 
   const modulosVisual = [
@@ -148,6 +187,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       carregarConfiguracoes();
       carregarTemplates();
       carregarContatosEmergencia();
+      carregarLocaisArmazenamento();
     }
   }, [usuarioLogado?.condominio_id]);
 
@@ -246,6 +286,191 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     } catch (err) {
       console.error('Erro ao carregar contatos de emergência:', err);
     }
+  };
+
+  const carregarLocaisArmazenamento = async () => {
+    const targetCondoId = usuarioLogado?.condominio_id;
+    if (!targetCondoId) return;
+
+    try {
+      // 1. Tentar ler do localStorage para resposta imediata
+      const cached = localStorage.getItem(`infport_locais_${targetCondoId}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLocaisArmazenamento(parsed);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 2. Tenta buscar da tabela dedicada locais_armazenamento
+      const { data: locaisTabela, error: errTabela } = await supabase
+        .from('locais_armazenamento')
+        .select('*')
+        .eq('condominio_id', targetCondoId)
+        .order('codigo', { ascending: true });
+
+      if (!errTabela && locaisTabela && locaisTabela.length > 0) {
+        setLocaisArmazenamento(locaisTabela);
+        localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(locaisTabela));
+        return;
+      }
+
+      // 3. Fallback: Tenta buscar da coluna locais_armazenamento na tabela configuracoes
+      const { data: configData } = await supabase
+        .from('configuracoes')
+        .select('locais_armazenamento')
+        .eq('condominio_id', targetCondoId)
+        .maybeSingle();
+
+      if (configData?.locais_armazenamento && Array.isArray(configData.locais_armazenamento) && configData.locais_armazenamento.length > 0) {
+        setLocaisArmazenamento(configData.locais_armazenamento);
+        localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(configData.locais_armazenamento));
+        return;
+      }
+
+      // 4. Se não existir nada cadastrado ainda, inicializa com os locais padrão
+      setLocaisArmazenamento(LOCAIS_ARMAZENAMENTO_PADRAO);
+      localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(LOCAIS_ARMAZENAMENTO_PADRAO));
+    } catch (err) {
+      console.error('Erro ao carregar locais de armazenamento:', err);
+      if (locaisArmazenamento.length === 0) {
+        setLocaisArmazenamento(LOCAIS_ARMAZENAMENTO_PADRAO);
+      }
+    }
+  };
+
+  const persistirLocais = async (novosLocais: LocalArmazenamento[]) => {
+    const targetCondoId = usuarioLogado?.condominio_id;
+    if (!targetCondoId) return;
+
+    setLocaisArmazenamento(novosLocais);
+    localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(novosLocais));
+
+    // Notifica outros módulos (como Encomendas) em tempo real
+    window.dispatchEvent(new CustomEvent('locais_armazenamento_atualizados', {
+      detail: { condominio_id: targetCondoId, locais: novosLocais }
+    }));
+
+    // Tenta salvar no Supabase
+    try {
+      // Salva na tabela configuracoes (JSONB)
+      await supabase
+        .from('configuracoes')
+        .upsert([
+          { condominio_id: targetCondoId, locais_armazenamento: novosLocais }
+        ], { onConflict: 'condominio_id' });
+
+      // Salva na tabela dedicada se existir
+      await supabase
+        .from('locais_armazenamento')
+        .upsert(
+          novosLocais.map(l => ({
+            id: l.id && l.id.length > 10 ? l.id : undefined,
+            condominio_id: targetCondoId,
+            codigo: l.codigo,
+            nome: l.nome,
+            categoria: l.categoria,
+            capacidade: l.capacidade || '',
+            observacao: l.observacao || '',
+            ativo: l.ativo
+          }))
+        );
+    } catch (e) {
+      console.warn('Aviso de persistência de locais:', e);
+    }
+  };
+
+  const abrirModalNovoLocal = () => {
+    setEditandoLocalId(null);
+    setFormLocal({
+      codigo: '',
+      nome: '',
+      categoria: 'Prateleira',
+      capacidade: 'Até 20 pacotes',
+      observacao: '',
+      ativo: true
+    });
+    setModalLocalAberto(true);
+  };
+
+  const abrirEdicaoLocal = (local: LocalArmazenamento) => {
+    setEditandoLocalId(local.id);
+    setFormLocal({
+      codigo: local.codigo,
+      nome: local.nome,
+      categoria: local.categoria || 'Prateleira',
+      capacidade: local.capacidade || '',
+      observacao: local.observacao || '',
+      ativo: local.ativo
+    });
+    setModalLocalAberto(true);
+  };
+
+  const salvarLocalArmazenamento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formLocal.codigo.trim() || !formLocal.nome.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Informe o código e o nome do local de armazenamento.' });
+      return;
+    }
+
+    const codigoFormatado = formLocal.codigo.trim().toUpperCase();
+    let atualizados: LocalArmazenamento[] = [];
+
+    if (editandoLocalId) {
+      atualizados = locaisArmazenamento.map(l => {
+        if (l.id === editandoLocalId) {
+          return {
+            ...l,
+            codigo: codigoFormatado,
+            nome: formLocal.nome.trim(),
+            categoria: formLocal.categoria,
+            capacidade: formLocal.capacidade.trim(),
+            observacao: formLocal.observacao.trim(),
+            ativo: formLocal.ativo
+          };
+        }
+        return l;
+      });
+      setMensagem({ tipo: 'sucesso', texto: `Local "${formLocal.nome}" atualizado na tabela com sucesso!` });
+    } else {
+      const novoLocal: LocalArmazenamento = {
+        id: Date.now().toString(),
+        codigo: codigoFormatado,
+        nome: formLocal.nome.trim(),
+        categoria: formLocal.categoria,
+        capacidade: formLocal.capacidade.trim(),
+        observacao: formLocal.observacao.trim(),
+        ativo: formLocal.ativo
+      };
+      atualizados = [...locaisArmazenamento, novoLocal];
+      setMensagem({ tipo: 'sucesso', texto: `Novo local "${formLocal.nome}" cadastrado na tabela!` });
+    }
+
+    await persistirLocais(atualizados);
+    setModalLocalAberto(false);
+  };
+
+  const toggleStatusLocal = async (id: string) => {
+    const atualizados = locaisArmazenamento.map(l => {
+      if (l.id === id) {
+        return { ...l, ativo: !l.ativo };
+      }
+      return l;
+    });
+    await persistirLocais(atualizados);
+  };
+
+  const excluirLocalArmazenamento = async (id: string) => {
+    const local = locaisArmazenamento.find(l => l.id === id);
+    if (!window.confirm(`Tem certeza que deseja remover o local "${local?.nome || id}" da tabela?`)) return;
+
+    const atualizados = locaisArmazenamento.filter(l => l.id !== id);
+    await persistirLocais(atualizados);
+    setMensagem({ tipo: 'sucesso', texto: 'Local de armazenamento removido da tabela com sucesso!' });
   };
 
   const salvarParametrizacao = async (e: React.FormEvent) => {
