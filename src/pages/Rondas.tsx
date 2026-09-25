@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import jsQR from 'jsqr';
 import { supabase } from '../services/supabase';
 import { 
   ShieldCheck, 
@@ -18,7 +19,12 @@ import {
   ArrowRightLeft,
   VideoOff,
   Check,
-  Trash2
+  Trash2,
+  Scan,
+  Radio,
+  Lock,
+  Unlock,
+  RefreshCw
 } from 'lucide-react';
 
 interface RondasProps {
@@ -31,6 +37,7 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
   const inputFotoRef = useRef<HTMLInputElement | null>(null);
+  const inputPlacaFotoRef = useRef<HTMLInputElement | null>(null);
 
   const nivelNum = Number(usuarioLogado?.nivel ?? usuarioLogado?.nivel_acesso);
   const perfilTexto = String(
@@ -194,8 +201,13 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const [lendoQrCamera, setLendoQrCamera] = useState(false);
+  const [pontoValidadoFisico, setPontoValidadoFisico] = useState(false);
+  const [nfcDisponivel, setNfcDisponivel] = useState(false);
+  const [nfcLendo, setNfcLendo] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<any>(null);
+  const ndefReaderRef = useRef<any>(null);
 
   const [operadorSelecionadoId, setOperadorSelecionadoId] = useState('');
   const [senhaLoginEntrante, setSenhaLoginEntrante] = useState('');
@@ -385,37 +397,140 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
     }
   };
 
-  const iniciarCameraQr = async () => {
+  const processarTagLida = (tagLidaBruta: string, pontoAlvo: any) => {
+    if (!pontoAlvo) return;
+    const tagLimpa = tagLidaBruta.trim().toUpperCase();
+    const tagEsperada = pontoAlvo.codigo_tag?.trim().toUpperCase();
+
+    if (tagLimpa === tagEsperada) {
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+        scanIntervalRef.current = null;
+      }
+      pararCameraQr();
+      pararLeitorNfc();
+
+      if ('vibrate' in navigator) {
+        try {
+          navigator.vibrate([100, 50, 100]);
+        } catch {
+          // ignore
+        }
+      }
+
+      setCodigoLido(tagLimpa);
+      setPontoValidadoFisico(true);
+      capturarGPS();
+      setMensagem({ 
+        tipo: 'sucesso', 
+        texto: `✅ Placa e QR Code do ponto "${pontoAlvo.nome_ponto}" validados com sucesso no local! Checklist desbloqueado.` 
+      });
+    } else {
+      setMensagem({ 
+        tipo: 'erro', 
+        texto: `🚨 Tag/QR lido (${tagLimpa}) NÃO corresponde a este ponto (${tagEsperada})! Aponte para a placa correta deste ponto.` 
+      });
+    }
+  };
+
+  const iniciarLeitorNfc = async (pontoAlvo: any) => {
+    if (typeof window !== 'undefined' && 'NDEFReader' in window) {
+      setNfcDisponivel(true);
+      try {
+        const ndef = new (window as any).NDEFReader();
+        ndefReaderRef.current = ndef;
+        await ndef.scan();
+        setNfcLendo(true);
+        ndef.onreading = (event: any) => {
+          let tagLida = event.serialNumber || '';
+          if (event.message && event.message.records) {
+            for (const record of event.message.records) {
+              if (record.recordType === 'text') {
+                const textDecoder = new TextDecoder(record.encoding || 'utf-8');
+                tagLida = textDecoder.decode(record.data);
+                break;
+              }
+            }
+          }
+          if (tagLida) {
+            processarTagLida(tagLida, pontoAlvo);
+          }
+        };
+      } catch (nfcErr) {
+        console.log('NFC não disponível ou cancelado:', nfcErr);
+        setNfcLendo(false);
+      }
+    } else {
+      setNfcDisponivel(false);
+    }
+  };
+
+  const pararLeitorNfc = () => {
+    setNfcLendo(false);
+    ndefReaderRef.current = null;
+  };
+
+  const iniciarCameraQr = async (pontoAlvo?: any) => {
+    const alvo = pontoAlvo || modalRegistrarPonto;
     setLendoQrCamera(true);
+
+    iniciarLeitorNfc(alvo);
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.setAttribute('playsinline', 'true');
+        await videoRef.current.play();
       }
 
-      if ('BarcodeDetector' in window) {
-        const barcodeDetector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-        const scanInterval = setInterval(async () => {
-          if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const barcodeDetector = ('BarcodeDetector' in window) 
+        ? new (window as any).BarcodeDetector({ formats: ['qr_code'] }) 
+        : null;
+
+      if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
+
+      scanIntervalRef.current = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2) return;
+
+        try {
+          let detectedCode: string | null = null;
+
+          if (barcodeDetector) {
             try {
               const barcodes = await barcodeDetector.detect(videoRef.current);
-              if (barcodes.length > 0) {
-                const tagDetectada = barcodes[0].rawValue;
-                setCodigoLido(tagDetectada.toUpperCase());
-                pararCameraQr();
-                clearInterval(scanInterval);
-                setMensagem({ tipo: 'sucesso', texto: 'QR Code lido com sucesso!' });
+              if (barcodes && barcodes.length > 0) {
+                detectedCode = barcodes[0].rawValue;
               }
-            } catch (err) {
-              console.error('Erro na detecção do QR:', err);
+            } catch {
+              // fallback to jsQR
             }
           }
-        }, 400);
-      }
+
+          if (!detectedCode && ctx) {
+            canvas.width = videoRef.current.videoWidth || 640;
+            canvas.height = videoRef.current.videoHeight || 480;
+            ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const qrResult = jsQR(imgData.data, canvas.width, canvas.height);
+            if (qrResult && qrResult.data) {
+              detectedCode = qrResult.data;
+            }
+          }
+
+          if (detectedCode) {
+            processarTagLida(detectedCode, alvo);
+          }
+        } catch (err) {
+          console.error('Erro na leitura de frame:', err);
+        }
+      }, 300);
+
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Não foi possível acessar a câmera do dispositivo: ' + err.message });
       setLendoQrCamera(false);
@@ -423,6 +538,10 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   };
 
   const pararCameraQr = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -430,25 +549,51 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
     setLendoQrCamera(false);
   };
 
-  const validarSemCameraFallback = () => {
-    if (modalRegistrarPonto?.codigo_tag) {
-      setCodigoLido(modalRegistrarPonto.codigo_tag.toUpperCase());
-      setMensagem({ tipo: 'sucesso', texto: 'Código da Tag confirmado.' });
+  const processarFotoPlacaQr = async (file: File | null) => {
+    if (!file || !modalRegistrarPonto) return;
+    try {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await img.decode();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const qrResult = jsQR(imgData.data, canvas.width, canvas.height);
+
+      if (qrResult && qrResult.data) {
+        processarTagLida(qrResult.data, modalRegistrarPonto);
+      } else {
+        setMensagem({ tipo: 'erro', texto: 'Nenhum QR Code legível foi encontrado nesta foto. Aponte a câmera com nitidez.' });
+      }
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Falha ao processar imagem: ' + err.message });
     }
   };
 
   const abrirRegistroPonto = (ponto: any) => {
     setModalRegistrarPonto(ponto);
     setCodigoLido('');
+    setPontoValidadoFisico(false);
     setObservacaoPonto('');
     setFotoPontoUrl('');
-    setLendoQrCamera(false);
     capturarGPS();
+
+    // Inicia a câmera e o leitor NFC automaticamente após renderizar o modal
+    setTimeout(() => {
+      iniciarCameraQr(ponto);
+    }, 150);
   };
 
   const fecharModalRegistroPonto = () => {
     pararCameraQr();
+    pararLeitorNfc();
     setModalRegistrarPonto(null);
+    setPontoValidadoFisico(false);
   };
 
   const handleAtualizarChecklist = (itemNome: string, status: string) => {
@@ -576,8 +721,8 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const confirmarLeituraPonto = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!codigoLido || !modalRegistrarPonto) {
-      setMensagem({ tipo: 'erro', texto: 'Leia o QR Code do ponto para validar.' });
+    if (!pontoValidadoFisico || !codigoLido || !modalRegistrarPonto) {
+      setMensagem({ tipo: 'erro', texto: 'A leitura do QR Code ou NFC da placa física no local é obrigatória!' });
       return;
     }
 
@@ -1124,137 +1269,226 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
               </button>
             </div>
 
-            <form onSubmit={confirmarLeituraPonto} className="space-y-4">
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700">Leitura do QR Code / Tag</label>
-                {lendoQrCamera ? (
-                  <div className="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
-                    <video ref={videoRef} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={pararCameraQr}
-                      className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full"
-                    >
-                      <VideoOff className="w-4 h-4" />
-                    </button>
+            {/* ESTADO 1: AINDA NÃO ESCANEOU A PLACA FÍSICA NO LOCAL */}
+            {!pontoValidadoFisico ? (
+              <div className="space-y-4">
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide">
+                      Checklist do Setor Bloqueado
+                    </h4>
+                    <p className="text-[11px] text-amber-700 leading-relaxed mt-0.5">
+                      Para evitar fraudes, o menu de checklist e a validação do ponto <strong>só serão liberados após a leitura da placa física</strong> no local.
+                    </p>
+                    <p className="text-[10px] font-mono text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded mt-1.5 w-fit">
+                      Tag esperada: <strong>{modalRegistrarPonto.codigo_tag}</strong>
+                    </p>
                   </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Código lido"
-                      value={codigoLido}
-                      onChange={(e) => setCodigoLido(e.target.value.toUpperCase())}
-                      className="flex-1 border rounded-xl p-2.5 text-xs font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={iniciarCameraQr}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1"
-                    >
-                      <Camera className="w-4 h-4" /> Ler QR
-                    </button>
-                    <button
-                      type="button"
-                      onClick={validarSemCameraFallback}
-                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs"
-                      title="Confirmar Tag Cadastrada"
-                    >
-                      OK
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Foto de Evidência (Opcional)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  ref={inputFotoRef}
-                  onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null)}
-                  className="hidden"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => inputFotoRef.current?.click()}
-                    disabled={uploadingFoto}
-                    className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-2"
-                  >
-                    <Camera className="w-4 h-4" /> {uploadingFoto ? 'Enviando...' : 'Tirar Foto'}
-                  </button>
-                  {fotoPontoUrl && (
-                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                      <Check className="w-4 h-4" /> Anexada
-                    </span>
-                  )}
                 </div>
-              </div>
 
-              <div className="border-t pt-3 space-y-2">
-                <span className="text-xs font-bold text-slate-800 block">Checklist de Itens do Setor</span>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                  {getObjetoSetor(modalRegistrarPonto.setor_id).itens.map((item: string, idx: number) => {
-                    const statusAtual = respostasChecklist[item] || 'ok';
-                    return (
-                      <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
-                        <span className="text-slate-700 font-medium flex-1 pr-2">{item}</span>
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleAtualizarChecklist(item, 'ok')}
-                            className={`px-2 py-1 rounded text-[10px] font-bold ${
-                              statusAtual === 'ok' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                            }`}
-                          >
-                            OK
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAtualizarChecklist(item, 'avaria')}
-                            className={`px-2 py-1 rounded text-[10px] font-bold ${
-                              statusAtual === 'avaria' ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-600'
-                            }`}
-                          >
-                            Avaria
-                          </button>
+                {/* Leitor de Câmera Ativo */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Aponte para o QR Code da Placa:
+                  </label>
+
+                  {lendoQrCamera ? (
+                    <div className="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border-2 border-blue-500 shadow-inner">
+                      <video ref={videoRef} className="w-full h-full object-cover" />
+                      
+                      {/* Mira de Leitura */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-48 h-48 border-2 border-emerald-400/80 rounded-xl relative shadow-[0_0_15px_rgba(52,211,153,0.5)]">
+                          <div className="absolute inset-x-2 top-1/2 h-0.5 bg-emerald-400 animate-pulse" />
                         </div>
                       </div>
-                    );
-                  })}
+
+                      <button
+                        type="button"
+                        onClick={pararCameraQr}
+                        className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full transition shadow-md"
+                        title="Pausar Câmera"
+                      >
+                        <VideoOff className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-100 p-6 rounded-xl border border-slate-200 text-center space-y-3">
+                      <Camera className="w-8 h-8 text-slate-400 mx-auto" />
+                      <p className="text-xs text-slate-600">Câmera pausada ou não iniciada.</p>
+                      <button
+                        type="button"
+                        onClick={() => iniciarCameraQr(modalRegistrarPonto)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 mx-auto transition"
+                      >
+                        <Camera className="w-4 h-4" /> Ativar Câmera QR
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Fallback de Foto e NFC */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      ref={inputPlacaFotoRef}
+                      onChange={(e) => processarFotoPlacaQr(e.target.files ? e.target.files[0] : null)}
+                      className="hidden"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => inputPlacaFotoRef.current?.click()}
+                      className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+                    >
+                      <Camera className="w-4 h-4 text-slate-500" /> Tirar Foto da Placa
+                    </button>
+
+                    {nfcDisponivel && (
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5">
+                        <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                        {nfcLendo ? 'NFC Ativo: Aproxime da Placa' : 'NFC Pronto'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={fecharModalRegistroPonto}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
                 </div>
               </div>
+            ) : (
+              /* ESTADO 2: PLACA VALIDADA FISICAMENTE NO LOCAL -> LIBERA MENU DO SETOR E CHECKLIST */
+              <form onSubmit={confirmarLeituraPonto} className="space-y-4">
+                {/* Banner de Validação com Sucesso */}
+                <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                        Placa Física Validada com Sucesso!
+                      </h4>
+                      <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded">
+                        No Local
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 mt-0.5">
+                      QR Code/NFC <strong>{codigoLido}</strong> conferido. Menu de itens do setor desbloqueado para conferência.
+                    </p>
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Observação do Ponto</label>
-                <textarea
-                  placeholder="Ex: Lâmpada do corredor piscando."
-                  value={observacaoPonto}
-                  onChange={(e) => setObservacaoPonto(e.target.value)}
-                  className="w-full border rounded-xl p-2.5 text-xs text-slate-800"
-                  rows={2}
-                />
-              </div>
+                {/* Menu do Setor: Checklist de Itens */}
+                <div className="border border-slate-200 bg-slate-50/50 p-3.5 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                      Checklist do Setor: {getNomeSetor(modalRegistrarPonto.setor_id)}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      {getObjetoSetor(modalRegistrarPonto.setor_id).itens.length} itens
+                    </span>
+                  </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={fecharModalRegistroPonto}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700"
-                >
-                  {loading ? 'Validando...' : 'Confirmar Ponto'}
-                </button>
-              </div>
-            </form>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {getObjetoSetor(modalRegistrarPonto.setor_id).itens.map((item: string, idx: number) => {
+                      const statusAtual = respostasChecklist[item] || 'ok';
+                      return (
+                        <div key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                          <span className="text-slate-700 font-medium flex-1 pr-2">{item}</span>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleAtualizarChecklist(item, 'ok')}
+                              className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
+                                statusAtual === 'ok' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              OK
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAtualizarChecklist(item, 'avaria')}
+                              className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
+                                statusAtual === 'avaria' ? 'bg-red-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              Avaria
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Foto de Evidência (Opcional) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Foto de Evidência no Local (Opcional)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={inputFotoRef}
+                    onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null)}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => inputFotoRef.current?.click()}
+                      disabled={uploadingFoto}
+                      className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-2 transition"
+                    >
+                      <Camera className="w-4 h-4" /> {uploadingFoto ? 'Enviando...' : 'Tirar Foto do Ponto'}
+                    </button>
+                    {fotoPontoUrl && (
+                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                        <Check className="w-4 h-4" /> Foto Anexada
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Observação */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Observação da Inspeção</label>
+                  <textarea
+                    placeholder="Ex: Tudo em perfeita ordem, luzes acesas, portão trancado."
+                    value={observacaoPonto}
+                    onChange={(e) => setObservacaoPonto(e.target.value)}
+                    className="w-full border rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={fecharModalRegistroPonto}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-5 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition flex items-center gap-1.5 shadow-md"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {loading ? 'Salvando...' : 'Confirmar e Registrar Ponto'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
