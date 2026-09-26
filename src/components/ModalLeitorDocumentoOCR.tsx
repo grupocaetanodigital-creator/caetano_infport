@@ -517,6 +517,81 @@ export default function ModalLeitorDocumentoOCR({
                   </span>
                 </div>
               )}
+
+              {/* GUIA DE CALIBRAÇÃO E SELETOR DE LINHAS IDENTIFICADAS */}
+              <div className="bg-slate-900/95 border border-slate-800 p-3 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase">
+                    <Sparkles className="w-3.5 h-3.5" /> Calibração de Zonas do Documento
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    dadosOcr?.metodoUtilizado === 'IA_GEMINI'
+                      ? 'bg-purple-950 text-purple-300 border border-purple-500/40'
+                      : 'bg-blue-950 text-blue-300 border border-blue-500/40'
+                  }`}>
+                    {dadosOcr?.metodoUtilizado === 'IA_GEMINI' ? '✨ Motor IA Gemini' : '⚡ Motor Local'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                  <div className="space-y-0.5">
+                    <strong className="text-emerald-300 block uppercase font-mono">1. RG Tradicional</strong>
+                    <p className="text-slate-400">Nome: abaixo de Expedição</p>
+                    <p className="text-slate-400">Doc: campo REGISTRO GERAL</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <strong className="text-purple-300 block uppercase font-mono">2. CNH Habilitação</strong>
+                    <p className="text-slate-400">Nome: campo 1. NOME</p>
+                    <p className="text-slate-400">Doc: campo CPF (11 dígitos)</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <strong className="text-blue-300 block uppercase font-mono">3. Nova CIN / Crachá</strong>
+                    <p className="text-slate-400">Nome: centro em destaque</p>
+                    <p className="text-slate-400">Doc: CPF nacional unificado</p>
+                  </div>
+                </div>
+
+                {/* Seletor rápido por toque em linhas identificadas */}
+                {dadosOcr?.linhasDetectadas && dadosOcr.linhasDetectadas.length > 0 && (
+                  <div className="pt-2 border-t border-slate-800 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                      Toque em uma linha detectada para calibrar/preencher:
+                    </span>
+                    <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                      {dadosOcr.linhasDetectadas.map((linha, idx) => (
+                        <div key={idx} className="bg-slate-950 p-1.5 rounded-lg border border-slate-800 flex items-center justify-between gap-2 text-[11px]">
+                          <span className="text-slate-300 truncate font-mono flex-1">{linha}</span>
+                          <div className="flex gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setNomeEditado(linha)}
+                              className="text-[9px] bg-slate-800 hover:bg-slate-700 text-emerald-300 px-1.5 py-0.5 rounded font-bold transition"
+                              title="Usar como Nome"
+                            >
+                              Nome
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const limpo = linha.replace(/\D/g, '');
+                                if (limpo.length === 11 && validarCPF(limpo)) {
+                                  setDocumentoEditado(formatarCPF(limpo));
+                                } else {
+                                  setDocumentoEditado(linha);
+                                }
+                              }}
+                              className="text-[9px] bg-slate-800 hover:bg-slate-700 text-blue-300 px-1.5 py-0.5 rounded font-bold transition"
+                              title="Usar como Documento"
+                            >
+                              Doc
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Botões de Ação */}

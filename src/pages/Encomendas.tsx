@@ -534,20 +534,36 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     try {
       const localArmazenar = localArmazenamentoTriagem || 'Bancada Principal';
 
-      const { error: itemErr } = await supabase
+      let payloadItem: any = {
+        lote_re_id: loteAtivo.id,
+        condominio_id: usuarioLogado.condominio_id,
+        bloco: blocoTriagem.trim(),
+        unidade: unidadeTriagem.trim(),
+        morador_id: moradorSelecionado?.id || null,
+        codigo_barras: codigoBarras.trim(),
+        foto_etiqueta_url: fotoEtiquetaUrl.trim(),
+        observacoes: observacoes.trim(),
+        local_armazenamento: localArmazenar,
+        status: 'retido'
+      };
+
+      let { data: itemInserido, error: itemErr } = await supabase
         .from('encomendas_itens')
-        .insert([{
-          lote_re_id: loteAtivo.id,
-          condominio_id: usuarioLogado.condominio_id,
-          bloco: blocoTriagem.trim(),
-          unidade: unidadeTriagem.trim(),
-          morador_id: moradorSelecionado?.id || null,
-          codigo_barras: codigoBarras.trim(),
-          foto_etiqueta_url: fotoEtiquetaUrl.trim(),
-          observacoes: observacoes.trim(),
-          local_armazenamento: localArmazenar,
-          status: 'retido'
-        }]);
+        .insert([payloadItem])
+        .select()
+        .maybeSingle();
+
+      // Fallback seguro caso a coluna local_armazenamento ainda não exista no Supabase
+      if (itemErr && (itemErr.message?.includes('local_armazenamento') || (itemErr as any).code === '42703' || itemErr.message?.includes('schema cache'))) {
+        console.warn('[INFPORT] Coluna local_armazenamento não encontrada no Supabase. Salvando pacote sem a coluna...');
+        delete payloadItem.local_armazenamento;
+        const retry = await supabase.from('encomendas_itens').insert([payloadItem]).select().maybeSingle();
+        itemErr = retry.error;
+        itemInserido = retry.data;
+        if (itemInserido) {
+          localStorage.setItem(`infport_item_local_${itemInserido.id}`, localArmazenar);
+        }
+      }
 
       if (itemErr) throw itemErr;
 
@@ -622,7 +638,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         .update({ local_armazenamento: novoLocalSelecionado })
         .in('id', idsParaAtualizar);
 
-      if (error) throw error;
+      if (error && (error.message?.includes('local_armazenamento') || (error as any).code === '42703' || error.message?.includes('schema cache'))) {
+        console.warn('[INFPORT] Coluna local_armazenamento ausente no Supabase. Atualizando localmente no navegador...');
+        idsParaAtualizar.forEach(id => {
+          localStorage.setItem(`infport_item_local_${id}`, novoLocalSelecionado);
+        });
+      } else if (error) {
+        throw error;
+      }
 
       // Atualiza o estado da lista em tempo real na tela
       setTodosItensRetidos(prev => prev.map(item => {
