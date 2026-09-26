@@ -12,6 +12,10 @@ import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import LeitorNFC from './components/LeitorNFC';
+import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { 
   ShieldCheck, 
   Lock, 
@@ -42,6 +46,7 @@ export default function App() {
   const [senha, setSenha] = useState('');
   const [operador, setOperador] = useState<any | null>(null);
   const [condominio, setCondominio] = useState<any | null>(null);
+  const [modalLeitorNfcGlobal, setModalLeitorNfcGlobal] = useState(false);
   
   const [listaCondominios, setListaCondominios] = useState<any[]>([]);
   const [condominioAtivoId, setCondominioAtivoId] = useState('');
@@ -141,8 +146,13 @@ export default function App() {
         .order('nome', { ascending: true });
       if (error) throw error;
       setListaCondominios(data || []);
+      salvarCacheLocal('condominios', data || [], 'global');
     } catch (err) {
-      console.error('Erro ao carregar condomínios no topo:', err);
+      console.warn('Erro ao carregar condomínios (tentando cache offline):', err);
+      const cache = obterCacheLocal<any[]>('condominios', 'global', []);
+      if (cache && cache.length > 0) {
+        setListaCondominios(cache);
+      }
     }
   };
 
@@ -477,6 +487,17 @@ export default function App() {
                       </button>
                     );
                   })}
+
+                  <button
+                    onClick={() => {
+                      setModalLeitorNfcGlobal(true);
+                      setDrawerMobileAberto(false);
+                    }}
+                    className="w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-3 text-emerald-400 bg-emerald-950/30 hover:bg-emerald-950/60 border border-emerald-500/20 transition mt-2 cursor-pointer"
+                  >
+                    <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
+                    <span>Leitor NFC / Tags</span>
+                  </button>
                 </div>
               </div>
 
@@ -517,6 +538,14 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
+              <PWAInstallButton />
+              <button
+                onClick={() => setModalLeitorNfcGlobal(true)}
+                className="p-2 text-emerald-400 bg-slate-800 active:bg-slate-700 rounded-xl transition"
+                title="Leitor de Tags & Cartões NFC"
+              >
+                <Radio className="w-5 h-5 animate-pulse" />
+              </button>
               <button
                 onClick={() => setDrawerMobileAberto(true)}
                 className="p-2 text-slate-200 bg-slate-800 active:bg-slate-700 rounded-xl transition"
@@ -548,7 +577,7 @@ export default function App() {
               <div className="max-w-4xl mx-auto space-y-4">
                 
                 {/* Banner Principal */}
-                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex items-center justify-between border border-slate-800">
+                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-slate-800">
                   <div className="space-y-1">
                     <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-md border border-emerald-800">
                       Posto Ativo
@@ -559,6 +588,18 @@ export default function App() {
                     <p className="text-xs sm:text-sm text-slate-300">
                       Operador: <strong className="text-white">{operador.nome}</strong>
                     </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <PWAInstallButton />
+                    <button
+                      onClick={() => setModalLeitorNfcGlobal(true)}
+                      className="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                      title="Abrir Leitor de Tags e Cartões NFC"
+                    >
+                      <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                      <span>Leitor NFC</span>
+                    </button>
                   </div>
                 </div>
 
@@ -688,6 +729,25 @@ export default function App() {
           </button>
         </nav>
 
+        {/* Indicador de Status Offline e Conexão na Portaria */}
+        <OfflineIndicator />
+
+        {/* Modal Global do Leitor de Tags & Cartões NFC */}
+        {modalLeitorNfcGlobal && (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="max-w-md w-full">
+              <LeitorNFC
+                titulo="Leitor de Tags & Cartões NFC"
+                subtitulo="Aproxime qualquer tag física, cartão ou chaveiro da portaria"
+                onTagLida={(tagLida, dadosExtras) => {
+                  console.log('[App] Tag NFC lida:', tagLida, dadosExtras);
+                }}
+                onFechar={() => setModalLeitorNfcGlobal(false)}
+              />
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
@@ -758,6 +818,8 @@ export default function App() {
           <span>Sistema Operacional</span>
         </div>
       </div>
+
+      <OfflineIndicator />
     </div>
   );
 }

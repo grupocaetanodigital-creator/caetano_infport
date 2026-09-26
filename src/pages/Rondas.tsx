@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 import { supabase } from '../services/supabase';
+import LeitorNFC from '../components/LeitorNFC';
 import { 
   ShieldCheck, 
   QrCode, 
@@ -24,7 +25,8 @@ import {
   Radio,
   Lock,
   Unlock,
-  RefreshCw
+  RefreshCw,
+  Smartphone
 } from 'lucide-react';
 
 interface RondasProps {
@@ -200,6 +202,8 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const [fotoPontoUrl, setFotoPontoUrl] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
+  const [modalTestarNfc, setModalTestarNfc] = useState(false);
+  const [modalLeitorNfcCadastro, setModalLeitorNfcCadastro] = useState(false);
   const [lendoQrCamera, setLendoQrCamera] = useState(false);
   const [pontoValidadoFisico, setPontoValidadoFisico] = useState(false);
   const [nfcDisponivel, setNfcDisponivel] = useState(false);
@@ -1145,6 +1149,14 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
 
         <div className="flex flex-wrap gap-2">
           <button
+            onClick={() => setModalTestarNfc(true)}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
+            title="Abrir Leitor de Tags e Cartões NFC com Som e Validação"
+          >
+            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" /> Leitor NFC
+          </button>
+
+          <button
             onClick={() => {
               carregarOperadores();
               setModalAssumirPosto(true);
@@ -1391,44 +1403,23 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                   Código da Tag / Placa Física *
                 </label>
                 
-                {/* Botões de Leitura com 1 Toque */}
-                <div className="grid grid-cols-2 gap-2 mb-2">
+                {/* Botão de Leitura de Tag / Cartão NFC com 1 Toque */}
+                <div className="mb-2">
                   <button
                     type="button"
-                    onClick={lerTagNfcParaCadastro}
-                    className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
-                      lendoNfcCadastro
-                        ? 'bg-emerald-600 text-white animate-pulse'
-                        : 'bg-slate-900 hover:bg-slate-800 text-white'
-                    }`}
+                    onClick={() => {
+                      capturarGPSNovoPonto();
+                      setModalLeitorNfcCadastro(true);
+                    }}
+                    className="w-full py-3.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-md bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98] uppercase tracking-wide cursor-pointer"
                   >
-                    <Radio className={`w-3.5 h-3.5 ${lendoNfcCadastro ? 'animate-spin' : ''}`} />
-                    {lendoNfcCadastro ? 'Aproxime a Tag...' : '📡 1 Toque: Tag NFC'}
+                    <Radio className="w-4 h-4 animate-pulse" />
+                    📡 Ler Tag NFC ou QR Code com 1 Toque
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={iniciarCameraQrCadastro}
-                    className="bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    {lendoQrCadastro ? 'Câmera Ativa...' : '📷 1 Toque: Ler QR'}
-                  </button>
+                  <p className="text-[11px] text-slate-500 text-center mt-1">
+                    Aproxime a tag física ou cartão NFC para capturar o código e coordenadas GPS do local automaticamente.
+                  </p>
                 </div>
-
-                {/* Leitor de Câmera para Cadastro */}
-                {lendoQrCadastro && (
-                  <div className="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border-2 border-blue-500 mb-2">
-                    <video ref={videoCadastroRef} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={pararCameraQrCadastro}
-                      className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full shadow-md"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
 
                 <input
                   type="text"
@@ -1544,7 +1535,7 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                       Checklist do Setor Bloqueado
                     </h4>
                     <p className="text-[11px] text-amber-700 leading-relaxed mt-0.5">
-                      Para evitar fraudes, o menu de checklist e a validação do ponto <strong>só serão liberados após a leitura da placa física</strong> no local.
+                      Para evitar fraudes, o checklist e a validação do ponto <strong>só serão liberados após a leitura da placa física</strong> no local.
                     </p>
                     <p className="text-[10px] font-mono text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded mt-1.5 w-fit">
                       Tag esperada: <strong>{modalRegistrarPonto.codigo_tag}</strong>
@@ -1552,94 +1543,35 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                   </div>
                 </div>
 
-                {/* Leitor de Câmera Ativo */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Aponte para o QR Code da Placa:
-                  </label>
+                {/* Componente Nativo Web NFC + QR Code + Manual */}
+                <LeitorNFC
+                  titulo="Leitura da Tag / Placa do Ponto"
+                  subtitulo={`Aproxime da tag NFC ou aponte a câmera para o QR Code da placa (${modalRegistrarPonto.nome_ponto})`}
+                  codigoEsperado={modalRegistrarPonto.codigo_tag}
+                  modoInline={true}
+                  onTagLida={(codigoLido) => {
+                    processarTagLida(codigoLido, modalRegistrarPonto);
+                  }}
+                />
 
-                  {lendoQrCamera ? (
-                    <div className="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border-2 border-blue-500 shadow-inner">
-                      <video ref={videoRef} className="w-full h-full object-cover" />
-                      
-                      {/* Mira de Leitura */}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-48 h-48 border-2 border-emerald-400/80 rounded-xl relative shadow-[0_0_15px_rgba(52,211,153,0.5)]">
-                          <div className="absolute inset-x-2 top-1/2 h-0.5 bg-emerald-400 animate-pulse" />
-                        </div>
-                      </div>
+                {/* Opção secundária: Foto física da placa */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={inputPlacaFotoRef}
+                    onChange={(e) => processarFotoPlacaQr(e.target.files ? e.target.files[0] : null)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => inputPlacaFotoRef.current?.click()}
+                    className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+                  >
+                    <Camera className="w-4 h-4 text-slate-500" /> Foto da Placa
+                  </button>
 
-                      <button
-                        type="button"
-                        onClick={pararCameraQr}
-                        className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full transition shadow-md"
-                        title="Pausar Câmera"
-                      >
-                        <VideoOff className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-100 p-6 rounded-xl border border-slate-200 text-center space-y-3">
-                      <Camera className="w-8 h-8 text-slate-400 mx-auto" />
-                      <p className="text-xs text-slate-600">Câmera pausada ou não iniciada.</p>
-                      <button
-                        type="button"
-                        onClick={() => iniciarCameraQr(modalRegistrarPonto)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 mx-auto transition"
-                      >
-                        <Camera className="w-4 h-4" /> Ativar Câmera QR
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Botão Dedicado de 1 Toque para Leitura Web NFC */}
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => iniciarLeitorNfc(modalRegistrarPonto)}
-                      className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-sm ${
-                        nfcLendo 
-                          ? 'bg-emerald-600 text-white animate-pulse' 
-                          : 'bg-slate-900 hover:bg-slate-800 text-white'
-                      }`}
-                    >
-                      <Radio className={`w-4 h-4 ${nfcLendo ? 'animate-spin' : ''}`} />
-                      {nfcLendo ? '📡 Leitor NFC Ativo: Encoste a Traseira do Celular na Placa...' : '📡 1 Toque: Ler Tag NFC no Local'}
-                    </button>
-                    <p className="text-[11px] text-slate-500 text-center">
-                      Aproxime o smartphone da Tag NFC instalada na placa do local. O sistema valida o código e o GPS antifraude no mesmo instante.
-                    </p>
-                  </div>
-
-                  {/* Fallback de Foto e NFC */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      ref={inputPlacaFotoRef}
-                      onChange={(e) => processarFotoPlacaQr(e.target.files ? e.target.files[0] : null)}
-                      className="hidden"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => inputPlacaFotoRef.current?.click()}
-                      className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
-                    >
-                      <Camera className="w-4 h-4 text-slate-500" /> Tirar Foto da Placa
-                    </button>
-
-                    {nfcDisponivel && (
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5">
-                        <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-                        {nfcLendo ? 'NFC Ativo: Aproxime da Placa' : 'NFC Pronto'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={fecharModalRegistroPonto}
@@ -1845,6 +1777,43 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL LEITOR DE TESTE NFC LIVRE */}
+      {modalTestarNfc && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full">
+            <LeitorNFC
+              titulo="Leitor de Tags & Cartões NFC"
+              subtitulo="Aproxime qualquer tag, cartão de condomínio ou crachá para ler"
+              onTagLida={(tagLida, dadosExtras) => {
+                console.log('Tag NFC lida no teste:', tagLida, dadosExtras);
+              }}
+              onFechar={() => setModalTestarNfc(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LEITURA NFC / QR PARA NOVO PONTO */}
+      {modalLeitorNfcCadastro && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full">
+            <LeitorNFC
+              titulo="Cadastrar Placa / Tag do Ponto"
+              subtitulo="Aproxime a tag física NFC ou escaneie o QR Code para vincular ao ponto"
+              onTagLida={(tagLida) => {
+                setCodigoTag(tagLida);
+                setModalLeitorNfcCadastro(false);
+                capturarGPSNovoPonto();
+                setMensagem({
+                  tipo: 'sucesso',
+                  texto: `✅ Tag (${tagLida}) lida e vinculada com sucesso! Coordenadas GPS capturadas.`
+                });
+              }}
+              onFechar={() => setModalLeitorNfcCadastro(false)}
+            />
           </div>
         </div>
       )}
