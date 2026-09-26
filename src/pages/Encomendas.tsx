@@ -17,7 +17,11 @@ import {
   Building2, 
   CheckSquare, 
   Square,
-  User
+  User,
+  Boxes,
+  MapPin,
+  Edit3,
+  Layers
 } from 'lucide-react';
 
 interface EncomendasProps {
@@ -80,6 +84,13 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [nomeRetirante, setNomeRetirante] = useState('');
   const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
   const [baixaConcluidaWhats, setBaixaConcluidaWhats] = useState<any | null>(null);
+
+  // Estados para Edição e Troca Dinâmica de Local Físico
+  const [modalMoverLocal, setModalMoverLocal] = useState(false);
+  const [itemParaMover, setItemParaMover] = useState<any | null>(null);
+  const [novoLocalSelecionado, setNovoLocalSelecionado] = useState('');
+  const [moverTodosDaUnidade, setMoverTodosDaUnidade] = useState(true);
+  const [moverEmLoteSelecionados, setMoverEmLoteSelecionados] = useState(false);
 
   const blocosDisponiveis = Array.from(
     new Set(moradores.map(m => m.bloco).filter(Boolean))
@@ -491,10 +502,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     if (itensRetidos && itensRetidos.length > 0) {
       tocarAlertaSonoro();
+      // Extrai os locais físicos onde os itens desta unidade já estão guardados
+      const locaisExistentes = Array.from(
+        new Set(
+          itensRetidos
+            .map((i: any) => i.local_armazenamento)
+            .filter((loc: any) => typeof loc === 'string' && loc.trim().length > 0)
+        )
+      );
+
       setAlertaAgrupamento({
         qtd: itensRetidos.length,
         unidade: unid,
-        bloco: bloc
+        bloco: bloc,
+        locais: locaisExistentes.length > 0 ? locaisExistentes : ['Bancada Principal'],
+        itens: itensRetidos
       });
     } else {
       setAlertaAgrupamento(null);
@@ -510,6 +532,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     setLoading(true);
 
     try {
+      const localArmazenar = localArmazenamentoTriagem || 'Bancada Principal';
+
       const { error: itemErr } = await supabase
         .from('encomendas_itens')
         .insert([{
@@ -521,6 +545,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           codigo_barras: codigoBarras.trim(),
           foto_etiqueta_url: fotoEtiquetaUrl.trim(),
           observacoes: observacoes.trim(),
+          local_armazenamento: localArmazenar,
           status: 'retido'
         }]);
 
@@ -539,7 +564,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
       const nomeDestinatario = moradorSelecionado ? moradorSelecionado.nome : 'Morador';
 
-      const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria assim que possível!`;
+      const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Local Físico de Guarda: ${localArmazenar}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria informando seu apartamento!`;
 
       setItemTriadoWhats({
         destinatario: nomeDestinatario,
@@ -550,9 +575,73 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setCodigoBarras(''); setFotoEtiquetaUrl(''); setObservacoes('');
       setAlertaAgrupamento(null);
       carregarDadosBase();
-      setMensagem({ tipo: 'sucesso', texto: 'Pacote triado e registrado com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: `Pacote triado com sucesso e alocado em: ${localArmazenar}!` });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Permite alterar e mover o local físico de guarda de encomendas a qualquer momento
+   * Suporta alteração individual, da unidade inteira ou em lote de itens selecionados.
+   */
+  const executarMudancaLocal = async () => {
+    if (!novoLocalSelecionado) {
+      setMensagem({ tipo: 'erro', texto: 'Selecione o novo local físico de armazenamento.' });
+      return;
+    }
+    setLoading(true);
+
+    try {
+      let idsParaAtualizar: string[] = [];
+
+      if (moverEmLoteSelecionados) {
+        idsParaAtualizar = [...itensSelecionadosIds];
+      } else if (itemParaMover) {
+        if (moverTodosDaUnidade) {
+          // Pega todos os itens retidos da mesma unidade/bloco para agrupar
+          const itensMesmaUnidade = todosItensRetidos.filter(
+            i => i.unidade === itemParaMover.unidade && (itemParaMover.bloco ? i.bloco === itemParaMover.bloco : true)
+          );
+          idsParaAtualizar = itensMesmaUnidade.map(i => i.id);
+        } else {
+          idsParaAtualizar = [itemParaMover.id];
+        }
+      }
+
+      if (idsParaAtualizar.length === 0) {
+        setMensagem({ tipo: 'erro', texto: 'Nenhum pacote selecionado para mover.' });
+        setLoading(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('encomendas_itens')
+        .update({ local_armazenamento: novoLocalSelecionado })
+        .in('id', idsParaAtualizar);
+
+      if (error) throw error;
+
+      // Atualiza o estado da lista em tempo real na tela
+      setTodosItensRetidos(prev => prev.map(item => {
+        if (idsParaAtualizar.includes(item.id)) {
+          return { ...item, local_armazenamento: novoLocalSelecionado };
+        }
+        return item;
+      }));
+
+      tocarBipSucesso();
+      setModalMoverLocal(false);
+      setItemParaMover(null);
+      setMoverEmLoteSelecionados(false);
+      setMensagem({
+        tipo: 'sucesso',
+        texto: `✅ ${idsParaAtualizar.length} encomenda(s) movida(s) para "${novoLocalSelecionado}" com sucesso!`
+      });
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao alterar local: ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -930,9 +1019,37 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 </div>
 
                 {alertaAgrupamento && (
-                  <div className="bg-amber-50 text-amber-800 p-3 rounded-lg border border-amber-200 flex items-center gap-2 text-sm">
-                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <span>Atenção: Já existem <strong>{alertaAgrupamento.qtd} pacotes</strong> retidos para a Unidade {alertaAgrupamento.unidade}{alertaAgrupamento.bloco ? ` - Bloco ${alertaAgrupamento.bloco}` : ''}.</span>
+                  <div className="bg-amber-50 text-amber-950 p-4 rounded-2xl border-2 border-amber-300 space-y-2.5 shadow-sm animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1 flex-1">
+                        <p className="text-xs font-black uppercase tracking-wide text-amber-900">
+                          ⚠️ Unidade com Encomendas Retidas na Portaria
+                        </p>
+                        <p className="text-xs text-amber-800">
+                          Já existem <strong>{alertaAgrupamento.qtd} pacote(s)</strong> retido(s) aguardando retirada para o Apt {alertaAgrupamento.unidade}{alertaAgrupamento.bloco ? ` - Bloco ${alertaAgrupamento.bloco}` : ''}.
+                        </p>
+                        <div className="text-xs text-amber-900 font-medium flex items-center gap-1.5 flex-wrap pt-0.5">
+                          <span className="text-[11px] font-bold text-amber-700">Locais atuais de guarda:</span>
+                          {alertaAgrupamento.locais && alertaAgrupamento.locais.map((loc: string, idx: number) => (
+                            <span key={idx} className="bg-amber-200/80 border border-amber-400/60 text-amber-950 px-2 py-0.5 rounded-md font-mono text-[11px] font-bold">
+                              📦 {loc}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {alertaAgrupamento.locais && alertaAgrupamento.locais.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setLocalArmazenamentoTriagem(alertaAgrupamento.locais[0])}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-sm cursor-pointer uppercase active:scale-[0.99]"
+                      >
+                        <Boxes className="w-4 h-4" />
+                        Agrupar neste mesmo local ({alertaAgrupamento.locais[0]})
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -950,6 +1067,40 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     </select>
                   </div>
                 )}
+
+                {/* SELETOR DO LOCAL FÍSICO DE ARMAZENAMENTO */}
+                <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Boxes className="w-4 h-4 text-emerald-600" />
+                      Local Físico de Armazenamento na Portaria *
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      Gerenciado em Configurações
+                    </span>
+                  </label>
+                  <select
+                    value={localArmazenamentoTriagem}
+                    onChange={(e) => setLocalArmazenamentoTriagem(e.target.value)}
+                    required
+                    className="w-full p-3 bg-white border border-slate-300 rounded-xl text-slate-900 font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition shadow-inner"
+                  >
+                    {locaisArmazenamento.filter(l => l.ativo !== false).map((loc: any) => {
+                      const valorFormatado = loc.codigo && loc.nome ? `${loc.codigo} - ${loc.nome}` : loc.nome || loc;
+                      return (
+                        <option key={loc.id || loc.codigo || loc} value={valorFormatado}>
+                          📦 {valorFormatado} {loc.categoria ? `(${loc.categoria})` : ''}
+                        </option>
+                      );
+                    })}
+                    {locaisArmazenamento.length === 0 && (
+                      <option value="Bancada Principal">📦 Bancada Principal de Triagem</option>
+                    )}
+                  </select>
+                  <p className="text-[11px] text-slate-500">
+                    O morador receberá no WhatsApp exatamente onde retirar a encomenda. O local pode ser alterado a qualquer momento.
+                  </p>
+                </div>
 
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-slate-700 uppercase">Código de Barras / Rastreio</label>
@@ -1079,8 +1230,30 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <h4 className="text-sm font-bold text-slate-700 bg-slate-50 p-2 rounded border border-slate-200">Pacotes Retidos Encontrados:</h4>
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+              <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <h4 className="text-xs font-black text-slate-800 uppercase flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-emerald-600" />
+                  Pacotes Retidos ({itensRetidosFiltrados.length})
+                </h4>
+
+                {itensSelecionadosIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoverEmLoteSelecionados(true);
+                      setItemParaMover(null);
+                      const primeiro = locaisArmazenamento.find(l => l.ativo !== false);
+                      setNovoLocalSelecionado(primeiro ? (primeiro.codigo && primeiro.nome ? `${primeiro.codigo} - ${primeiro.nome}` : primeiro.nome || primeiro) : 'Bancada Principal');
+                      setModalMoverLocal(true);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  >
+                    <Boxes className="w-3.5 h-3.5" /> Mover {itensSelecionadosIds.length} Selecionados
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
                 {itensRetidosFiltrados.length > 0 ? (
                   itensRetidosFiltrados.map((item: any) => {
                     const selecionado = itensSelecionadosIds.includes(item.id);
@@ -1088,29 +1261,72 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       <div 
                         key={item.id} 
                         onClick={() => toggleItemSelecao(item.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition flex gap-3 items-start ${selecionado ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition flex gap-3 items-start ${
+                          selecionado ? 'border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/20' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                        }`}
                       >
                         <div className="mt-1 text-slate-400">
                           {selecionado ? <CheckSquare className="w-5 h-5 text-emerald-600" /> : <Square className="w-5 h-5" />}
                         </div>
-                        <div className="flex-1">
-                          <div className="flex justify-between items-start">
-                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Apt {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}</span>
-                            <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-mono">{new Date(item.created_at).toLocaleDateString('pt-BR')}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
+                              Apt {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
+                            </span>
+                            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono font-bold">
+                              {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                            </span>
                           </div>
-                          <p className="text-sm font-bold text-slate-900 mt-1">{item.moradores?.nome || 'Morador não vinculado'}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">Rastreio: {item.codigo_barras || 'Sem código'}</p>
+
+                          <p className="text-sm font-bold text-slate-900 mt-1 truncate">
+                            {item.moradores?.nome || 'Morador não vinculado'}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                            Rastreio: {item.codigo_barras || 'Sem código'}
+                          </p>
+
                           {item.foto_etiqueta_url && (
-                            <a href={item.foto_etiqueta_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 hover:underline">
+                            <a 
+                              href={item.foto_etiqueta_url} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              onClick={e => e.stopPropagation()} 
+                              className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-bold"
+                            >
                               <ExternalLink className="w-3 h-3" /> Ver Foto Etiqueta
                             </a>
                           )}
+
+                          {/* LOCAL FÍSICO COM BOTÃO DE ALTERAR EM 1 CLIQUE */}
+                          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100 flex-wrap gap-2">
+                            <span className="text-[11px] font-bold text-emerald-950 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
+                              <Boxes className="w-3.5 h-3.5 text-emerald-700" />
+                              <span className="truncate max-w-[180px]">{item.local_armazenamento || 'Bancada Principal'}</span>
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setItemParaMover(item);
+                                const localAtual = item.local_armazenamento || (locaisArmazenamento[0] ? `${locaisArmazenamento[0].codigo} - ${locaisArmazenamento[0].nome}` : 'Bancada Principal');
+                                setNovoLocalSelecionado(localAtual);
+                                setMoverTodosDaUnidade(true);
+                                setMoverEmLoteSelecionados(false);
+                                setModalMoverLocal(true);
+                              }}
+                              className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer active:scale-95"
+                              title="Alterar local físico deste pacote ou agrupar todos desta unidade"
+                            >
+                              <Edit3 className="w-3 h-3 text-slate-500" /> Alterar Local
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="p-6 text-center text-slate-500 text-sm border-2 border-dashed border-slate-200 rounded-xl">
+                  <div className="p-8 text-center text-slate-500 text-sm border-2 border-dashed border-slate-200 rounded-2xl">
                     Nenhum pacote encontrado para os filtros atuais.
                   </div>
                 )}
@@ -1268,6 +1484,131 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           </div>
           <div className="p-6 bg-black text-center text-white text-xs">
             A câmera lerá automaticamente o código de barras ou QR Code do pacote.
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ALTERAR / MOVER LOCAL FÍSICO DE ENCOMENDAS */}
+      {modalMoverLocal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in duration-150">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <Boxes className="w-5 h-5 text-emerald-600" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {moverEmLoteSelecionados ? 'Mover Encomendas Selecionadas' : 'Alterar Local de Armazenamento'}
+                  </h3>
+                  <p className="text-xs text-slate-500">Reorganização física dos pacotes na portaria</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setModalMoverLocal(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Resumo do item / lote */}
+            {moverEmLoteSelecionados ? (
+              <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs space-y-1 text-emerald-950 font-medium">
+                <p className="font-bold text-sm text-emerald-900 flex items-center gap-1.5">
+                  <Boxes className="w-4 h-4 text-emerald-700" />
+                  {itensSelecionadosIds.length} pacote(s) selecionado(s)
+                </p>
+                <p className="text-[11px] text-emerald-800">
+                  Todos os pacotes selecionados serão movidos em lote para o novo local escolhido abaixo.
+                </p>
+              </div>
+            ) : itemParaMover ? (
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl text-xs space-y-1.5 text-slate-700">
+                <div className="flex justify-between items-center">
+                  <strong className="text-slate-900 text-sm">
+                    Apt {itemParaMover.unidade}{itemParaMover.bloco ? ` - Bloco ${itemParaMover.bloco}` : ''}
+                  </strong>
+                  <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded font-mono">
+                    {itemParaMover.codigo_barras || 'Sem rastreio'}
+                  </span>
+                </div>
+                <p className="text-slate-600">
+                  Destinatário: <strong>{itemParaMover.moradores?.nome || 'Morador'}</strong>
+                </p>
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                  Local Atual: <strong>{itemParaMover.local_armazenamento || 'Bancada Principal'}</strong>
+                </p>
+              </div>
+            ) : null}
+
+            {/* Seleção do Novo Local */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-800 uppercase">
+                Selecione o Novo Local Físico de Guarda *
+              </label>
+              <select
+                value={novoLocalSelecionado}
+                onChange={(e) => setNovoLocalSelecionado(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition"
+              >
+                {locaisArmazenamento.filter(l => l.ativo !== false).map((loc: any) => {
+                  const valor = loc.codigo && loc.nome ? `${loc.codigo} - ${loc.nome}` : loc.nome || loc;
+                  return (
+                    <option key={loc.id || loc.codigo || loc} value={valor}>
+                      📦 {valor} {loc.categoria ? `(${loc.categoria})` : ''}
+                    </option>
+                  );
+                })}
+                {locaisArmazenamento.length === 0 && (
+                  <>
+                    <option value="Bancada Principal">📦 Bancada Principal de Triagem</option>
+                    <option value="Chão / Caixas Grandes">📦 Chão / Caixas Grandes</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Checkbox Agrupar todos da mesma unidade */}
+            {!moverEmLoteSelecionados && itemParaMover && (
+              <label className="flex items-start gap-2.5 bg-slate-50 border border-slate-200 p-3 rounded-2xl text-xs text-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={moverTodosDaUnidade}
+                  onChange={(e) => setMoverTodosDaUnidade(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 mt-0.5"
+                />
+                <div>
+                  <span className="font-bold block">
+                    Agrupar todas as encomendas do Apt {itemParaMover.unidade}{itemParaMover.bloco ? ` - Bloco ${itemParaMover.bloco}` : ''}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Conforme chegam novos pacotes, move todos para ficarem juntos no mesmo local físico.
+                  </span>
+                </div>
+              </label>
+            )}
+
+            {/* Botões de Ação */}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setModalMoverLocal(false)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-3 rounded-xl text-xs transition"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={executarMudancaLocal}
+                disabled={loading}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-3 rounded-xl text-xs uppercase shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {loading ? 'Salvando...' : 'Confirmar Novo Local'}
+              </button>
+            </div>
           </div>
         </div>
       )}
