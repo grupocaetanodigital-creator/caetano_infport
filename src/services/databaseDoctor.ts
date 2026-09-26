@@ -283,6 +283,12 @@ ALTER TABLE IF EXISTS condominios
 ALTER TABLE IF EXISTS encomendas_itens
   ADD COLUMN IF NOT EXISTS local_armazenamento TEXT DEFAULT 'Bancada Principal';
 
+-- 0.3 Garantir colunas de OCR, fotos de documentos e faces na tabela prestadores
+ALTER TABLE IF EXISTS prestadores
+  ADD COLUMN IF NOT EXISTS foto_documento TEXT,
+  ADD COLUMN IF NOT EXISTS foto_rosto TEXT,
+  ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'CPF';
+
 -- 1. Tentativa de cópia segura de materiais (se as colunas existirem, migra; senão, ignora com segurança)
 DO $$
 BEGIN
