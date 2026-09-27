@@ -41,7 +41,10 @@ import {
   Home,
   Grid,
   ChevronLeft,
-  Sparkles
+  Sparkles,
+  HardHat,
+  PackageCheck,
+  ClipboardList
 } from 'lucide-react';
 
 export default function App() {
@@ -302,12 +305,12 @@ export default function App() {
 
   const modulosDisponiveis = [
     { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
-    { id: 'custodia', titulo: 'Custódia Itens', icone: Shield, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-    { id: 'prestadores', titulo: 'Prestadores & Obras', icone: Briefcase, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-purple-50 text-purple-600 border-purple-200' },
-    { id: 'materiais', titulo: 'Materiais Posto', icone: Radio, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-amber-50 text-amber-600 border-amber-200' },
+    { id: 'custodia', titulo: 'Custódia Itens', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { id: 'prestadores', titulo: 'Prestadores & Obras', icone: HardHat, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-amber-50 text-amber-700 border-amber-300' },
+    { id: 'materiais', titulo: 'Materiais Posto', icone: ClipboardList, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-teal-50 text-teal-700 border-teal-200' },
     { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
     { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
-    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-teal-50 text-teal-600 border-teal-200' },
+    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
     { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
     { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
     { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
@@ -545,17 +548,10 @@ export default function App() {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => setModalLeitorNfcGlobal(true)}
-                className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition"
+                className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition cursor-pointer"
                 title="Leitor de Tags & Cartões NFC"
               >
                 <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              </button>
-              <button
-                onClick={() => setDrawerMobileAberto(true)}
-                className="p-1.5 text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition"
-                title="Menu Principal"
-              >
-                <Menu className="w-5 h-5" />
               </button>
             </div>
           </header>
@@ -683,26 +679,26 @@ export default function App() {
 
         </div>
 
-        {/* BARRA INFERIOR MOBILE */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-300 flex justify-around items-center h-16 z-40 px-1 shadow-2xl">
+        {/* BARRA INFERIOR MOBILE COMPACTA & MODERNA */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-300 flex justify-around items-center h-12 z-40 px-1 shadow-xl">
           <button
             onClick={() => mudarModulo('dashboard')}
-            className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
               moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-100'
             }`}
           >
-            <Home className="w-5 h-5 mb-0.5" />
+            <Home className="w-4 h-4 mb-0.5" />
             Início
           </button>
 
           {featureFlags.mod02_gestao_encomendas && (
             <button
               onClick={() => mudarModulo('encomendas')}
-              className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
                 moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-100'
               }`}
             >
-              <Package className="w-5 h-5 mb-0.5" />
+              <Package className="w-4 h-4 mb-0.5" />
               Encomendas
             </button>
           )}
@@ -710,11 +706,11 @@ export default function App() {
           {featureFlags.mod05_quadro_chaves && (
             <button
               onClick={() => mudarModulo('chaves')}
-              className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
                 moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-100'
               }`}
             >
-              <Key className="w-5 h-5 mb-0.5" />
+              <Key className="w-4 h-4 mb-0.5" />
               Chaves
             </button>
           )}
@@ -722,20 +718,20 @@ export default function App() {
           {featureFlags.mod07_gestao_ronda && (
             <button
               onClick={() => mudarModulo('rondas')}
-              className={`flex flex-col items-center justify-center w-full h-full text-xs font-bold transition ${
+              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
                 moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-100'
               }`}
             >
-              <QrCode className="w-5 h-5 mb-0.5" />
+              <QrCode className="w-4 h-4 mb-0.5" />
               Rondas
             </button>
           )}
 
           <button
             onClick={() => setDrawerMobileAberto(true)}
-            className="flex flex-col items-center justify-center w-full h-full text-xs font-bold hover:text-slate-100 text-slate-300"
+            className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold hover:text-slate-100 text-slate-300 transition cursor-pointer"
           >
-            <Grid className="w-5 h-5 mb-0.5" />
+            <Grid className="w-4 h-4 mb-0.5" />
             Módulos
           </button>
         </nav>
