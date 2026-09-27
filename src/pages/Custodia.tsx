@@ -244,132 +244,132 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 bg-white rounded-xl shadow-2xs border border-slate-200 overflow-hidden">
         <button
           onClick={() => setAba('entrada')}
-          className={`p-4 text-left border-b-4 transition ${aba === 'entrada' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+          className={`p-2.5 text-left border-b-2 transition cursor-pointer ${aba === 'entrada' ? 'border-emerald-600 bg-slate-50' : 'border-transparent'}`}
         >
-          <span className="text-xs font-bold uppercase text-slate-400 block">Fluxo 1</span>
-          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><PackagePlus className="w-4 h-4 text-emerald-600" /> Receber e Guardar Item</strong>
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Fluxo 1</span>
+          <strong className="text-xs sm:text-sm text-slate-900 flex items-center gap-1.5"><PackagePlus className="w-3.5 h-3.5 text-emerald-600" /> Receber e Guardar</strong>
         </button>
 
         <button
           onClick={() => setAba('saida')}
-          className={`p-4 text-left border-b-4 transition ${aba === 'saida' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+          className={`p-2.5 text-left border-b-2 transition cursor-pointer ${aba === 'saida' ? 'border-emerald-600 bg-slate-50' : 'border-transparent'}`}
         >
-          <span className="text-xs font-bold uppercase text-slate-400 block">Fluxo 2</span>
-          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><PackageCheck className="w-4 h-4 text-blue-600" /> Baixa / Devolução ({itensGuardados.length})</strong>
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Fluxo 2</span>
+          <strong className="text-xs sm:text-sm text-slate-900 flex items-center gap-1.5"><PackageCheck className="w-3.5 h-3.5 text-blue-600" /> Baixa / Devolução ({itensGuardados.length})</strong>
         </button>
       </div>
 
       {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+        <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
-          {mensagem.texto}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{mensagem.texto}</span>
         </div>
       )}
 
       {aba === 'entrada' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <div className="border-b pb-4">
-            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-              <ShieldCheck className="w-6 h-6 text-slate-800" /> Custódia de Itens na Portaria
+        <div className="bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200 space-y-3">
+          <div className="border-b pb-2">
+            <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Custódia de Itens na Portaria
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] text-slate-500">
               Registre o objeto deixado na guarita identificando quem entregou e quem está autorizado a retirar.
             </p>
           </div>
 
-          <form onSubmit={salvarEntradaCustodia} className="space-y-6 max-w-4xl">
+          <form onSubmit={salvarEntradaCustodia} className="space-y-3 max-w-4xl">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Selecione o Fluxo de Custódia *</label>
-              <div className="grid grid-cols-3 gap-3">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Selecione o Fluxo de Custódia *</label>
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setFluxo('M-M')}
-                  className={`p-3 rounded-xl border text-center transition ${fluxo === 'M-M' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                  className={`p-2 rounded-lg border text-center transition cursor-pointer ${fluxo === 'M-M' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
                 >
                   <p className="text-xs">Morador ➔ Morador</p>
-                  <span className="text-[10px] opacity-75">Chaves, documentos</span>
+                  <span className="text-[9px] opacity-75">Chaves, documentos</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFluxo('M-T')}
-                  className={`p-3 rounded-xl border text-center transition ${fluxo === 'M-T' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                  className={`p-2 rounded-lg border text-center transition cursor-pointer ${fluxo === 'M-T' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
                 >
                   <p className="text-xs">Morador ➔ Terceiro</p>
-                  <span className="text-[10px] opacity-75">Para prestador / visita</span>
+                  <span className="text-[9px] opacity-75">Para prestador / visita</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFluxo('T-M')}
-                  className={`p-3 rounded-xl border text-center transition ${fluxo === 'T-M' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                  className={`p-2 rounded-lg border text-center transition cursor-pointer ${fluxo === 'T-M' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
                 >
                   <p className="text-xs">Terceiro ➔ Morador</p>
-                  <span className="text-[10px] opacity-75">Farmácia / lavanderia</span>
+                  <span className="text-[9px] opacity-75">Farmácia / lavanderia</span>
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-              <div className="space-y-3">
-                <h4 className="font-bold text-xs uppercase text-slate-700 border-b pb-2 flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-emerald-600" /> Origem (Quem Deixou o Objeto)
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="space-y-2">
+                <h4 className="font-bold text-[11px] uppercase text-slate-700 border-b pb-1 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-emerald-600" /> Origem (Quem Deixou o Objeto)
                 </h4>
 
                 {fluxo.startsWith('M') ? (
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Unidade / AP *</label>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase">Unidade / AP *</label>
                         <input
                           type="text"
                           required
                           value={origemUnidade}
                           onChange={(e) => selecionarOrigemMorador(e.target.value, origemBloco)}
                           placeholder="Ex: 24"
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Bloco</label>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase">Bloco</label>
                         <input
                           type="text"
                           value={origemBloco}
                           onChange={(e) => { setOrigemBloco(e.target.value); selecionarOrigemMorador(origemUnidade, e.target.value); }}
                           placeholder="Ex: A"
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase">Nome do Morador *</label>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase">Nome do Morador *</label>
                       <input
                         type="text"
                         required
                         value={origemNome}
                         onChange={(e) => setOrigemNome(e.target.value)}
                         placeholder="Nome do morador"
-                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs"
+                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
                       />
                     </div>
                   </>
                 ) : (
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase">Nome / Empresa do Terceiro *</label>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Nome / Empresa do Terceiro *</label>
                     <input
                       type="text"
                       required
                       value={origemNome}
                       onChange={(e) => setOrigemNome(e.target.value)}
                       placeholder="Ex: Farmácia Drogasil / Entregador João"
-                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs"
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
                   </div>
                 )}
@@ -520,66 +520,66 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
       )}
 
       {aba === 'saida' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <div className="border-b pb-4">
-            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-              <PackageCheck className="w-6 h-6 text-blue-600" /> Devolução de Objeto em Custódia
+        <div className="bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200 space-y-3">
+          <div className="border-b pb-2">
+            <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+              <PackageCheck className="w-4 h-4 text-blue-600" /> Devolução de Objeto em Custódia
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] text-slate-500">
               Localize o item na portaria e registre a retirada colhendo a foto e nome de quem recebeu.
             </p>
           </div>
 
-          <div className="relative max-w-xl">
-            <Search className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" />
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
             <input
               type="text"
               value={buscaTermo}
               onChange={(e) => setBuscaTermo(e.target.value)}
               placeholder="Buscar por código, unidade, nome do morador ou descrição..."
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-slate-900"
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs outline-none focus:ring-1 focus:ring-slate-900"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {itensFiltradosSaida.map((item: any) => (
               <div
                 key={item.id}
                 onClick={() => setItemSelecionadoSaida(item)}
-                className={`p-4 rounded-xl border cursor-pointer transition space-y-3 ${
+                className={`p-2.5 rounded-lg border cursor-pointer transition space-y-2 ${
                   itemSelecionadoSaida?.id === item.id 
-                    ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600' 
+                    ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-600' 
                     : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
                 }`}
               >
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-2">
                   <div>
-                    <span className="text-[10px] font-bold font-mono bg-slate-900 text-white px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-bold font-mono bg-slate-900 text-white px-1.5 py-0.2 rounded">
                       {item.codigo_custodia}
                     </span>
-                    <h4 className="font-bold text-sm text-slate-900 mt-1">{item.descricao}</h4>
+                    <h4 className="font-bold text-xs text-slate-900 mt-0.5">{item.descricao}</h4>
                   </div>
                   {item.foto_entrada_url && (
-                    <img src={item.foto_entrada_url} alt="Objeto" className="w-12 h-12 rounded-lg object-cover border" />
+                    <img src={item.foto_entrada_url} alt="Objeto" className="w-10 h-10 rounded-md object-cover border shrink-0" />
                   )}
                 </div>
 
-                <div className="text-xs text-slate-600 space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
-                  <p className="flex items-center gap-1">
-                    <span className="font-bold text-slate-800">De:</span> {item.origem_nome_doc} {item.origem_unidade ? `(Apt ${item.origem_unidade})` : ''}
+                <div className="text-[11px] text-slate-600 space-y-0.5 bg-white p-2 rounded-md border border-slate-200">
+                  <p className="truncate">
+                    <span className="font-bold text-slate-800">De:</span> {item.origem_nome_doc} {item.origem_unidade ? `(Ap ${item.origem_unidade})` : ''}
                   </p>
-                  <p className="flex items-center gap-1">
-                    <span className="font-bold text-slate-800">Para:</span> {item.destino_nome_doc} {item.destino_unidade ? `(Apt ${item.destino_unidade})` : ''}
+                  <p className="truncate">
+                    <span className="font-bold text-slate-800">Para:</span> {item.destino_nome_doc} {item.destino_unidade ? `(Ap ${item.destino_unidade})` : ''}
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Entrou em: {new Date(item.data_hora_entrada || item.created_at).toLocaleString('pt-BR')}
+                  <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
+                    <Clock className="w-2.5 h-2.5" /> {new Date(item.data_hora_entrada || item.created_at).toLocaleString('pt-BR')}
                   </p>
                 </div>
               </div>
             ))}
 
             {itensFiltradosSaida.length === 0 && (
-              <div className="col-span-full text-center py-8 text-slate-500 text-xs italic">
+              <div className="col-span-full text-center py-6 text-slate-500 text-xs italic">
                 Nenhum objeto aguardando retirada no momento.
               </div>
             )}
