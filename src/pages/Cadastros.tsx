@@ -16,7 +16,11 @@ import {
   Clock,
   MessageCircle,
   ExternalLink,
-  Phone
+  Phone,
+  Trash2,
+  UserCheck,
+  UserX,
+  Lock
 } from 'lucide-react';
 import { 
   carregarCondominioConfig, 
@@ -62,6 +66,9 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [senhaOperador, setSenhaOperador] = useState('');
   const [nivelAcesso, setNivelAcesso] = useState('3');
   const [condominioIdOperador, setCondominioIdOperador] = useState('');
+  const [ativoOperador, setAtivoOperador] = useState(true);
+  const [termoBuscaOperador, setTermoBuscaOperador] = useState('');
+  const [filtroStatusOperador, setFiltroStatusOperador] = useState<'todos' | 'ativos' | 'inativos'>('todos');
 
   const [nomeMorador, setNomeMorador] = useState('');
   const [blocoMorador, setBlocoMorador] = useState('');
@@ -270,7 +277,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           nome: nomeOperador.trim(),
           login: loginOperador.trim(),
           nivel_acesso: parseInt(nivelAcesso),
-          condominio_id: targetCondominioId
+          condominio_id: targetCondominioId,
+          ativo: ativoOperador
         };
         if (senhaOperador.trim()) {
           dadosAtualizacao.senha = senhaOperador.trim();
@@ -296,7 +304,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             senha: senhaOperador.trim(),
             nivel_acesso: parseInt(nivelAcesso),
             condominio_id: targetCondominioId,
-            ativo: true
+            ativo: ativoOperador
           }
         ]);
         if (error) throw error;
@@ -320,6 +328,59 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setSenhaOperador('');
     setNivelAcesso(String(op.nivel_acesso));
     setCondominioIdOperador(op.condominio_id || '');
+    setAtivoOperador(op.ativo !== false);
+  };
+
+  const toggleAtivoOperador = async (op: any) => {
+    if (op.id === usuarioLogado?.id) {
+      alert('Atenção: você não pode desativar seu próprio usuário em sessão.');
+      return;
+    }
+    const novoStatus = !(op.ativo !== false);
+    try {
+      const { error } = await supabase
+        .from('operadores')
+        .update({ ativo: novoStatus })
+        .eq('id', op.id);
+      if (error) throw error;
+      setOperadores(prev => prev.map(o => o.id === op.id ? { ...o, ativo: novoStatus } : o));
+      setMensagem({
+        tipo: 'sucesso',
+        texto: `Operador "${op.nome}" foi ${novoStatus ? 'ativado' : 'desativado'} com sucesso!`
+      });
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao alterar status: ${err.message}` });
+    }
+  };
+
+  const excluirOperador = async (op: any) => {
+    if (op.id === usuarioLogado?.id) {
+      alert('Atenção: você não pode excluir seu próprio usuário logado.');
+      return;
+    }
+    if (op.nivel_acesso === 0) {
+      const totalAdmins = operadores.filter(o => o.nivel_acesso === 0).length;
+      if (totalAdmins <= 1) {
+        alert('Operação bloqueada: o sistema precisa manter pelo menos um Administrador Geral cadastrado.');
+        return;
+      }
+    }
+
+    if (!window.confirm(`Tem certeza que deseja EXCLUIR permanentemente o operador "${op.nome}" (${op.login})? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('operadores')
+        .delete()
+        .eq('id', op.id);
+      if (error) throw error;
+      setOperadores(prev => prev.filter(o => o.id !== op.id));
+      setMensagem({ tipo: 'sucesso', texto: `Operador "${op.nome}" excluído com sucesso do banco!` });
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao excluir operador: ${err.message}` });
+    }
   };
 
   const salvarMorador = async (e: React.FormEvent) => {
@@ -823,6 +884,18 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 {eAdmin && <option value="0">Nível 0 - Administrador Dev</option>}
               </select>
             </div>
+
+            <div className="flex items-center gap-2 pt-1 pb-1">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ativoOperador}
+                  onChange={(e) => setAtivoOperador(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                />
+                <span>Operador Ativo no Sistema (Acesso Liberado)</span>
+              </label>
+            </div>
             <button
               type="submit"
               disabled={loading}
@@ -833,15 +906,82 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           </form>
 
           <div className="md:col-span-2 bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200">
-            <h3 className="font-bold text-slate-800 text-xs sm:text-sm mb-3 border-b pb-2">
-              Operadores Registrados ({operadores.length})
-              {condominioFiltroAdmin && <span className="text-[11px] font-normal text-emerald-600 block">Filtrado por: {getNomeCondominioPorId(condominioFiltroAdmin)}</span>}
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 border-b pb-2">
+              <div>
+                <h3 className="font-bold text-slate-800 text-xs sm:text-sm">
+                  Operadores Registrados ({operadores.length})
+                </h3>
+                {condominioFiltroAdmin && (
+                  <span className="text-[11px] font-normal text-emerald-600 block">
+                    Filtrado por: {getNomeCondominioPorId(condominioFiltroAdmin)}
+                  </span>
+                )}
+              </div>
+
+              {/* Filtros de Status */}
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusOperador('todos')}
+                  className={`px-2 py-1 rounded-md transition ${filtroStatusOperador === 'todos' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'}`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusOperador('ativos')}
+                  className={`px-2 py-1 rounded-md transition ${filtroStatusOperador === 'ativos' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-600'}`}
+                >
+                  Ativos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusOperador('inativos')}
+                  className={`px-2 py-1 rounded-md transition ${filtroStatusOperador === 'inativos' ? 'bg-white text-red-700 shadow-2xs' : 'text-slate-600'}`}
+                >
+                  Inativos
+                </button>
+              </div>
+            </div>
+
+            {/* Busca rápida */}
+            <div className="relative mb-3">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={termoBuscaOperador}
+                onChange={(e) => setTermoBuscaOperador(e.target.value)}
+                placeholder="Buscar por nome ou login de operador..."
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-800"
+              />
+            </div>
+
             <div className="space-y-2">
-              {operadores.map((op) => (
-                <div key={op.id} className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center shadow-2xs">
+              {operadores
+                .filter(op => {
+                  if (filtroStatusOperador === 'ativos' && op.ativo === false) return false;
+                  if (filtroStatusOperador === 'inativos' && op.ativo !== false) return false;
+                  if (!termoBuscaOperador.trim()) return true;
+                  const t = termoBuscaOperador.toLowerCase();
+                  return (op.nome?.toLowerCase().includes(t) || op.login?.toLowerCase().includes(t));
+                })
+                .map((op) => (
+                <div key={op.id} className={`p-2.5 sm:p-3 border rounded-xl flex justify-between items-center shadow-2xs transition ${
+                  op.ativo === false ? 'bg-slate-100/60 border-slate-200 opacity-75' : 'bg-slate-50 border-slate-200'
+                }`}>
                   <div>
-                    <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{op.nome}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{op.nome}</h4>
+                      {op.ativo === false ? (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                          Inativo
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                          Ativo
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-slate-500">Login: <strong>{op.login}</strong></p>
                     {eAdmin && (
                       <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded mt-0.5 inline-block">
@@ -850,13 +990,6 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => prepararEdicaoOperador(op)}
-                      className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
-                      title="Editar"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       op.nivel_acesso === 0 ? 'bg-purple-100 text-purple-800' :
                       op.nivel_acesso === 1 ? 'bg-indigo-100 text-indigo-800' :
@@ -864,9 +997,42 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     }`}>
                       {op.nivel_acesso === 0 ? 'Dev Admin' : op.nivel_acesso === 1 ? 'Master' : op.nivel_acesso === 2 ? 'Supervisor' : 'Operador'}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleAtivoOperador(op)}
+                      className={`p-1.5 rounded-lg transition ${
+                        op.ativo === false 
+                          ? 'text-emerald-700 hover:bg-emerald-100 bg-emerald-50' 
+                          : 'text-amber-700 hover:bg-amber-100 bg-amber-50'
+                      }`}
+                      title={op.ativo === false ? "Ativar operador" : "Desativar operador"}
+                    >
+                      {op.ativo === false ? <UserCheck className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => prepararEdicaoOperador(op)}
+                      className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition"
+                      title="Editar"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => excluirOperador(op)}
+                      className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+                      title="Excluir operador"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}
+              {operadores.length === 0 && (
+                <div className="p-4 text-center text-xs text-slate-400 italic">
+                  Nenhum operador encontrado para este condomínio.
+                </div>
+              )}
             </div>
           </div>
         </div>

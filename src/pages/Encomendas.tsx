@@ -142,21 +142,24 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       if (!error && data && data.length > 0) {
         setLocaisArmazenamento(data);
+        localStorage.setItem(`infport_locais_${usuarioLogado.condominio_id}`, JSON.stringify(data));
         const primeiroAtivo = data[0];
         setLocalArmazenamentoTriagem(`${primeiroAtivo.codigo} - ${primeiroAtivo.nome}`);
         return;
       }
 
-      const { data: configData } = await supabase
-        .from('configuracoes')
-        .select('locais_armazenamento')
-        .eq('condominio_id', usuarioLogado.condominio_id)
-        .maybeSingle();
-
-      if (configData?.locais_armazenamento && Array.isArray(configData.locais_armazenamento)) {
-        setLocaisArmazenamento(configData.locais_armazenamento);
-        const primeiroAtivo = configData.locais_armazenamento.find((l: any) => l.ativo);
-        if (primeiroAtivo) setLocalArmazenamentoTriagem(`${primeiroAtivo.codigo} - ${primeiroAtivo.nome}`);
+      // Se o banco não tem locais salvos para este condomínio, usa locais padrão para não travar a guarita
+      if (!cached || locaisArmazenamento.length === 0) {
+        const locaisPadrao = [
+          { id: 'padrao_1', codigo: 'PRAT-A1', nome: 'Prateleira A1', ativo: true },
+          { id: 'padrao_2', codigo: 'PRAT-A2', nome: 'Prateleira A2', ativo: true },
+          { id: 'padrao_3', codigo: 'GAV-01', nome: 'Gaveta 01 (Documentos)', ativo: true },
+          { id: 'padrao_4', codigo: 'ARM-01', nome: 'Armário 01 (Valores)', ativo: true },
+          { id: 'padrao_5', codigo: 'CHAO-01', nome: 'Chão / Volumosos', ativo: true },
+          { id: 'padrao_6', codigo: 'BANCADA', nome: 'Bancada Principal', ativo: true }
+        ];
+        setLocaisArmazenamento(locaisPadrao);
+        setLocalArmazenamentoTriagem('BANCADA - Bancada Principal');
       }
     } catch (e) {
       console.warn('Erro ao carregar locais:', e);

@@ -11,6 +11,7 @@ import Ocorrencias from './pages/Ocorrencias';
 import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
+import ModalMeuPerfil from './components/ModalMeuPerfil';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -44,12 +45,21 @@ import {
   Sparkles,
   HardHat,
   PackageCheck,
-  ClipboardList
+  ClipboardList,
+  Eye,
+  EyeOff,
+  KeyRound,
+  UserCheck
 } from 'lucide-react';
 
 export default function App() {
+  const CHAVE_SESSAO = 'infport_sessao_operador';
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
+  const [restaurandoSessao, setRestaurandoSessao] = useState(true);
+  const [lembrarAcesso, setLembrarAcesso] = useState(true);
+  const [mostrarSenhaLogin, setMostrarSenhaLogin] = useState(false);
+  const [modalMeuPerfilAberto, setModalMeuPerfilAberto] = useState(false);
   const [operador, setOperador] = useState<any | null>(null);
   const [condominio, setCondominio] = useState<any | null>(null);
   const [modalLeitorNfcGlobal, setModalLeitorNfcGlobal] = useState(false);
@@ -75,6 +85,91 @@ export default function App() {
   const [moduloAtual, setModuloAtual] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+
+
+  // Restaurar sessão persistente no carregamento inicial (PWA / Refresh / Mobile)
+  useEffect(() => {
+    let montado = true;
+    const restaurarSessaoSalva = async () => {
+      try {
+        const sessaoRaw = localStorage.getItem(CHAVE_SESSAO);
+        if (!sessaoRaw) {
+          if (montado) setRestaurandoSessao(false);
+          return;
+        }
+
+        const sessao = JSON.parse(sessaoRaw);
+        if (sessao?.operador?.id) {
+          if (montado) {
+            setOperador(sessao.operador);
+            if (sessao.condominio) setCondominio(sessao.condominio);
+            setCondominioAtivoId(sessao.condominioAtivoId || sessao.operador.condominio_id || '');
+            if (sessao.moduloAtual && sessao.moduloAtual !== 'login') {
+              setModuloAtual(sessao.moduloAtual);
+            }
+          }
+
+          // Validação assíncrona no Supabase para garantir que o operador ainda existe e está ativo
+          try {
+            const { data: opAtual, error: opErr } = await supabase
+              .from('operadores')
+              .select('id, nome, login, nivel_acesso, ativo, condominio_id')
+              .eq('id', sessao.operador.id)
+              .maybeSingle();
+
+            if (opErr || !opAtual || opAtual.ativo === false) {
+              console.warn('Sessão invalidada pelo banco:', opErr || 'Operador inativo');
+              localStorage.removeItem(CHAVE_SESSAO);
+              if (montado) {
+                setOperador(null);
+                setCondominio(null);
+                setErro('Sessão expirada ou operador desativado pela administração.');
+              }
+            } else if (montado) {
+              const opCompleto = { ...sessao.operador, ...opAtual };
+              setOperador(opCompleto);
+              
+              // Atualiza condomínio se aplicável
+              const targetCondo = opAtual.condominio_id || sessao.condominioAtivoId;
+              if (targetCondo) {
+                const { data: cData } = await supabase
+                  .from('condominios')
+                  .select('*')
+                  .eq('id', targetCondo)
+                  .maybeSingle();
+                if (cData && montado) setCondominio(cData);
+              }
+            }
+          } catch (valErr) {
+            console.warn('Erro ao validar operador online (modo offline tolerante):', valErr);
+          }
+        }
+      } catch (err) {
+        console.warn('Falha ao ler sessão local:', err);
+      } finally {
+        if (montado) setRestaurandoSessao(false);
+      }
+    };
+
+    restaurarSessaoSalva();
+    return () => { montado = false; };
+  }, []);
+
+  // Mantém os dados da sessão local atualizados conforme o usuário navega
+  useEffect(() => {
+    if (!operador) return;
+    try {
+      const sessaoRaw = localStorage.getItem(CHAVE_SESSAO);
+      if (sessaoRaw) {
+        const sessao = JSON.parse(sessaoRaw);
+        sessao.moduloAtual = moduloAtual;
+        sessao.condominioAtivoId = condominioAtivoId;
+        sessao.condominio = condominio;
+        sessao.atualizadoEm = new Date().toISOString();
+        localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
+      }
+    } catch {}
+  }, [moduloAtual, condominioAtivoId, condominio, operador]);
 
   const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
   const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
@@ -416,25 +511,43 @@ export default function App() {
 
           <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
             {menuAberto && (
-              <div className="flex items-center gap-2 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+              <div 
+                onClick={() => setModalMeuPerfilAberto(true)}
+                className="flex items-center gap-2 overflow-hidden cursor-pointer hover:opacity-85 transition group"
+                title="Clique para abrir Meu Perfil & Alterar Senha"
+              >
+                <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition">
                   {operador.nome?.charAt(0)}
                 </div>
                 <div className="truncate">
-                  <p className="text-xs sm:text-sm font-bold text-white truncate">{operador.nome}</p>
-                  <p className="text-xs text-slate-400 uppercase font-mono">
+                  <p className="text-xs sm:text-sm font-bold text-white truncate flex items-center gap-1">
+                    {operador.nome}
+                    <KeyRound className="w-3 h-3 text-slate-500 group-hover:text-emerald-400" />
+                  </p>
+                  <p className="text-[10px] text-slate-400 uppercase font-mono">
                     {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso ?? 3}`}
                   </p>
                 </div>
               </div>
             )}
-            <button
-              onClick={handleLogout}
-              className="bg-red-600/90 hover:bg-red-700 text-white p-2.5 rounded-xl transition font-bold text-xs mx-auto md:mx-0"
-              title="Sair"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setModalMeuPerfilAberto(true)}
+                className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800 p-2 rounded-xl transition font-bold text-xs"
+                title="Meu Perfil & Senha"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="bg-red-600/90 hover:bg-red-700 text-white p-2.5 rounded-xl transition font-bold text-xs"
+                title="Sair do Sistema"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -546,6 +659,14 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setModalMeuPerfilAberto(true)}
+                className="p-1.5 text-slate-300 hover:text-emerald-400 bg-slate-800 hover:bg-slate-700 rounded-lg transition cursor-pointer"
+                title="Meu Perfil & Senha"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => setModalLeitorNfcGlobal(true)}
                 className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition cursor-pointer"
@@ -756,6 +877,34 @@ export default function App() {
           </div>
         )}
 
+        {/* Modal de Meu Perfil & Troca de Senha */}
+        {modalMeuPerfilAberto && (
+          <ModalMeuPerfil
+            isOpen={modalMeuPerfilAberto}
+            onClose={() => setModalMeuPerfilAberto(false)}
+            operador={operadorContextoGlobal}
+            condominio={condominio}
+            onOperadorAtualizado={(opAtualizado) => {
+              setOperador(opAtualizado);
+            }}
+          />
+        )}
+
+      </div>
+    );
+  }
+
+  if (restaurandoSessao) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white">
+        <div className="w-20 h-20 mb-4 animate-pulse flex items-center justify-center">
+          <EmblemaInfport tamanho="xl" comBrilho />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight">INFPORT 1.0</h1>
+        <p className="text-xs text-slate-400 mt-2 flex items-center gap-2 font-medium">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+          Conectando ao banco de dados e restaurando sessão segura...
+        </p>
       </div>
     );
   }
@@ -810,14 +959,34 @@ export default function App() {
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-500 absolute left-3 top-3.5 z-10" />
               <input
-                type="password"
+                type={mostrarSenhaLogin ? "text" : "password"}
                 required
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 placeholder="Digite sua senha"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-900 text-base font-semibold"
+                className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 text-slate-900 text-base font-semibold"
               />
+              <button
+                type="button"
+                onClick={() => setMostrarSenhaLogin(!mostrarSenhaLogin)}
+                className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                title={mostrarSenhaLogin ? "Ocultar senha" : "Ver senha"}
+              >
+                {mostrarSenhaLogin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between py-0.5 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer text-slate-600 font-semibold select-none">
+              <input
+                type="checkbox"
+                checked={lembrarAcesso}
+                onChange={(e) => setLembrarAcesso(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+              />
+              <span>Manter conectado neste dispositivo</span>
+            </label>
           </div>
 
           <button
