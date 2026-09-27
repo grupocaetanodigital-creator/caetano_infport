@@ -1133,27 +1133,28 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const pontosZerados = pontos.filter(p => !pontosLidosIds.includes(p.id));
 
   return (
-    <div className="space-y-6">
-      <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md border border-slate-800">
+    <div className="space-y-3">
+      {/* Header Principal Compacto */}
+      <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
         <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
-            <UserCheck className="w-3.5 h-3.5" /> Ronda Ativo: {operadorRondaAtual}
+          <span className="text-[9px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
+            <UserCheck className="w-3 h-3" /> Ronda Ativo: {operadorRondaAtual}
           </span>
-          <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" /> Controle de Rondas Patrimoniais
+          <h3 className="font-bold text-sm sm:text-base mt-0.5 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" /> Controle de Rondas Patrimoniais
           </h3>
-          <p className="text-xs text-slate-300">
+          <p className="text-[11px] text-slate-300">
             Validação por QR Code com Checklist do Setor, Foto e GPS.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setModalTestarNfc(true)}
-            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs"
             title="Abrir Leitor de Tags e Cartões NFC com Som e Validação"
           >
-            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" /> Leitor NFC
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> Leitor NFC
           </button>
 
           <button
@@ -1161,9 +1162,9 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
               carregarOperadores();
               setModalAssumirPosto(true);
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase shadow-sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition uppercase shadow-2xs"
           >
-            <ArrowRightLeft className="w-4 h-4" /> Assumir Posto
+            <ArrowRightLeft className="w-3.5 h-3.5" /> Assumir Posto
           </button>
 
           {podeGerenciarPontos && (
@@ -1172,9 +1173,9 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
                 setCoordsNovoPonto(null);
                 setModalNovoPonto(true);
               }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs"
             >
-              <Plus className="w-4 h-4" /> Cadastrar Ponto
+              <Plus className="w-3.5 h-3.5" /> Cadastrar Ponto
             </button>
           )}
 
@@ -1182,141 +1183,141 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
             <button
               onClick={iniciarRonda}
               disabled={loading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition uppercase shadow-2xs"
             >
-              <Play className="w-4 h-4" /> Iniciar Ronda
+              <Play className="w-3.5 h-3.5" /> Iniciar Ronda
             </button>
           ) : (
             <button
               onClick={finalizarRonda}
               disabled={loading}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase"
+              className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition uppercase shadow-2xs"
             >
-              <Flag className="w-4 h-4" /> Finalizar Ronda
+              <Flag className="w-3.5 h-3.5" /> Finalizar Ronda
             </button>
           )}
         </div>
       </div>
 
       {whatsAppRelatorio && (
-        <div className="bg-emerald-50 border-2 border-emerald-500 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <MessageCircle className="w-8 h-8 text-emerald-600 flex-shrink-0" />
+        <div className="bg-emerald-50 border border-emerald-400 p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-6 h-6 text-emerald-600 flex-shrink-0" />
             <div>
-              <strong className="font-bold text-emerald-900 text-sm">Relatório Detalhado Gerado!</strong>
-              <p className="text-xs text-emerald-700">Envie o relatório completo com observações e fotos no grupo.</p>
+              <strong className="font-bold text-emerald-900 text-xs">Relatório Detalhado Gerado!</strong>
+              <p className="text-[11px] text-emerald-700">Envie o relatório com observações e fotos no grupo.</p>
             </div>
           </div>
           <a
             href={whatsAppRelatorio.link}
             target="_blank"
             rel="noreferrer"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition uppercase shadow-2xs"
           >
-            <MessageCircle className="w-4 h-4" /> Enviar no WhatsApp <ExternalLink className="w-3.5 h-3.5" />
+            <MessageCircle className="w-3.5 h-3.5" /> Enviar no WhatsApp <ExternalLink className="w-3 h-3" />
           </a>
         </div>
       )}
 
       {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+        <div className={`p-2.5 rounded-lg flex items-center gap-2 text-xs font-semibold ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
           {mensagem.texto}
         </div>
       )}
 
       {rondaAtiva && (
-        <div className="bg-slate-950 text-white p-5 rounded-2xl space-y-6 border border-slate-800 shadow-lg">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
+        <div className="bg-slate-950 text-white p-3 sm:p-3.5 rounded-xl space-y-2.5 border border-slate-800 shadow-2xs">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 border-b border-slate-800 pb-2">
             <div>
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">Ronda Ativa</span>
-              <p className="text-xs text-slate-300">
+              <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest block">Ronda Ativa</span>
+              <p className="text-[11px] text-slate-300">
                 Início: <strong>{new Date(rondaAtiva.data_inicio).toLocaleTimeString('pt-BR')}</strong> por <strong>{rondaAtiva.operador_nome}</strong>
               </p>
             </div>
 
-            <span className="text-xs font-bold bg-slate-800 text-emerald-400 px-3 py-1 rounded-full border border-slate-700">
+            <span className="text-xs font-bold bg-slate-800 text-emerald-400 px-2.5 py-0.5 rounded-full border border-slate-700">
               {registrosRonda.length} de {pontos.length} Pontos Validados
             </span>
           </div>
 
           {pontosZerados.length > 0 && (
-            <div className="bg-amber-950/60 border border-amber-800/80 p-3 rounded-xl text-xs text-amber-200 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+            <div className="bg-amber-950/60 border border-amber-800/80 p-2 rounded-lg text-[11px] text-amber-200 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
               <span>Pontos pendentes para verificação: {pontosZerados.length}</span>
             </div>
           )}
         </div>
       )}
 
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h4 className="font-bold text-slate-800 text-base flex items-center gap-2">
-            <QrCode className="w-5 h-5 text-blue-600" /> Pontos de Ronda Cadastrados
+      <div className="bg-white rounded-xl p-3 sm:p-4 border border-slate-200 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <h4 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+            <QrCode className="w-4 h-4 text-blue-600" /> Pontos de Ronda Cadastrados
           </h4>
-          <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">
+          <span className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
             Total: {pontos.length}
           </span>
         </div>
 
         {pontos.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 text-sm">
+          <div className="text-center py-6 text-slate-400 text-xs italic">
             Nenhum ponto de ronda cadastrado para este condomínio.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
             {pontos.map((ponto) => {
               const lido = pontosLidosIds.includes(ponto.id);
               return (
                 <div
                   key={ponto.id}
-                  className={`p-4 rounded-xl border transition flex flex-col justify-between gap-3 ${
+                  className={`p-3 rounded-xl border transition flex flex-col justify-between gap-2 shadow-2xs ${
                     lido ? 'bg-emerald-50/60 border-emerald-300' : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                  <div className="space-y-1">
+                    <div className="flex items-start justify-between gap-1.5">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
                         {getNomeSetor(ponto.setor_id)}
                       </span>
                       {lido ? (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Validado
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded">
+                        <span className="text-[9px] font-bold text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded">
                           Pendente
                         </span>
                       )}
                     </div>
-                    <h5 className="font-bold text-slate-900 text-sm mt-2">{ponto.nome_ponto}</h5>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                    <h5 className="font-bold text-slate-900 text-xs sm:text-sm">{ponto.nome_ponto}</h5>
+                    <p className="text-[11px] text-slate-500 line-clamp-2">
                       {ponto.localizacao_descricao || 'Sem descrição adicional.'}
                     </p>
-                    <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1">
-                      <QrCode className="w-3.5 h-3.5 text-slate-400" /> TAG: <code className="font-mono text-slate-600 font-bold">{ponto.codigo_tag}</code>
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <QrCode className="w-3 h-3 text-slate-400" /> TAG: <code className="font-mono text-slate-600 font-bold">{ponto.codigo_tag}</code>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60">
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/60">
                     {rondaAtiva && !lido && (
                       <button
                         onClick={() => abrirRegistroPonto(ponto)}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-2.5 rounded-lg text-xs flex items-center justify-center gap-1 transition shadow-2xs"
                       >
-                        <Camera className="w-4 h-4" /> Validar Ponto
+                        <Camera className="w-3.5 h-3.5" /> Validar Ponto
                       </button>
                     )}
 
                     {podeGerenciarPontos && (
                       <button
                         onClick={() => excluirPonto(ponto.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                         title="Excluir Ponto"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
@@ -1327,27 +1328,27 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
         )}
       </div>
 
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-        <h4 className="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
-          <History className="w-5 h-5 text-slate-600" /> Histórico de Rondas Recentes
+      <div className="bg-white rounded-xl p-3 sm:p-4 border border-slate-200 shadow-2xs space-y-3">
+        <h4 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5 border-b border-slate-100 pb-2">
+          <History className="w-4 h-4 text-slate-600" /> Histórico de Rondas Recentes
         </h4>
 
         {historicoRondas.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-4">Nenhuma ronda finalizada no histórico.</p>
+          <p className="text-xs text-slate-400 text-center py-4 italic">Nenhuma ronda finalizada no histórico.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {historicoRondas.map((h) => (
-              <div key={h.id} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div key={h.id} className="p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
                       h.status === 'Concluída' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                     }`}>
                       {h.status}
                     </span>
                     <span className="text-xs font-bold text-slate-800">{h.operador_nome}</span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-0.5">
                     Início: {new Date(h.data_inicio).toLocaleString('pt-BR')} | Fim: {h.data_fim ? new Date(h.data_fim).toLocaleString('pt-BR') : '—'}
                   </p>
                 </div>
