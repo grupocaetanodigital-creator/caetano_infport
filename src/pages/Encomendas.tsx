@@ -19,9 +19,7 @@ import {
   Square,
   User,
   Boxes,
-  MapPin,
-  Edit3,
-  Layers
+  Edit3
 } from 'lucide-react';
 
 interface EncomendasProps {
@@ -80,12 +78,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const [buscaBaixaGeral, setBuscaBaixaGeral] = useState('');
   const [abaBlocoSelecionada, setAbaBlocoSelecionada] = useState('TODOS');
+  
+  // ESTADOS DA BAIXA E MENUS FLUTUANTES
   const [itensSelecionadosIds, setItensSelecionadosIds] = useState<string[]>([]);
+  const [modalBaixaAberta, setModalBaixaAberta] = useState(false);
   const [nomeRetirante, setNomeRetirante] = useState('');
   const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
   const [baixaConcluidaWhats, setBaixaConcluidaWhats] = useState<any | null>(null);
 
-  // Estados para Edição e Troca Dinâmica de Local Físico
   const [modalMoverLocal, setModalMoverLocal] = useState(false);
   const [itemParaMover, setItemParaMover] = useState<any | null>(null);
   const [novoLocalSelecionado, setNovoLocalSelecionado] = useState('');
@@ -502,7 +502,6 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     if (itensRetidos && itensRetidos.length > 0) {
       tocarAlertaSonoro();
-      // Extrai os locais físicos onde os itens desta unidade já estão guardados
       const locaisExistentes = Array.from(
         new Set(
           itensRetidos
@@ -554,14 +553,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         .maybeSingle();
 
       if (itemErr && (itemErr.message?.includes('local_armazenamento') || (itemErr as any).code === '42703' || itemErr.message?.includes('schema cache'))) {
-        console.warn('[INFPORT] Coluna local_armazenamento não encontrada no Supabase. Salvando pacote sem a coluna...');
         delete payloadItem.local_armazenamento;
         const retry = await supabase.from('encomendas_itens').insert([payloadItem]).select().maybeSingle();
         itemErr = retry.error;
         itemInserido = retry.data;
-        if (itemInserido) {
-          localStorage.setItem(`infport_item_local_${itemInserido.id}`, localArmazenar);
-        }
       }
 
       if (itemErr) throw itemErr;
@@ -621,25 +616,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         }
       }
 
-      if (idsParaAtualizar.length === 0) {
-        setMensagem({ tipo: 'erro', texto: 'Nenhum pacote selecionado para mover.' });
-        setLoading(false);
-        return;
-      }
+      if (idsParaAtualizar.length === 0) return;
 
       const { error } = await supabase
         .from('encomendas_itens')
         .update({ local_armazenamento: novoLocalSelecionado })
         .in('id', idsParaAtualizar);
 
-      if (error && (error.message?.includes('local_armazenamento') || (error as any).code === '42703' || error.message?.includes('schema cache'))) {
-        console.warn('[INFPORT] Coluna local_armazenamento ausente no Supabase. Atualizando localmente...');
-        idsParaAtualizar.forEach(id => {
-          localStorage.setItem(`infport_item_local_${id}`, novoLocalSelecionado);
-        });
-      } else if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       setTodosItensRetidos(prev => prev.map(item => {
         if (idsParaAtualizar.includes(item.id)) {
@@ -694,7 +678,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     );
   });
 
+  const toggleItemSelecao = (id: string) => {
+    if (itensSelecionadosIds.includes(id)) {
+      const novos = itensSelecionadosIds.filter(item => item !== id);
+      setItensSelecionadosIds(novos);
+      // Se não houver mais pacotes selecionados, fechamos o modal flutuante caso esteja aberto
+      if (novos.length === 0) setModalBaixaAberta(false);
+    } else {
+      setItensSelecionadosIds([...itensSelecionadosIds, id]);
+    }
+  };
+
   const itensSelecionadosObjetos = todosItensRetidos.filter(i => itensSelecionadosIds.includes(i.id));
+  
   const moradoresDasUnidadesBaixa = moradores.filter(m => 
     itensSelecionadosObjetos.some(item => 
       String(item.unidade).toLowerCase() === String(m.unidade).toLowerCase() &&
@@ -702,19 +698,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     )
   );
 
-  const toggleItemSelecao = (id: string) => {
-    if (itensSelecionadosIds.includes(id)) {
-      setItensSelecionadosIds(itensSelecionadosIds.filter(item => item !== id));
-    } else {
-      setItensSelecionadosIds([...itensSelecionadosIds, id]);
-    }
-  };
-
   const efetivarBaixaSaida = async (e?: React.SyntheticEvent) => {
     if (e) e.preventDefault();
     
     if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione os pacotes, informe o nome do retirante e tire a foto da entrega.' });
+      setMensagem({ tipo: 'erro', texto: 'Preencha o nome do retirante e tire a foto.' });
       return;
     }
     setLoading(true);
@@ -741,7 +729,6 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
       });
 
-      setItensSelecionadosIds([]);
       setNomeRetirante(''); setFotoRetiranteUrl('');
       carregarDadosBase();
       setMensagem({ tipo: 'sucesso', texto: 'Baixa de saída realizada com sucesso!' });
@@ -753,7 +740,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 relative pb-20">
       <div className="grid grid-cols-3 gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
         <div className="py-1 px-1.5 rounded-lg bg-blue-50/60 flex items-center justify-center gap-1.5 text-center">
           <Truck className="w-3.5 h-3.5 text-blue-700 shrink-0" />
@@ -1219,7 +1206,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          {/* LISTAGEM DE PACOTES Ocupa largura total agora */}
+          <div className="space-y-2.5">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between bg-slate-50 p-1.5 rounded-lg border border-slate-200">
                 <h4 className="text-[11px] font-black text-slate-800 uppercase flex items-center gap-1">
@@ -1240,24 +1228,13 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       }}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
                     >
-                      <Boxes className="w-3 h-3" /> Mover {itensSelecionadosIds.length} Sel.
-                    </button>
-                  )}
-                  {/* AJUSTE NA BAIXA: ÂNCORA DE NAVEGAÇÃO PARA MOBILE */}
-                  {itensSelecionadosIds.length > 0 && !baixaConcluidaWhats && (
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById('area-baixa')?.scrollIntoView({ behavior: 'smooth' })}
-                      className="bg-slate-900 hover:bg-slate-800 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
-                      title="Rolar para preenchimento de baixa"
-                    >
-                      <UserCheck className="w-3 h-3" /> Ir p/ Baixa
+                      <Boxes className="w-3 h-3" /> Mover Selecionados
                     </button>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
                 {itensRetidosFiltrados.length > 0 ? (
                   itensRetidosFiltrados.map((item: any) => {
                     const selecionado = itensSelecionadosIds.includes(item.id);
@@ -1341,106 +1318,201 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* ÁREA DE FINALIZAÇÃO - RESTRUTURADA PARA LIMPEZA VISUAL E UX */}
-            <div id="area-baixa" className="bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 space-y-2.5">
-              <h4 className="text-xs font-bold text-slate-700 border-b border-slate-200 pb-1 uppercase">Finalizar Entrega (Baixa)</h4>
-              
+      {/* ======================================================== */}
+      {/* 4. BARRA DE AÇÃO FLUTUANTE (FAB) PARA INICIAR A BAIXA    */}
+      {/* ======================================================== */}
+      {etapa === '3' && itensSelecionadosIds.length > 0 && !modalBaixaAberta && !baixaConcluidaWhats && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-lg bg-slate-900 text-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.24)] p-3.5 flex justify-between items-center z-30 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="flex items-center gap-3">
+             <div className="bg-emerald-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-inner">
+               {itensSelecionadosIds.length}
+             </div>
+             <span className="text-sm font-bold leading-tight">
+               Pacotes <br/>
+               <span className="text-[10px] text-slate-300 font-normal">Selecionados</span>
+             </span>
+          </div>
+          <button 
+            onClick={() => setModalBaixaAberta(true)} 
+            className="bg-emerald-500 hover:bg-emerald-600 px-5 py-2.5 rounded-xl text-sm font-black shadow-lg cursor-pointer flex items-center gap-2 transition"
+          >
+            Finalizar Entrega <UserCheck className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 5. MENU FLUTUANTE (BOTTOM SHEET MODAL) DE BAIXA/CONFERÊNCIA */}
+      {/* ======================================================== */}
+      {(modalBaixaAberta || baixaConcluidaWhats) && etapa === '3' && (
+        <div className="fixed inset-0 z-40 flex justify-center items-end bg-slate-900/60 backdrop-blur-sm sm:p-4">
+          <div className="bg-slate-50 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+            
+            {/* CABEÇALHO DO MENU FLUTUANTE */}
+            <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-black text-slate-900 flex items-center gap-2 text-base">
+                  <UserCheck className="w-5 h-5 text-emerald-600" /> 
+                  Conferência e Retirada
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Valide os itens e colha a assinatura</p>
+              </div>
+              {!baixaConcluidaWhats && (
+                <button 
+                  onClick={() => setModalBaixaAberta(false)} 
+                  className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {/* CONTEÚDO SCROLLÁVEL DO MENU FLUTUANTE */}
+            <div className="overflow-y-auto p-4 space-y-4">
               {baixaConcluidaWhats ? (
-                 <div className="mt-2 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-3 shadow-sm">
+                 <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-4">
                    <div className="flex justify-center">
-                     <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                     <CheckCircle2 className="w-14 h-14 text-emerald-600" />
                    </div>
-                   <p className="text-sm font-bold text-emerald-800">Baixa registrada com sucesso!</p>
-                   <a href={baixaConcluidaWhats.link} target="_blank" rel="noreferrer" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2 transition w-full shadow-sm">
-                     <MessageCircle className="w-4 h-4" /> Enviar Recibo de Entrega
+                   <p className="text-lg font-black text-emerald-900">Entrega Finalizada!</p>
+                   <a 
+                     href={baixaConcluidaWhats.link} 
+                     target="_blank" 
+                     rel="noreferrer" 
+                     className="bg-green-500 hover:bg-green-600 text-white px-4 py-3.5 rounded-xl text-sm font-bold flex justify-center items-center gap-2 transition w-full shadow-sm"
+                   >
+                     <MessageCircle className="w-5 h-5" /> Enviar Recibo no WhatsApp
                    </a>
-                   <button onClick={() => setBaixaConcluidaWhats(null)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-bold transition mt-2 shadow-sm cursor-pointer">
-                     Voltar / Nova Baixa
+                   <button 
+                     onClick={() => { setBaixaConcluidaWhats(null); setItensSelecionadosIds([]); setModalBaixaAberta(false); }} 
+                     className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold transition mt-2 cursor-pointer"
+                   >
+                     Fechar e Voltar
                    </button>
                  </div>
               ) : (
                  <>
-                   <div className="flex items-center gap-2">
-                     <span className="text-xs font-bold text-slate-500">Pacotes Selecionados:</span>
-                     <span className="bg-slate-900 text-white font-bold px-2 py-0.5 rounded text-sm">{itensSelecionadosIds.length}</span>
+                   {/* ÁREA DE CONFERÊNCIA FÍSICA (LISTA COMPACTA DOS PACOTES) */}
+                   <div className="space-y-1.5">
+                      <h4 className="text-[11px] font-bold text-slate-500 uppercase flex items-center justify-between">
+                        <span>Pacotes Selecionados para Entrega</span>
+                        <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono">{itensSelecionadosIds.length}</span>
+                      </h4>
+                      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 shadow-sm max-h-48 overflow-y-auto">
+                        {itensSelecionadosObjetos.map(item => (
+                          <div key={item.id} className="p-2.5 flex justify-between items-center gap-2 hover:bg-slate-50 transition">
+                             <div className="min-w-0">
+                               <div className="flex items-center gap-1.5">
+                                 <span className="text-[10px] font-black uppercase text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded">
+                                   Apt {item.unidade}{item.bloco ? `-${item.bloco}` : ''}
+                                 </span>
+                                 <span className="text-xs font-bold text-slate-700 truncate">{item.moradores?.nome || 'Sem morador'}</span>
+                               </div>
+                               <div className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                                 Loc: {item.local_armazenamento || 'Não definido'} | Rast: {item.codigo_barras || 'Sem Cód'}
+                               </div>
+                             </div>
+                             <button 
+                               onClick={() => toggleItemSelecao(item.id)} 
+                               className="text-red-500 hover:bg-red-50 p-2 rounded-lg shrink-0 cursor-pointer transition"
+                               title="Remover pacote da entrega"
+                             >
+                               <X className="w-4 h-4" />
+                             </button>
+                          </div>
+                        ))}
+                      </div>
                    </div>
 
-                   {itensSelecionadosIds.length > 0 ? (
-                     <form onSubmit={efetivarBaixaSaida} className="space-y-2.5 pt-1">
-                       
-                       {moradoresDasUnidadesBaixa.length > 0 && (
-                         <div className="space-y-1">
-                           <label className="block text-[10px] font-bold text-slate-700 uppercase">Preencher com Morador:</label>
-                           <div className="flex flex-wrap gap-1">
-                             {moradoresDasUnidadesBaixa.map((m: any) => (
-                               <button
-                                 key={m.id}
-                                 type="button"
-                                 onClick={() => setNomeRetirante(m.nome)}
-                                 className="bg-white border border-slate-300 text-slate-700 hover:bg-blue-50 text-[11px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer"
-                               >
-                                 <User className="w-3 h-3" /> {m.nome}
-                               </button>
-                             ))}
-                           </div>
+                   {/* FORMULÁRIO DE QUEM ESTÁ RETIRANDO */}
+                   <form id="form-baixa-flutuante" onSubmit={efetivarBaixaSaida} className="space-y-3.5 pt-2">
+                     {moradoresDasUnidadesBaixa.length > 0 && (
+                       <div className="space-y-1.5">
+                         <label className="block text-[10px] font-bold text-slate-700 uppercase">Preencher rápido com morador vinculado:</label>
+                         <div className="flex flex-wrap gap-1.5">
+                           {moradoresDasUnidadesBaixa.map((m: any) => (
+                             <button
+                               key={m.id}
+                               type="button"
+                               onClick={() => setNomeRetirante(m.nome)}
+                               className="bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 font-bold text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                             >
+                               <User className="w-3.5 h-3.5" /> {m.nome}
+                             </button>
+                           ))}
+                         </div>
+                       </div>
+                     )}
+
+                     <div className="space-y-1">
+                       <label className="block text-[11px] font-bold text-slate-700 uppercase">Nome de quem está retirando *</label>
+                       <input
+                         type="text"
+                         value={nomeRetirante}
+                         onChange={(e) => setNomeRetirante(e.target.value)}
+                         placeholder="Ex: João da Silva (Titular) ou RG..."
+                         required
+                         className="w-full p-3 bg-white border border-slate-300 rounded-xl text-slate-900 text-sm font-bold focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
+                       />
+                     </div>
+
+                     <div className="space-y-1 pb-2">
+                       <label className="block text-[11px] font-bold text-slate-700 uppercase">Comprovante (Assinatura ou Foto do Rosto) *</label>
+                       {!fotoRetiranteUrl ? (
+                         <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-xl p-5 flex flex-col items-center justify-center gap-2 transition">
+                           <Camera className="w-7 h-7 text-emerald-600" />
+                           <span className="text-sm font-bold text-slate-700">
+                             {uploadingFoto ? 'Enviando...' : 'Capturar Comprovante da Entrega'}
+                           </span>
+                           <input 
+                             type="file" 
+                             accept="image/*" 
+                             capture="environment" 
+                             className="hidden" 
+                             onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
+                             disabled={uploadingFoto} 
+                           />
+                         </label>
+                       ) : (
+                         <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex justify-center">
+                           <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-36 rounded-lg object-cover shadow-sm" />
+                           <button 
+                             type="button" 
+                             onClick={() => setFotoRetiranteUrl('')} 
+                             className="absolute top-3 right-3 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 shadow-md cursor-pointer"
+                           >
+                             <X className="w-4 h-4" />
+                           </button>
                          </div>
                        )}
-
-                       <div className="space-y-1">
-                         <label className="block text-[11px] font-bold text-slate-700 uppercase">Quem está retirando? (Nome / RG) *</label>
-                         <input
-                           type="text"
-                           value={nomeRetirante}
-                           onChange={(e) => setNomeRetirante(e.target.value)}
-                           placeholder="Nome de quem pegou o pacote..."
-                           required
-                           className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
-                         />
-                       </div>
-
-                       <div className="space-y-1">
-                         <label className="block text-[11px] font-bold text-slate-700 uppercase">Comprovante de Entrega (Foto) *</label>
-                         {!fotoRetiranteUrl ? (
-                           <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition">
-                             <Camera className="w-4 h-4 text-emerald-600" />
-                             <span className="text-xs font-bold text-slate-700">
-                               {uploadingFoto ? 'Enviando...' : 'Foto Assinatura / Retirante'}
-                             </span>
-                             <input 
-                               type="file" 
-                               accept="image/*" 
-                               capture="environment" 
-                               className="hidden" 
-                               onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
-                               disabled={uploadingFoto} 
-                             />
-                           </label>
-                         ) : (
-                           <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
-                             <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-24 rounded object-cover" />
-                             <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
-                               <X className="w-3.5 h-3.5" />
-                             </button>
-                           </div>
-                         )}
-                       </div>
-
-                       <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs">
-                         {loading ? 'Processando...' : <><UserCheck className="w-4 h-4" /> Confirmar Entrega</>}
-                       </button>
-                     </form>
-                   ) : (
-                     <div className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs text-center shadow-sm">
-                       Selecione ao menos um pacote na lista ao lado para efetuar a entrega.
                      </div>
-                   )}
+                   </form>
                  </>
               )}
             </div>
+            
+            {/* RODAPÉ DO MENU FLUTUANTE (Apenas exibido se a baixa não foi concluída) */}
+            {!baixaConcluidaWhats && (
+              <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                <button 
+                  type="submit" 
+                  form="form-baixa-flutuante" 
+                  disabled={loading || itensSelecionadosIds.length === 0} 
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-sm cursor-pointer shadow-lg"
+                >
+                  {loading ? 'Processando Baixa...' : <><UserCheck className="w-5 h-5" /> Confirmar Entrega ({itensSelecionadosIds.length})</>}
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
       )}
+
 
       {/* MODAL CADASTRAR ENTREGADOR */}
       {modalNovoEntregador && (
@@ -1530,7 +1602,6 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               </button>
             </div>
 
-            {/* Resumo do item / lote */}
             {moverEmLoteSelecionados ? (
               <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs space-y-1 text-emerald-950 font-medium">
                 <p className="font-bold text-sm text-emerald-900 flex items-center gap-1.5">
