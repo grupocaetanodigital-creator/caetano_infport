@@ -42,94 +42,94 @@ export default function TabelasResumoPosto({
   const mat = consolidacao.materiais;
 
   return (
-    <div className="space-y-4">
-      {/* Seletor de Tabela / Abas de Resumo */}
-      <div className="flex flex-wrap gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+    <div className="space-y-2.5">
+      {/* Seletor de Tabela / Abas de Resumo Compactas */}
+      <div className="flex flex-wrap gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
         <button
           type="button"
           onClick={() => setTabelaAtiva('geral')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'geral' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'geral' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-200'
           }`}
         >
-          📊 Resumo Geral
+          <span>📊 Geral</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('encomendas')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'encomendas' ? 'bg-purple-700 text-white shadow-xs' : 'text-slate-600 hover:bg-purple-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'encomendas' ? 'bg-purple-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-purple-50'
           }`}
         >
-          <Package className="w-3.5 h-3.5" />
-          Encomendas & RE ({enc.totalRePlantao} REs | {enc.totalRetidasNoPosto} retidos)
+          <Package className="w-3 h-3" />
+          <span>Encomendas ({enc.totalRetidasNoPosto})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('rondas')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'rondas' ? 'bg-indigo-700 text-white shadow-xs' : 'text-slate-600 hover:bg-indigo-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'rondas' ? 'bg-indigo-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-indigo-50'
           }`}
         >
-          <Footprints className="w-3.5 h-3.5" />
-          Rondas ({ron.totalExecutadasPlantao} feitas)
+          <Footprints className="w-3 h-3" />
+          <span>Rondas ({ron.totalExecutadasPlantao})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('chaves')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'chaves' ? 'bg-amber-700 text-white shadow-xs' : 'text-slate-600 hover:bg-amber-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'chaves' ? 'bg-amber-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-amber-50'
           }`}
         >
-          <Key className="w-3.5 h-3.5" />
-          Chaves Fora ({cha.totalFora})
+          <Key className="w-3 h-3" />
+          <span>Chaves ({cha.totalFora})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('ocorrencias')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'ocorrencias' ? 'bg-red-700 text-white shadow-xs' : 'text-slate-600 hover:bg-red-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'ocorrencias' ? 'bg-red-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-red-50'
           }`}
         >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Ocorrências Pendentes ({oco.totalPendentes})
+          <AlertTriangle className="w-3 h-3" />
+          <span>Ocorrências ({oco.totalPendentes})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('custodia')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'custodia' ? 'bg-sky-700 text-white shadow-xs' : 'text-slate-600 hover:bg-sky-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'custodia' ? 'bg-sky-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-sky-50'
           }`}
         >
-          <Box className="w-3.5 h-3.5" />
-          Custódia ({cus.totalAguardando})
+          <Box className="w-3 h-3" />
+          <span>Custódia ({cus.totalAguardando})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('prestadores')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'prestadores' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:bg-blue-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'prestadores' ? 'bg-blue-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-blue-50'
           }`}
         >
-          <HardHat className="w-3.5 h-3.5" />
-          Prestadores ({pre.totalPresentes})
+          <HardHat className="w-3 h-3" />
+          <span>Prestadores ({pre.totalPresentes})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabelaAtiva('materiais')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg transition flex items-center gap-1.5 ${
-            tabelaAtiva === 'materiais' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:bg-emerald-100'
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'materiais' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-emerald-50'
           }`}
         >
-          <Radio className="w-3.5 h-3.5" />
-          Materiais ({mat.totalEquipamentos})
+          <Radio className="w-3 h-3" />
+          <span>Materiais ({mat.totalEquipamentos})</span>
         </button>
       </div>
 
