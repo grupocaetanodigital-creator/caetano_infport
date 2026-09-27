@@ -759,98 +759,98 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* PAINEL DE METRICAS DO DIA */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-700 rounded-xl">
-            <Truck className="w-6 h-6" />
+    <div className="space-y-3">
+      {/* PAINEL DE METRICAS DO DIA (COMPACTO & OTIMIZADO) */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-2">
+          <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg shrink-0">
+            <Truck className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Lotes RE Criados Hoje</span>
-            <strong className="text-2xl font-black text-slate-900">{statsDia.lotesHoje}</strong>
-            <span className="text-[10px] text-slate-500 block">00:00 às 23:59</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl">
-            <Package className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Encomendas Triadas Hoje</span>
-            <strong className="text-2xl font-black text-emerald-700">{statsDia.triadasHoje}</strong>
-            <span className="text-[10px] text-slate-500 block">00:00 às 23:59</span>
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold uppercase text-slate-500 block truncate">Lotes RE</span>
+            <strong className="text-base sm:text-xl font-black text-slate-900 leading-none">{statsDia.lotesHoje}</strong>
+            <span className="text-[9px] text-slate-400 hidden sm:block">Hoje</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-amber-50 text-amber-700 rounded-xl">
-            <Clock className="w-6 h-6" />
+        <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-2">
+          <div className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg shrink-0">
+            <Package className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Aguardando Triagem</span>
-            <strong className="text-2xl font-black text-amber-700">{statsDia.aguardandoTriagem}</strong>
-            <span className="text-[10px] text-slate-500 block">Pacotes em lotes abertos</span>
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold uppercase text-slate-500 block truncate">Triadas</span>
+            <strong className="text-base sm:text-xl font-black text-emerald-700 leading-none">{statsDia.triadasHoje}</strong>
+            <span className="text-[9px] text-slate-400 hidden sm:block">Hoje</span>
+          </div>
+        </div>
+
+        <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-2">
+          <div className="p-1.5 bg-amber-50 text-amber-700 rounded-lg shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold uppercase text-slate-500 block truncate">Aguardando</span>
+            <strong className="text-base sm:text-xl font-black text-amber-700 leading-none">{statsDia.aguardandoTriagem}</strong>
+            <span className="text-[9px] text-slate-400 hidden sm:block">Pendentes</span>
           </div>
         </div>
       </div>
 
-      {/* DISPLAY DE PACOTES RETIDOS POR BLOCO */}
-      <div className="bg-slate-900 text-white p-4 rounded-xl shadow-sm space-y-2">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-emerald-400" /> Pacotes Retidos na Portaria por Bloco:
+      {/* DISPLAY DE PACOTES RETIDOS POR BLOCO (COMPACTO) */}
+      <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-xs space-y-1.5">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-emerald-400" /> Pacotes Retidos por Bloco:
           </h4>
-          <span className="text-xs font-mono font-bold bg-slate-800 text-emerald-400 px-2.5 py-1 rounded-md">
-            Total Retido: {todosItensRetidos.length} vol.
+          <span className="text-[11px] font-mono font-bold bg-slate-800 text-emerald-400 px-2 py-0.5 rounded">
+            Total: {todosItensRetidos.length} vol.
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
           {Object.keys(statsDia.retidosPorBloco).length > 0 ? (
             Object.entries(statsDia.retidosPorBloco).map(([blocoNome, qtd]) => (
               <div 
                 key={blocoNome} 
                 onClick={() => { setEtapa('3'); setAbaBlocoSelecionada(blocoNome); }}
-                className="bg-slate-800 hover:bg-slate-700 cursor-pointer border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs transition"
+                className="bg-slate-800 hover:bg-slate-700 cursor-pointer border border-slate-700 px-2 py-1 rounded-md flex items-center gap-1.5 text-xs transition"
               >
-                <span className="font-bold text-slate-200">{blocoNome}:</span>
-                <span className="font-black text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded text-xs">
-                  {qtd} {qtd === 1 ? 'pacote' : 'pacotes'}
+                <span className="font-bold text-slate-200 text-[11px]">{blocoNome}:</span>
+                <span className="font-black text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-1.5 py-0.2 rounded text-[10px]">
+                  {qtd} {qtd === 1 ? 'pct' : 'pcts'}
                 </span>
               </div>
             ))
           ) : (
-            <p className="text-xs text-slate-400 italic">Nenhuma encomenda retida no momento.</p>
+            <p className="text-[11px] text-slate-400 italic">Nenhuma encomenda retida no momento.</p>
           )}
         </div>
       </div>
 
-      {/* Navegação Sequencial de 3 Etapas */}
-      <div className="grid grid-cols-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* Navegação Sequencial de 3 Etapas (Compacta) */}
+      <div className="grid grid-cols-3 bg-white rounded-xl shadow-2xs border border-slate-200 overflow-hidden">
         <button
           onClick={() => setEtapa('1')}
-          className={`p-4 text-left border-b-4 transition ${etapa === '1' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+          className={`p-2 sm:p-2.5 text-center border-b-2 transition cursor-pointer ${etapa === '1' ? 'border-slate-900 bg-slate-100 font-black' : 'border-transparent hover:bg-slate-50'}`}
         >
-          <span className="text-xs font-bold uppercase text-slate-400 block">1ª Etapa</span>
-          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><Truck className="w-4 h-4" /> Recebimento (RE)</strong>
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">1ª Etapa</span>
+          <strong className="text-xs sm:text-sm text-slate-900 flex items-center justify-center gap-1"><Truck className="w-3.5 h-3.5 text-slate-700" /> <span className="hidden sm:inline">Recebimento</span> (RE)</strong>
         </button>
 
         <button
           onClick={() => setEtapa('2')}
-          className={`p-4 text-left border-b-4 transition ${etapa === '2' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+          className={`p-2 sm:p-2.5 text-center border-b-2 transition cursor-pointer ${etapa === '2' ? 'border-slate-900 bg-slate-100 font-black' : 'border-transparent hover:bg-slate-50'}`}
         >
-          <span className="text-xs font-bold uppercase text-slate-400 block">2ª Etapa</span>
-          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><Package className="w-4 h-4" /> Triagem do Lote</strong>
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">2ª Etapa</span>
+          <strong className="text-xs sm:text-sm text-slate-900 flex items-center justify-center gap-1"><Package className="w-3.5 h-3.5 text-slate-700" /> Triagem</strong>
         </button>
 
         <button
           onClick={() => setEtapa('3')}
-          className={`p-4 text-left border-b-4 transition ${etapa === '3' ? 'border-slate-900 bg-slate-50' : 'border-transparent'}`}
+          className={`p-2 sm:p-2.5 text-center border-b-2 transition cursor-pointer ${etapa === '3' ? 'border-slate-900 bg-slate-100 font-black' : 'border-transparent hover:bg-slate-50'}`}
         >
-          <span className="text-xs font-bold uppercase text-slate-400 block">3ª Etapa</span>
-          <strong className="text-sm text-slate-900 flex items-center gap-1.5"><UserCheck className="w-4 h-4" /> Saída / Baixa</strong>
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">3ª Etapa</span>
+          <strong className="text-xs sm:text-sm text-slate-900 flex items-center justify-center gap-1"><UserCheck className="w-3.5 h-3.5 text-slate-700" /> Saída / Baixa</strong>
         </button>
       </div>
 
@@ -866,37 +866,37 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       {/* 1ª ETAPA — RECEBIMENTO DO LOTE (RE) */}
       {etapa === '1' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <div className="flex justify-between items-center border-b pb-4">
-            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-              <Truck className="w-6 h-6 text-slate-800" /> Novo Recebimento de Entrega (RE)
+        <div className="bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200 space-y-3">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
+              <Truck className="w-4 h-4 text-slate-800" /> Recebimento de Entrega (RE)
             </h3>
             <button
               onClick={() => setModalNovoEntregador(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1 transition"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
             >
-              <Plus className="w-4 h-4" /> + Cadastro Rápido de Entregador
+              <Plus className="w-3.5 h-3.5" /> + Entregador
             </button>
           </div>
 
-          <form onSubmit={criarLoteRE} className="space-y-4 max-w-2xl">
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase">Buscar / Selecionar Entregador *</label>
+          <form onSubmit={criarLoteRE} className="space-y-3 max-w-2xl">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase">Buscar / Selecionar Entregador *</label>
               
               {!entregadorSelecionado ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="relative">
-                    <Search className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
                       value={buscaEntregador}
                       onChange={(e) => setBuscaEntregador(e.target.value)}
-                      placeholder="Digite o nome, empresa ou documento do entregador..."
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                      placeholder="Digite o nome, empresa ou documento..."
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                     />
                   </div>
 
-                  <div className="max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-sm divide-y divide-slate-100">
+                  <div className="max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-2xs divide-y divide-slate-100">
                     {entregadoresFiltrados.length > 0 ? (
                       entregadoresFiltrados.map((ent) => (
                         <div
@@ -905,44 +905,44 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                             setEntregadorSelecionado(ent);
                             setBuscaEntregador('');
                           }}
-                          className="p-3 hover:bg-slate-50 cursor-pointer transition flex justify-between items-center"
+                          className="p-2.5 hover:bg-slate-50 cursor-pointer transition flex justify-between items-center"
                         >
                           <div>
                             <p className="text-xs font-bold text-slate-900">{ent.nome}</p>
-                            <p className="text-[11px] text-slate-500">
+                            <p className="text-[10px] text-slate-500">
                               {ent.empresa ? `Empresa: ${ent.empresa}` : 'Avulso'} | Doc: {ent.documento || 'Sem doc'}
                             </p>
                           </div>
-                          <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">
+                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
                             Selecionar
                           </span>
                         </div>
                       ))
                     ) : (
-                      <div className="p-4 text-xs text-slate-500 italic text-center">
+                      <div className="p-3 text-xs text-slate-500 italic text-center">
                         Nenhum entregador encontrado com esse termo.
                       </div>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-300 flex justify-between items-center">
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-300 flex justify-between items-center">
                   <div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">Entregador Selecionado</span>
-                    <h4 className="text-base font-bold text-slate-900 mt-1">{entregadorSelecionado.nome}</h4>
-                    <p className="text-xs text-slate-500">
+                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase">Entregador Selecionado</span>
+                    <h4 className="text-sm font-bold text-slate-900 mt-0.5">{entregadorSelecionado.nome}</h4>
+                    <p className="text-[11px] text-slate-500">
                       Empresa: {entregadorSelecionado.empresa || 'Avulso'} | Doc: {entregadorSelecionado.documento || 'Sem doc'}
                     </p>
                   </div>
-                  <button type="button" onClick={() => setEntregadorSelecionado(null)} className="text-red-500 hover:text-red-700 p-2">
-                    <X className="w-5 h-5" />
+                  <button type="button" onClick={() => setEntregadorSelecionado(null)} className="text-red-500 hover:text-red-700 p-1.5 cursor-pointer">
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="space-y-2 pt-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase">Quantidade de Volumes (Declarada) *</label>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase">Quantidade de Volumes (Declarada) *</label>
               <input 
                 type="number" 
                 inputMode="numeric" 
@@ -951,12 +951,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 value={qtdDeclarada} 
                 onChange={(e) => setQtdDeclarada(e.target.value)} 
                 required 
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition" 
+                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition" 
               />
             </div>
 
-            <button type="submit" disabled={loading} className="w-full mt-4 bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50">
-              {loading ? 'Gerando Lote...' : <><CheckCircle2 className="w-5 h-5" /> Gerar Lote de Recebimento</>}
+            <button type="submit" disabled={loading} className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition text-xs disabled:opacity-50 cursor-pointer">
+              {loading ? 'Gerando Lote...' : <><CheckCircle2 className="w-4 h-4" /> Gerar Lote de Recebimento</>}
             </button>
           </form>
 
@@ -981,19 +981,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       {/* 2ª ETAPA — TRIAGEM DE PACOTES */}
       {etapa === '2' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <div className="border-b pb-4">
-            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-              <Package className="w-6 h-6 text-slate-800" /> Triagem de Pacotes
+        <div className="bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200 space-y-3">
+          <div className="border-b border-slate-100 pb-2">
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
+              <Package className="w-4 h-4 text-slate-800" /> Triagem de Pacotes do Lote
             </h3>
-            <p className="text-xs text-slate-500 mt-1">Vincule os pacotes recebidos às unidades e notifique o morador.</p>
+            <p className="text-[11px] text-slate-500">Vincule os pacotes recebidos à unidade para notificar o morador.</p>
           </div>
 
-          <div className="space-y-4 max-w-2xl">
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase">1. Selecione o Lote Pendente *</label>
+          <div className="space-y-3 max-w-2xl">
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase">1. Selecione o Lote Pendente *</label>
               <select
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                 value={loteAtivo ? loteAtivo.id : ''}
                 onChange={(e) => {
                   const loteId = e.target.value;
@@ -1010,14 +1010,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             </div>
 
             {loteAtivo && (
-              <form onSubmit={salvarItemTriagem} className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-700 uppercase">Bloco</label>
+              <form onSubmit={salvarItemTriagem} className="space-y-2.5 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Bloco</label>
                     <select
                       value={blocoTriagem}
                       onChange={(e) => buscarMoradoresEChecarAgrupamento(unidadeTriagem, e.target.value)}
-                      className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                     >
                       <option value="">Nenhum/Único</option>
                       {blocosDisponiveis.map((b: any) => (
@@ -1026,8 +1026,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     </select>
                   </div>
                   
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-700 uppercase">Unidade / Ap *</label>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Unidade / AP *</label>
                     <input
                       type="number"
                       inputMode="numeric"
@@ -1036,27 +1036,24 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       onChange={(e) => buscarMoradoresEChecarAgrupamento(e.target.value, blocoTriagem)}
                       placeholder="Ex: 101"
                       required
-                      className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                     />
                   </div>
                 </div>
 
                 {alertaAgrupamento && (
-                  <div className="bg-amber-50 text-amber-950 p-4 rounded-2xl border-2 border-amber-300 space-y-2.5 shadow-sm animate-in fade-in duration-200">
-                    <div className="flex items-start gap-2.5">
-                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div className="space-y-1 flex-1">
-                        <p className="text-xs font-black uppercase tracking-wide text-amber-900">
-                          ⚠️ Unidade com Encomendas Retidas na Portaria
+                  <div className="bg-amber-50 text-amber-950 p-2.5 rounded-xl border border-amber-300 space-y-1.5 shadow-2xs">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-[11px] flex-1">
+                        <p className="font-bold text-amber-900">
+                          Já existem {alertaAgrupamento.qtd} pacote(s) retido(s) para esta unidade.
                         </p>
-                        <p className="text-xs text-amber-800">
-                          Já existem <strong>{alertaAgrupamento.qtd} pacote(s)</strong> retido(s) aguardando retirada para o Apt {alertaAgrupamento.unidade}{alertaAgrupamento.bloco ? ` - Bloco ${alertaAgrupamento.bloco}` : ''}.
-                        </p>
-                        <div className="text-xs text-amber-900 font-medium flex items-center gap-1.5 flex-wrap pt-0.5">
-                          <span className="text-[11px] font-bold text-amber-700">Locais atuais de guarda:</span>
+                        <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                          <span className="text-amber-800 font-semibold">Local atual:</span>
                           {alertaAgrupamento.locais && alertaAgrupamento.locais.map((loc: string, idx: number) => (
-                            <span key={idx} className="bg-amber-200/80 border border-amber-400/60 text-amber-950 px-2 py-0.5 rounded-md font-mono text-[11px] font-bold">
-                              📦 {loc}
+                            <span key={idx} className="bg-amber-200/80 text-amber-950 px-1.5 py-0.2 rounded font-mono font-bold text-[10px]">
+                              {loc}
                             </span>
                           ))}
                         </div>
@@ -1067,52 +1064,47 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       <button
                         type="button"
                         onClick={() => setLocalArmazenamentoTriagem(alertaAgrupamento.locais[0])}
-                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-sm cursor-pointer uppercase active:scale-[0.99]"
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
                       >
-                        <Boxes className="w-4 h-4" />
-                        Agrupar neste mesmo local ({alertaAgrupamento.locais[0]})
+                        <Boxes className="w-3.5 h-3.5" />
+                        Agrupar no mesmo local ({alertaAgrupamento.locais[0]})
                       </button>
                     )}
                   </div>
                 )}
 
                 {moradoresDaUnidade.length > 0 && (
-                  <div className="space-y-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
-                    <label className="block text-xs font-bold text-blue-800 uppercase">Selecione o Destinatário</label>
+                  <div className="space-y-1 bg-blue-50/80 p-2 rounded-lg border border-blue-200">
+                    <label className="block text-[10px] font-bold text-blue-800 uppercase">Destinatário</label>
                     <select
-                      className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm"
+                      className="w-full p-1.5 bg-white border border-blue-200 rounded text-xs font-semibold"
                       onChange={(e) => setMoradorSelecionado(moradoresDaUnidade.find(m => m.id === e.target.value))}
                       value={moradorSelecionado?.id || ''}
                     >
                       {moradoresDaUnidade.map(m => (
-                        <option key={m.id} value={m.id}>{m.nome} (Tel: {m.telefone || 'Sem telefone'})</option>
+                        <option key={m.id} value={m.id}>{m.nome} (Tel: {m.telefone || 'Sem tel'})</option>
                       ))}
                     </select>
                   </div>
                 )}
 
-                {/* SELETOR DO LOCAL FÍSICO DE ARMAZENAMENTO */}
-                <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Boxes className="w-4 h-4 text-emerald-600" />
-                      Local Físico de Armazenamento na Portaria *
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-normal">
-                      Gerenciado em Configurações
-                    </span>
+                {/* SELETOR DO LOCAL FÍSICO DE ARMAZENAMENTO (DIRETO E SEM EXCESSO) */}
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1">
+                    <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+                    Local de Armazenamento na Portaria *
                   </label>
                   <select
                     value={localArmazenamentoTriagem}
                     onChange={(e) => setLocalArmazenamentoTriagem(e.target.value)}
                     required
-                    className="w-full p-3 bg-white border border-slate-300 rounded-xl text-slate-900 font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition shadow-inner"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-bold text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                   >
                     {locaisArmazenamento.filter(l => l.ativo !== false).map((loc: any) => {
                       const valorFormatado = loc.codigo && loc.nome ? `${loc.codigo} - ${loc.nome}` : loc.nome || loc;
                       return (
                         <option key={loc.id || loc.codigo || loc} value={valorFormatado}>
-                          📦 {valorFormatado} {loc.categoria ? `(${loc.categoria})` : ''}
+                          📦 {valorFormatado}
                         </option>
                       );
                     })}
@@ -1120,33 +1112,30 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       <option value="Bancada Principal">📦 Bancada Principal de Triagem</option>
                     )}
                   </select>
-                  <p className="text-[11px] text-slate-500">
-                    O morador receberá no WhatsApp exatamente onde retirar a encomenda. O local pode ser alterado a qualquer momento.
-                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">Código de Barras / Rastreio</label>
-                  <div className="flex gap-2">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase">Código de Barras / Rastreio</label>
+                  <div className="flex gap-1.5">
                     <input
                       type="text"
                       value={codigoBarras}
                       onChange={(e) => setCodigoBarras(e.target.value)}
                       placeholder="Escaneie ou digite..."
-                      className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-mono focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                     />
-                    <button type="button" onClick={() => abrirLeitorCamera('triagem')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-3 rounded-lg transition flex items-center gap-2">
-                      <QrCode className="w-5 h-5" />
+                    <button type="button" onClick={() => abrirLeitorCamera('triagem')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg transition flex items-center gap-1 cursor-pointer">
+                      <QrCode className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">Foto do Pacote / Etiqueta *</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase">Foto do Pacote / Etiqueta *</label>
                   {!fotoEtiquetaUrl ? (
-                    <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50 cursor-pointer rounded-xl p-6 flex flex-col items-center justify-center gap-2 transition group">
-                      <Camera className="w-8 h-8 text-slate-400 group-hover:text-emerald-500" />
-                      <span className="text-sm font-medium text-slate-500 group-hover:text-emerald-600">
+                    <label className="border border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition bg-slate-50">
+                      <Camera className="w-4 h-4 text-emerald-600" />
+                      <span className="text-xs font-bold text-slate-700">
                         {uploadingFoto ? 'Enviando foto...' : 'Tirar Foto do Pacote'}
                       </span>
                       <input 
@@ -1159,28 +1148,28 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       />
                     </label>
                   ) : (
-                    <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 p-2 flex justify-center">
-                      <img src={fotoEtiquetaUrl} alt="Etiqueta" className="max-h-48 rounded object-cover" />
-                      <button type="button" onClick={() => setFotoEtiquetaUrl('')} className="absolute top-4 right-4 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 shadow-md">
-                        <X className="w-4 h-4" />
+                    <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 p-1.5 flex justify-center">
+                      <img src={fotoEtiquetaUrl} alt="Etiqueta" className="max-h-28 rounded object-cover" />
+                      <button type="button" onClick={() => setFotoEtiquetaUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">Observações (Opcional)</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase">Observações (Opcional)</label>
                   <input
                     type="text"
                     value={observacoes}
                     onChange={(e) => setObservacoes(e.target.value)}
-                    placeholder="Ex: Caixa amassada, perecível..."
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
+                    placeholder="Ex: Caixa amassada, frágil..."
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                   />
                 </div>
 
-                <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 mt-4">
-                  {loading ? 'Salvando...' : <><CheckCircle2 className="w-5 h-5" /> Salvar Triagem e Reter Pacote</>}
+                <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition text-xs disabled:opacity-50 cursor-pointer mt-1">
+                  {loading ? 'Salvando...' : <><CheckCircle2 className="w-4 h-4" /> Salvar Triagem e Reter Pacote</>}
                 </button>
               </form>
             )}
@@ -1208,35 +1197,34 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       {/* 3ª ETAPA — SAÍDA E BAIXA */}
       {etapa === '3' && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-          <div className="border-b pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="border-b border-slate-100 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-                <UserCheck className="w-6 h-6 text-slate-800" /> Entrega de Pacotes (Saída)
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-slate-800" /> Entrega de Pacotes (Saída)
               </h3>
-              <p className="text-xs text-slate-500 mt-1">Busque a unidade ou leia o código de barras para dar baixa.</p>
             </div>
             
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search className="w-5 h-5 text-slate-400 absolute left-3 top-2.5" />
+            <div className="flex gap-1.5 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-60">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
                   value={buscaBaixaGeral}
                   onChange={(e) => setBuscaBaixaGeral(e.target.value)}
                   placeholder="Unidade, Bloco ou Código..."
-                  className="pl-10 pr-4 py-2 w-64 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="pl-8 pr-3 py-1.5 w-full bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                 />
               </div>
-              <button onClick={() => abrirLeitorCamera('baixa')} className="bg-slate-900 hover:bg-slate-800 text-white p-2 rounded-lg transition" title="Ler Código de Barras">
-                <QrCode className="w-5 h-5" />
+              <button onClick={() => abrirLeitorCamera('baixa')} className="bg-slate-900 hover:bg-slate-800 text-white p-2 rounded-lg transition shrink-0 cursor-pointer" title="Ler Código de Barras">
+                <QrCode className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          <div className="flex overflow-x-auto pb-2 gap-2 snap-x">
+          <div className="flex overflow-x-auto pb-1.5 gap-1.5 snap-x">
             <button
               onClick={() => setAbaBlocoSelecionada('TODOS')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition snap-start ${abaBlocoSelecionada === 'TODOS' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition snap-start cursor-pointer ${abaBlocoSelecionada === 'TODOS' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
             >
               Todos os Blocos
             </button>
@@ -1244,18 +1232,18 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               <button
                 key={bloco}
                 onClick={() => setAbaBlocoSelecionada(bloco)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition snap-start flex items-center gap-2 ${abaBlocoSelecionada === bloco ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition snap-start flex items-center gap-1 cursor-pointer ${abaBlocoSelecionada === bloco ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
               >
-                {bloco} <span className="bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[10px]">{statsDia.retidosPorBloco[bloco]}</span>
+                {bloco} <span className="bg-emerald-500 text-white px-1 py-0.2 rounded text-[10px] font-mono">{statsDia.retidosPorBloco[bloco]}</span>
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <h4 className="text-xs font-black text-slate-800 uppercase flex items-center gap-1.5">
-                  <Package className="w-4 h-4 text-emerald-600" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <h4 className="text-[11px] font-black text-slate-800 uppercase flex items-center gap-1">
+                  <Package className="w-3.5 h-3.5 text-emerald-600" />
                   Pacotes Retidos ({itensRetidosFiltrados.length})
                 </h4>
 
@@ -1269,14 +1257,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       setNovoLocalSelecionado(primeiro ? (primeiro.codigo && primeiro.nome ? `${primeiro.codigo} - ${primeiro.nome}` : primeiro.nome || primeiro) : 'Bancada Principal');
                       setModalMoverLocal(true);
                     }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] px-2 py-1 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
                   >
-                    <Boxes className="w-3.5 h-3.5" /> Mover {itensSelecionadosIds.length} Selecionados
+                    <Boxes className="w-3 h-3" /> Mover {itensSelecionadosIds.length} Sel.
                   </button>
                 )}
               </div>
 
-              <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
                 {itensRetidosFiltrados.length > 0 ? (
                   itensRetidosFiltrados.map((item: any) => {
                     const selecionado = itensSelecionadosIds.includes(item.id);
@@ -1284,47 +1272,46 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       <div 
                         key={item.id} 
                         onClick={() => toggleItemSelecao(item.id)}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition flex gap-3 items-start ${
-                          selecionado ? 'border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/20' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                        className={`p-2 rounded-xl border cursor-pointer transition flex gap-2 items-start ${
+                          selecionado ? 'border-emerald-500 bg-emerald-50/70 shadow-2xs ring-1 ring-emerald-500/30' : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        <div className="mt-1 text-slate-400">
-                          {selecionado ? <CheckSquare className="w-5 h-5 text-emerald-600" /> : <Square className="w-5 h-5" />}
+                        <div className="mt-0.5 text-slate-400 shrink-0">
+                          {selecionado ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start gap-2">
-                            <span className="text-xs font-black uppercase tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
+                          <div className="flex justify-between items-center gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-900 bg-slate-100 px-1.5 py-0.2 rounded">
                               Apt {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
                             </span>
-                            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono font-bold">
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-mono font-bold">
                               {new Date(item.created_at).toLocaleDateString('pt-BR')}
                             </span>
                           </div>
 
-                          <p className="text-sm font-bold text-slate-900 mt-1 truncate">
+                          <p className="text-xs font-bold text-slate-900 mt-0.5 truncate">
                             {item.moradores?.nome || 'Morador não vinculado'}
                           </p>
-                          <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                            Rastreio: {item.codigo_barras || 'Sem código'}
-                          </p>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                            <span>Rastreio: {item.codigo_barras || 'Sem código'}</span>
+                            {item.foto_etiqueta_url && (
+                              <a 
+                                href={item.foto_etiqueta_url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                onClick={e => e.stopPropagation()} 
+                                className="inline-flex items-center gap-0.5 text-blue-600 hover:text-blue-800 font-bold"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5" /> Foto
+                              </a>
+                            )}
+                          </div>
 
-                          {item.foto_etiqueta_url && (
-                            <a 
-                              href={item.foto_etiqueta_url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              onClick={e => e.stopPropagation()} 
-                              className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-bold"
-                            >
-                              <ExternalLink className="w-3 h-3" /> Ver Foto Etiqueta
-                            </a>
-                          )}
-
-                          {/* LOCAL FÍSICO COM BOTÃO DE ALTERAR EM 1 CLIQUE */}
-                          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100 flex-wrap gap-2">
-                            <span className="text-[11px] font-bold text-emerald-950 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
-                              <Boxes className="w-3.5 h-3.5 text-emerald-700" />
-                              <span className="truncate max-w-[180px]">{item.local_armazenamento || 'Bancada Principal'}</span>
+                          {/* LOCAL FÍSICO COM BOTÃO DE ALTERAR EM 1 CLIQUE (COMPACTO) */}
+                          <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 flex-wrap gap-1">
+                            <span className="text-[10px] font-bold text-emerald-950 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                              <Boxes className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="truncate max-w-[150px]">{item.local_armazenamento || 'Bancada Principal'}</span>
                             </span>
 
                             <button
@@ -1338,10 +1325,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                 setMoverEmLoteSelecionados(false);
                                 setModalMoverLocal(true);
                               }}
-                              className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer active:scale-95"
-                              title="Alterar local físico deste pacote ou agrupar todos desta unidade"
+                              className="text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-1.5 py-0.2 rounded flex items-center gap-0.5 transition cursor-pointer"
+                              title="Alterar local físico deste pacote"
                             >
-                              <Edit3 className="w-3 h-3 text-slate-500" /> Alterar Local
+                              <Edit3 className="w-2.5 h-2.5 text-slate-500" /> Alterar
                             </button>
                           </div>
                         </div>
@@ -1349,15 +1336,15 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     );
                   })
                 ) : (
-                  <div className="p-8 text-center text-slate-500 text-sm border-2 border-dashed border-slate-200 rounded-2xl">
+                  <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-200 rounded-xl">
                     Nenhum pacote encontrado para os filtros atuais.
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-              <h4 className="text-sm font-bold text-slate-700 border-b border-slate-200 pb-2">Finalizar Entrega (Baixa)</h4>
+            <div className="bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 space-y-2.5">
+              <h4 className="text-xs font-bold text-slate-700 border-b border-slate-200 pb-1 uppercase">Finalizar Entrega (Baixa)</h4>
               
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-500">Pacotes Selecionados:</span>
@@ -1365,18 +1352,18 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               </div>
 
               {itensSelecionadosIds.length > 0 ? (
-                <form onSubmit={efetivarBaixaSaida} className="space-y-4 pt-2">
+                <form onSubmit={efetivarBaixaSaida} className="space-y-2.5 pt-1">
                   
                   {moradoresDasUnidadesBaixa.length > 0 && (
-                    <div className="space-y-2">
-                      <label className="block text-xs font-bold text-slate-700 uppercase">Preencher Rapidamente com Morador:</label>
-                      <div className="flex flex-wrap gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase">Preencher com Morador:</label>
+                      <div className="flex flex-wrap gap-1">
                         {moradoresDasUnidadesBaixa.map((m: any) => (
                           <button
                             key={m.id}
                             type="button"
                             onClick={() => setNomeRetirante(m.nome)}
-                            className="bg-white border border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300 text-xs px-3 py-1.5 rounded-full transition flex items-center gap-1"
+                            className="bg-white border border-slate-300 text-slate-700 hover:bg-blue-50 text-[11px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer"
                           >
                             <User className="w-3 h-3" /> {m.nome}
                           </button>
@@ -1385,25 +1372,25 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-700 uppercase">Quem está retirando? (Nome / RG) *</label>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Quem está retirando? (Nome / RG) *</label>
                     <input
                       type="text"
                       value={nomeRetirante}
                       onChange={(e) => setNomeRetirante(e.target.value)}
                       placeholder="Nome de quem pegou o pacote..."
                       required
-                      className="w-full p-3 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-700 uppercase">Comprovante de Entrega (Foto) *</label>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Comprovante de Entrega (Foto) *</label>
                     {!fotoRetiranteUrl ? (
-                      <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-xl p-4 flex flex-col items-center justify-center gap-2 transition group">
-                        <Camera className="w-6 h-6 text-slate-400 group-hover:text-emerald-500" />
-                        <span className="text-xs font-medium text-slate-500 group-hover:text-emerald-600 text-center">
-                          {uploadingFoto ? 'Enviando...' : 'Tirar Foto da Assinatura / Retirante'}
+                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition">
+                        <Camera className="w-4 h-4 text-emerald-600" />
+                        <span className="text-xs font-bold text-slate-700">
+                          {uploadingFoto ? 'Enviando...' : 'Foto Assinatura / Retirante'}
                         </span>
                         <input 
                           type="file" 
@@ -1415,21 +1402,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                         />
                       </label>
                     ) : (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex justify-center">
-                        <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-32 rounded object-cover" />
-                        <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-4 right-4 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-md">
-                          <X className="w-4 h-4" />
+                      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
+                        <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-24 rounded object-cover" />
+                        <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
                   </div>
 
-                  <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 mt-4 shadow-md">
-                    {loading ? 'Processando...' : <><UserCheck className="w-5 h-5" /> Confirmar Entrega</>}
+                  <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs">
+                    {loading ? 'Processando...' : <><UserCheck className="w-4 h-4" /> Confirmar Entrega</>}
                   </button>
                 </form>
               ) : (
-                <div className="p-4 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-sm text-center">
+                <div className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs text-center">
                   Selecione ao menos um pacote na lista ao lado para efetuar a entrega.
                 </div>
               )}

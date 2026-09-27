@@ -529,30 +529,30 @@ export default function App() {
           />
 
           {/* CABEÇALHO MOBILE */}
-          <header className="md:hidden bg-slate-900 text-white p-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <EmblemaInfport tamanho="sm" />
-              <div className="truncate">
-                <h1 className="font-bold text-base leading-tight">INFPORT 1.0</h1>
-                <p className="text-xs text-slate-300 truncate max-w-[190px]">
-                  {operadorContextoGlobal.condominio_nome}
+          <header className="md:hidden bg-slate-900 text-white px-3 py-2 flex items-center justify-between sticky top-0 z-30 shadow-md border-b border-slate-800">
+            <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
+              <EmblemaInfport tamanho="sm" comBrilho />
+              <div className="min-w-0 flex-1">
+                <h1 className="font-extrabold text-xs text-white truncate leading-tight">
+                  {operadorContextoGlobal.condominio_nome || 'Condomínio Homologação INFPORT'}
+                </h1>
+                <p className="text-[11px] text-emerald-400 font-semibold truncate leading-tight mt-0.5">
+                  Operador: <span className="text-white font-bold">{operador.nome || 'Caetano'}</span>
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <ControleFonteAcessibilidade />
-              <PWAInstallButton />
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => setModalLeitorNfcGlobal(true)}
-                className="p-2 text-emerald-400 bg-slate-800 active:bg-slate-700 rounded-xl transition"
+                className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition"
                 title="Leitor de Tags & Cartões NFC"
               >
-                <Radio className="w-5 h-5 animate-pulse" />
+                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
               </button>
               <button
                 onClick={() => setDrawerMobileAberto(true)}
-                className="p-2 text-slate-200 bg-slate-800 active:bg-slate-700 rounded-xl transition"
+                className="p-1.5 text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition"
                 title="Menu Principal"
               >
                 <Menu className="w-5 h-5" />
@@ -561,16 +561,16 @@ export default function App() {
           </header>
 
           {moduloAtual !== 'dashboard' && (
-            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm">
+            <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between shadow-xs">
               <button 
                 onClick={() => mudarModulo('dashboard')}
-                className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition cursor-pointer"
+                className="flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
               </button>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs sm:text-sm font-bold uppercase text-slate-900 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200">
+                <span className="text-xs font-bold uppercase text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
                   {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
                 </span>
                 <div className="hidden sm:flex items-center gap-2">
@@ -581,57 +581,57 @@ export default function App() {
             </div>
           )}
 
-          <main className="flex-1 p-3 sm:p-6 overflow-y-auto text-slate-900">
+          <main className="flex-1 p-2.5 sm:p-4 overflow-y-auto text-slate-900">
             
             {moduloAtual === 'dashboard' && (
-              <div className="max-w-4xl mx-auto space-y-4">
+              <div className="max-w-4xl mx-auto space-y-3">
                 
-                {/* Banner Principal */}
-                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-slate-800">
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-md border border-emerald-800">
-                      Posto Ativo
-                    </span>
-                    <h2 className="text-base sm:text-lg font-bold text-white truncate">
-                      {operadorContextoGlobal.condominio_nome}
-                    </h2>
-                    <p className="text-xs sm:text-sm text-slate-300">
-                      Operador: <strong className="text-white">{operador.nome}</strong>
-                    </p>
+                {/* Faixa Rápida de Status do Posto (Sleek & Sem Duplicações) */}
+                <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl shadow-xs flex items-center justify-between gap-2 border border-slate-800">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    <div className="truncate">
+                      <p className="text-xs font-bold text-white truncate">
+                        Posto Ativo: <span className="text-emerald-400 font-extrabold">{operadorContextoGlobal.condominio_nome || 'Condomínio'}</span>
+                      </p>
+                      <p className="text-[11px] text-slate-300 truncate">
+                        Plantão Operacional • Operador: <strong className="text-white">{operador.nome || 'Caetano'}</strong>
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <ControleFonteAcessibilidade />
                     <PWAInstallButton />
                     <button
                       onClick={() => setModalLeitorNfcGlobal(true)}
-                      className="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                      className="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold px-2 py-1 rounded-lg text-xs flex items-center gap-1 transition cursor-pointer"
                       title="Abrir Leitor de Tags e Cartões NFC"
                     >
-                      <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-                      <span>Leitor NFC</span>
+                      <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                      <span className="hidden sm:inline">NFC</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Grid dos Módulos Operacionais */}
+                {/* Grid dos Módulos Operacionais Otimizado (Ícones Compactos e Fáceis de Clicar) */}
                 <div>
-                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600 mb-3 px-1">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2 px-1">
                     Módulos Operacionais
                   </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {modulosDisponiveis.filter(m => m.flag).map((item) => {
                       const Icone = item.icone;
                       return (
                         <button
                           key={item.id}
                           onClick={() => mudarModulo(item.id)}
-                          className="bg-white hover:bg-slate-50 active:scale-[0.97] p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center gap-2.5 transition group"
+                          className="bg-white hover:bg-slate-50 active:scale-[0.98] p-2.5 sm:p-3 rounded-xl border border-slate-200 hover:border-slate-300 shadow-2xs flex flex-col items-center justify-center text-center gap-1.5 transition group cursor-pointer"
                         >
-                          <div className={`p-3.5 rounded-2xl border ${item.cor} group-hover:scale-110 transition duration-200`}>
-                            <Icone className="w-7 h-7" />
+                          <div className={`p-2 rounded-lg border ${item.cor} group-hover:scale-105 transition duration-150`}>
+                            <Icone className="w-5 h-5 sm:w-6 sm:h-6" />
                           </div>
-                          <span className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">
+                          <span className="text-xs font-bold text-slate-800 leading-tight line-clamp-1">
                             {item.titulo}
                           </span>
                         </button>
