@@ -287,61 +287,56 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const totalAtrasadas = movimentacoesAtivas.filter((m: any) => m.atrasado).length;
 
   return (
-    <div className="space-y-6">
-      <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded">
-            Módulo 05 — Quadro Digital de Chaves
-          </span>
-          <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
-            <Key className="w-5 h-5 text-emerald-400" /> Controle de Prazos e Empréstimos
-          </h3>
-          <p className="text-xs text-slate-300">
-            Monitoramento de chaves disponíveis, retiradas e alertas visuais de atraso.
-          </p>
+    <div className="space-y-3">
+      <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
+        <div className="flex items-center gap-2">
+          <Key className="w-5 h-5 text-amber-400 shrink-0" />
+          <div>
+            <h3 className="font-bold text-xs sm:text-sm text-white">Quadro Digital de Chaves</h3>
+            <p className="text-[10px] text-slate-400">Controle de prazos, empréstimos e devoluções na portaria</p>
+          </div>
         </div>
 
         <button
           onClick={() => { limparFormularioChave(); setModalNovaChave(true); }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm uppercase"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs cursor-pointer"
         >
-          <Plus className="w-4 h-4" /> Cadastrar Chave
+          <Plus className="w-3.5 h-3.5" /> <span>Cadastrar Chave</span>
         </button>
       </div>
 
       {totalAtrasadas > 0 && (
-        <div className="bg-red-600 text-white p-4 rounded-xl flex items-center gap-3 animate-pulse shadow-lg">
-          <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-          <div className="text-xs">
-            <strong className="block font-bold text-sm">⚠️ ATENÇÃO — CHAVE(S) EM ATRASO!</strong>
-            Existem <strong>{totalAtrasadas} chave(s)</strong> que ultrapassaram o tempo limite de devolução.
+        <div className="bg-red-600 text-white p-2.5 rounded-xl flex items-center gap-2 animate-pulse shadow-2xs">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <div className="text-[11px]">
+            <strong className="block font-bold">⚠️ ATENÇÃO: {totalAtrasadas} CHAVE(S) EM ATRASO!</strong>
+            Chaves ultrapassaram o tempo limite de devolução.
           </div>
         </div>
       )}
 
       {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+        <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
-          {mensagem.texto}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{mensagem.texto}</span>
         </div>
       )}
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-          <input
-            type="text"
-            value={buscaTermo}
-            onChange={(e) => setBuscaTermo(e.target.value)}
-            placeholder="Buscar por código, nome ou unidade..."
-            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs outline-none focus:ring-2 focus:ring-slate-900"
-          />
-        </div>
+      {/* Barra de Pesquisa Compacta */}
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+        <input
+          type="text"
+          value={buscaTermo}
+          onChange={(e) => setBuscaTermo(e.target.value)}
+          placeholder="Buscar por código, nome ou unidade..."
+          className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs font-medium focus:outline-hidden focus:border-emerald-500 transition"
+        />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
         {chavesFiltradas.map((chave: any) => {
           const movAtiva = movimentacoesAtivas.find((m: any) => m.chave_id === chave.id);
           const estaAtrasada = movAtiva?.atrasado;
@@ -349,61 +344,61 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
           return (
             <div
               key={chave.id}
-              className={`p-3.5 rounded-xl border flex flex-col justify-between transition shadow-sm relative ${
+              className={`p-2 sm:p-2.5 rounded-lg border flex flex-col justify-between transition shadow-2xs relative ${
                 chave.status === 'Disponível'
                   ? 'bg-emerald-50/40 border-emerald-300 hover:border-emerald-500'
                   : estaAtrasada
-                  ? 'bg-red-50 border-red-500 ring-2 ring-red-500 animate-pulse'
+                  ? 'bg-red-50 border-red-500 ring-1 ring-red-500 animate-pulse'
                   : 'bg-amber-50/50 border-amber-300'
               }`}
             >
               <div>
                 <div className="flex justify-between items-center gap-1">
-                  <span className="text-[11px] font-black font-mono bg-slate-900 text-white px-2 py-0.5 rounded">
+                  <span className="text-[10px] font-black font-mono bg-slate-900 text-white px-1.5 py-0.2 rounded">
                     {chave.codigo_chave}
                   </span>
                   
                   <div className="flex items-center gap-1">
                     <button
                       onClick={(e) => prepararEdicao(chave, e)}
-                      className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 rounded transition"
+                      className="p-0.5 text-slate-400 hover:text-slate-900 rounded transition cursor-pointer"
                       title="Editar Chave"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="w-3 h-3" />
                     </button>
-                    <Key className={`w-4 h-4 ${
+                    <Key className={`w-3.5 h-3.5 ${
                       chave.status === 'Disponível' ? 'text-emerald-600' : estaAtrasada ? 'text-red-600' : 'text-amber-600'
                     }`} />
                   </div>
                 </div>
 
-                <h4 className="font-bold text-slate-900 text-xs mt-2 line-clamp-2">{chave.nome_chave}</h4>
+                <h4 className="font-bold text-slate-900 text-xs mt-1 truncate" title={chave.nome_chave}>{chave.nome_chave}</h4>
                 {chave.unidade && (
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    Apt {chave.unidade} {chave.bloco ? `- Bloco ${chave.bloco}` : ''}
+                  <p className="text-[10px] text-slate-500 truncate">
+                    Ap {chave.unidade} {chave.bloco ? `• Bl. ${chave.bloco}` : ''}
                   </p>
                 )}
               </div>
 
-              <div className="mt-3 pt-2 border-t border-slate-200/60">
+              <div className="mt-2 pt-1.5 border-t border-slate-200/60">
                 {chave.status === 'Disponível' ? (
                   <button
                     onClick={() => setModalRetirada(chave)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold py-1.5 rounded-lg transition"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 rounded-md transition cursor-pointer"
                   >
                     Emprestar
                   </button>
                 ) : (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-800 line-clamp-1">
+                    <p className="text-[10px] font-bold text-slate-800 truncate">
                       {movAtiva?.retirante_nome}
                     </p>
                     <p className={`text-[9px] font-bold ${estaAtrasada ? 'text-red-700' : 'text-amber-700'}`}>
-                      {estaAtrasada ? '⚠️ ATRASADO' : `Devolver até: ${new Date(movAtiva?.previsao_devolucao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                      {estaAtrasada ? '⚠️ ATRASADO' : `Até: ${new Date(movAtiva?.previsao_devolucao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
                     </p>
                     <button
                       onClick={() => setModalDevolucao(movAtiva)}
-                      className="w-full bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold py-1.5 rounded-lg transition"
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold py-1 rounded-md transition cursor-pointer"
                     >
                       Devolver
                     </button>
@@ -415,96 +410,96 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
         })}
 
         {chavesFiltradas.length === 0 && (
-          <div className="col-span-full bg-white p-8 rounded-xl border text-center text-xs text-slate-500 italic">
+          <div className="col-span-full bg-white p-6 rounded-xl border text-center text-xs text-slate-500 italic">
             Nenhuma chave encontrada no quadro.
           </div>
         )}
       </div>
 
       {modalNovaChave && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={limparFormularioChave} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-4 space-y-3 shadow-2xl relative">
+            <button onClick={limparFormularioChave} className="absolute top-3 right-3 text-slate-400 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Key className="w-5 h-5 text-emerald-600" />
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <Key className="w-4 h-4 text-emerald-600" />
               {idEdicao ? 'Editar Dados da Chave' : 'Nova Chave no Quadro'}
             </h3>
 
-            <form onSubmit={salvarChave} className="space-y-3">
+            <form onSubmit={salvarChave} className="space-y-2.5">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cód. Chave *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Cód. Chave *</label>
                   <input
                     type="text"
                     required
                     value={codigoChave}
                     onChange={(e) => setCodigoChave(e.target.value)}
                     placeholder="Ex: CH-01"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tempo Limite (Horas)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Tempo Limite (Horas)</label>
                   <input
                     type="number"
                     min="1"
                     value={tempoLimiteHoras}
                     onChange={(e) => setTempoLimiteHoras(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Identificador / Local *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Identificador / Local *</label>
                 <input
                   type="text"
                   required
                   value={nomeChave}
                   onChange={(e) => setNomeChave(e.target.value)}
                   placeholder="Ex: Salão de Festas, Casa de Máquinas..."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / AP</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / AP</label>
                   <input
                     type="text"
                     value={unidade}
                     onChange={(e) => setUnidade(e.target.value)}
                     placeholder="Ex: 101"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Bloco</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Bloco</label>
                   <input
                     type="text"
                     value={bloco}
                     onChange={(e) => setBloco(e.target.value)}
                     placeholder="Ex: A"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
               </div>
 
-              <div className="pt-2 flex gap-2">
+              <div className="pt-1 flex gap-2">
                 <button
                   type="button"
                   onClick={limparFormularioChave}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-xl uppercase text-xs"
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-lg text-xs cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-lg uppercase text-xs transition cursor-pointer"
                 >
                   {idEdicao ? 'Salvar Alterações' : 'Cadastrar Chave'}
                 </button>
@@ -515,28 +510,28 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       )}
 
       {modalRetirada && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalRetirada(null)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-4 space-y-3 shadow-2xl relative">
+            <button onClick={() => setModalRetirada(null)} className="absolute top-3 right-3 text-slate-400 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Key className="w-5 h-5 text-emerald-600" /> Retirada da Chave {modalRetirada.codigo_chave}
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <Key className="w-4 h-4 text-emerald-600" /> Retirada da Chave {modalRetirada.codigo_chave}
             </h3>
 
-            <form onSubmit={efetivarRetirada} className="space-y-3">
+            <form onSubmit={efetivarRetirada} className="space-y-2.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Tipo de Retirante *</label>
-                <div className="grid grid-cols-3 gap-2">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Tipo de Retirante *</label>
+                <div className="grid grid-cols-3 gap-1.5">
                   {['Morador', 'Colaborador', 'Terceiros'].map((tipo) => (
                     <button
                       key={tipo}
                       type="button"
                       onClick={() => setTipoRetirante(tipo)}
-                      className={`py-2 px-3 text-xs font-bold rounded-lg border transition ${
+                      className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition cursor-pointer ${
                         tipoRetirante === tipo
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
                       }`}
                     >
@@ -547,44 +542,44 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nome do Retirante *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Nome do Retirante *</label>
                 <input
                   type="text"
                   required
                   value={retiranteNome}
                   onChange={(e) => setRetiranteNome(e.target.value)}
                   placeholder="Ex: Carlos Santos"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">RG / CPF (Opcional)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">RG / CPF (Opcional)</label>
                   <input
                     type="text"
                     value={retiranteDoc}
                     onChange={(e) => setRetiranteDoc(e.target.value)}
                     placeholder="Ex: 12.345.678-9"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">WhatsApp (Opcional)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">WhatsApp (Opcional)</label>
                   <input
                     type="text"
                     value={retiranteTel}
                     onChange={(e) => setRetiranteTel(e.target.value)}
                     placeholder="Ex: 11940609960"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Entrega (Opcional)</label>
-                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs">
-                  <Camera className="w-4 h-4 text-emerald-400" />
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">Foto da Entrega (Opcional)</label>
+                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs">
+                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
                   {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto (Opcional)'}
                   <input
                     type="file"
@@ -597,7 +592,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 </label>
 
                 {fotoRetiradaUrl && (
-                  <div className="mt-2 w-20 h-20 rounded-lg overflow-hidden border-2 border-emerald-500">
+                  <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border border-emerald-500">
                     <img src={fotoRetiradaUrl} alt="Foto Retirada" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -606,7 +601,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
               <button
                 type="submit"
                 disabled={loading || uploadingFoto}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg uppercase text-xs transition cursor-pointer"
               >
                 Efetivar Empréstimo
               </button>
@@ -617,9 +612,9 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 href={whatsEmprestimo.link}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition w-full justify-center"
+                className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-emerald-700 transition w-full justify-center"
               >
-                <MessageCircle className="w-4 h-4" /> Enviar Comprovante no WhatsApp <ExternalLink className="w-3 h-3" />
+                <MessageCircle className="w-3.5 h-3.5" /> Enviar Comprovante no WhatsApp <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>
@@ -627,25 +622,25 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       )}
 
       {modalDevolucao && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalDevolucao(null)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-4 space-y-3 shadow-2xl relative">
+            <button onClick={() => setModalDevolucao(null)} className="absolute top-3 right-3 text-slate-400 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Check className="w-5 h-5 text-emerald-600" /> Devolver Chave {modalDevolucao.chaves?.codigo_chave}
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-600" /> Devolver Chave {modalDevolucao.chaves?.codigo_chave}
             </h3>
 
             <p className="text-xs text-slate-600">
               Retirada por: <strong>{modalDevolucao.retirante_nome}</strong>
             </p>
 
-            <form onSubmit={efetivarDevolucao} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto da Chave no Quadro (Opcional)</label>
-                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs">
-                  <Camera className="w-4 h-4 text-emerald-400" />
+            <form onSubmit={efetivarDevolucao} className="space-y-3">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">Foto no Quadro (Opcional)</label>
+                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs">
+                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
                   {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto da Devolução (Opcional)'}
                   <input
                     type="file"
@@ -658,7 +653,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 </label>
 
                 {fotoDevolucaoUrl && (
-                  <div className="mt-2 w-20 h-20 rounded-lg overflow-hidden border-2 border-emerald-500">
+                  <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border border-emerald-500">
                     <img src={fotoDevolucaoUrl} alt="Foto Devolução" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -667,7 +662,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
               <button
                 type="submit"
                 disabled={loading || uploadingFoto}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-lg uppercase text-xs transition cursor-pointer"
               >
                 Efetivar Devolução e Liberar Chave
               </button>
