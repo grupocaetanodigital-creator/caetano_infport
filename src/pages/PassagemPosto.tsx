@@ -894,81 +894,77 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   const infoPlantaoVigente = calcularPlantaoVigente(condominioConfig, new Date());
 
   return (
-    <div className="space-y-6">
-      {/* Header Principal */}
-      <div className="bg-slate-900 text-white p-6 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg border border-slate-800">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-3 py-1 rounded flex items-center gap-1.5 w-fit">
-            <Repeat className="w-3.5 h-3.5" /> Módulo 09 - Passagem de Posto Auditada
-          </span>
-          <h2 className="font-bold text-xl mt-1.5 flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-emerald-400" /> Auditoria & Passagem de Posto
-          </h2>
-          <p className="text-xs text-slate-300 mt-0.5">
-            Consolidação completa automática de Encomendas/RE, Rondas, Chaves, Prestadores, Custódia, Materiais e Ocorrências.
-          </p>
+    <div className="space-y-3">
+      {/* Header Principal Compacto */}
+      <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div>
+            <h3 className="font-bold text-xs sm:text-sm text-white">Auditoria & Passagem de Posto</h3>
+            <p className="text-[10px] text-slate-400">Consolidação automática dos 7 módulos de guarita</p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           {condominioConfig?.whatsapp_grupo_url && (
             <a
               href={condominioConfig.whatsapp_grupo_url}
               target="_blank"
               rel="noreferrer"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-3 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm"
-              title="Abrir o Grupo de WhatsApp Oficial deste Condomínio"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs"
+              title="Abrir o Grupo de WhatsApp Oficial"
             >
-              <MessageCircle className="w-4 h-4" />
-              Grupo WhatsApp
-              <ExternalLink className="w-3.5 h-3.5" />
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+              <ExternalLink className="w-3 h-3" />
             </a>
           )}
 
           <button
             onClick={abrirNovaPassagem}
-            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-5 py-3 rounded-xl text-xs flex items-center gap-2 transition uppercase shadow-md active:scale-95"
+            className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 transition uppercase shadow-2xs cursor-pointer"
           >
-            <Plus className="w-4 h-4" /> Iniciar Troca de Turno
+            <Plus className="w-3.5 h-3.5" /> <span>Troca de Turno</span>
           </button>
         </div>
       </div>
 
-      {/* BANNER DE CONFIGURAÇÃO DE PLANTÃO DO CONDOMÍNIO ATIVO */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 shadow-md">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1">
-              <Building className="w-3.5 h-3.5 text-emerald-400" />
+      {/* BANNER DE CONFIGURAÇÃO DE PLANTÃO COMPACTO */}
+      <div className="bg-slate-900/90 text-white p-2.5 rounded-xl border border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 shadow-2xs">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1">
+              <Building className="w-3 h-3 text-emerald-400" />
               {condominioConfig?.nome || 'Condomínio'}
             </span>
-            <span className="text-emerald-400 font-mono text-xs font-bold bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700 flex items-center gap-1">
-              <Clock className="w-3 h-3" />
+            <span className="text-emerald-400 font-mono text-[10px] font-bold bg-slate-800 px-2 py-0.2 rounded-md border border-slate-700 flex items-center gap-1">
+              <Clock className="w-2.5 h-2.5" />
               Escala: {condominioConfig?.escala_label || '06:00 às 18:00 / 18:00 às 06:00'}
             </span>
           </div>
 
-          <p className="text-xs text-slate-200">
-            <strong>{infoPlantaoVigente.labelTurno}</strong> em andamento • Início em {new Date(consolidacao.plantaoInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({consolidacao.plantaoHoras}h decorridas)
+          <p className="text-[11px] text-slate-300">
+            <strong>{infoPlantaoVigente.labelTurno}</strong> • Início às {new Date(consolidacao.plantaoInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({consolidacao.plantaoHoras}h decorridas)
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {condominioConfig?.whatsapp_grupo_url ? (
-            <div className="flex items-center gap-2 bg-slate-800/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl text-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="text-slate-300 text-[11px]">Grupo WhatsApp:</span>
+            <div className="flex items-center gap-1.5 bg-slate-800/90 border border-emerald-500/40 px-2 py-1 rounded-lg text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-slate-300">Grupo:</span>
               <a
                 href={condominioConfig.whatsapp_grupo_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 font-bold font-mono text-[11px] underline flex items-center gap-1"
+                className="text-emerald-400 font-bold underline flex items-center gap-0.5"
               >
-                Conectado <ExternalLink className="w-3 h-3" />
+                Conectado <ExternalLink className="w-2.5 h-2.5" />
               </a>
             </div>
           ) : (
-            <span className="text-[11px] text-amber-300 bg-amber-950/60 border border-amber-500/30 px-3 py-1.5 rounded-xl">
-              ⚠️ Configure o link do grupo de WhatsApp em <strong>Cadastros ➔ Condomínios</strong>
+            <span className="text-[10px] text-amber-300 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-lg">
+              ⚠️ Grupo WhatsApp pendente
             </span>
           )}
 
@@ -976,52 +972,43 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
             type="button"
             onClick={() => consolidarModulosPosto()}
             disabled={loadingAuditoria}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition"
-            title="Recarregar e re-auditar dados de todos os módulos"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1 transition cursor-pointer"
+            title="Recarregar auditoria"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingAuditoria ? 'animate-spin text-emerald-400' : ''}`} />
-            {loadingAuditoria ? 'Atualizando...' : 'Recarregar Auditoria'}
+            <RefreshCw className={`w-3 h-3 ${loadingAuditoria ? 'animate-spin text-emerald-400' : ''}`} />
+            <span>{loadingAuditoria ? 'Atualizando...' : 'Recarregar'}</span>
           </button>
         </div>
       </div>
 
       {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+        <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
-          {mensagem.texto}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{mensagem.texto}</span>
         </div>
       )}
 
       {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-              <Table className="w-5 h-5 text-emerald-600" />
+            <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+              <Table className="w-4 h-4 text-emerald-600" />
               Tabelas de Resumo do Plantão para Conferência
             </h3>
-            <p className="text-xs text-slate-500">
-              Conferência detalhada item a item de Rondas, Encomendas/RE, Chaves fora do quadro, Ocorrências não resolvidas, Custódia, Prestadores e Materiais.
+            <p className="text-[11px] text-slate-500">
+              Conferência detalhada item a item de Rondas, REs, Chaves, Ocorrências, Custódia, Prestadores e Materiais.
             </p>
           </div>
-          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hidden sm:inline-flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5" /> 7 Módulos Sincronizados
+          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md hidden sm:inline-flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> 7 Módulos Sincronizados
           </span>
         </div>
 
         <TabelasResumoPosto consolidacao={consolidacao} />
       </div>
-
-      {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
-          mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
-        }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
-          {mensagem.texto}
-        </div>
-      )}
 
       {/* Histórico de Trocas de Turno */}
       <div className="space-y-4">
@@ -1044,94 +1031,96 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
             const pre = p.prestadores || {};
 
             return (
-              <div key={item.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5 flex flex-col justify-between hover:border-slate-300 transition">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2.5">
-                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 font-mono">
-                      <FileCheck2 className="w-4 h-4 text-emerald-600" /> {item.codigo || 'PAS:CONCLUÍDO'}
+              <div key={item.id} className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 flex flex-col justify-between hover:border-slate-300 transition">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center border-b pb-1.5">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1 font-mono">
+                      <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" /> {item.codigo || 'PAS:CONCLUÍDO'}
                     </span>
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                    <span className={`text-[10px] font-bold px-2 py-0.2 rounded-md ${
                       item.status === 'Divergência Registrada' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                     }`}>
                       {item.status || 'Concluída'}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl text-xs border border-slate-100">
+                  <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg text-xs border border-slate-100">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Sainte (Saindo):</span>
-                      <strong className="text-slate-800">{item.operador_sainte_nome}</strong>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase block">Sainte:</span>
+                      <strong className="text-slate-800 text-[11px] truncate block">{item.operador_sainte_nome}</strong>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Entrante (Assumiu):</span>
-                      <strong className="text-emerald-700">{item.operador_entrante_nome}</strong>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase block">Entrante:</span>
+                      <strong className="text-emerald-700 text-[11px] truncate block">{item.operador_entrante_nome}</strong>
                     </div>
                   </div>
 
                   {/* Resumo Consolidado em Chips */}
-                  <div className="text-[11px] space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span className="font-bold text-slate-700 uppercase text-[10px] block border-b pb-1">Snapshot Consolidado do Plantão:</span>
-                    <div className="grid grid-cols-2 gap-2 text-slate-600">
-                      <div className="flex items-center gap-1.5">
-                        <Package className="w-3.5 h-3.5 text-purple-600" />
-                        <span>REs / Retidas: <strong>{enc.totalRetidasNoPosto ?? p.encomendasPendentes ?? 0} vol.</strong></span>
+                  <div className="text-[11px] space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <span className="font-bold text-slate-700 uppercase text-[9px] block border-b pb-0.5">Snapshot do Plantão:</span>
+                    <div className="grid grid-cols-2 gap-1 text-slate-600 text-[10px]">
+                      <div className="flex items-center gap-1 truncate">
+                        <Package className="w-3 h-3 text-purple-600 shrink-0" />
+                        <span className="truncate">Retidas: <strong>{enc.totalRetidasNoPosto ?? p.encomendasPendentes ?? 0} vol.</strong></span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <Key className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Chaves Fora: <strong className={(cha.totalFora ?? p.chavesFora) > 0 ? 'text-amber-700' : ''}>{cha.totalFora ?? p.chavesFora ?? 0}</strong></span>
+                      <div className="flex items-center gap-1 truncate">
+                        <Key className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span className="truncate">Chaves Fora: <strong className={(cha.totalFora ?? p.chavesFora) > 0 ? 'text-amber-700' : ''}>{cha.totalFora ?? p.chavesFora ?? 0}</strong></span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <Footprints className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Rondas: <strong>{ron.totalExecutadasPlantao ?? p.rondasUltimas12h ?? 0} feitas</strong></span>
+                      <div className="flex items-center gap-1 truncate">
+                        <Footprints className="w-3 h-3 text-indigo-600 shrink-0" />
+                        <span className="truncate">Rondas: <strong>{ron.totalExecutadasPlantao ?? p.rondasUltimas12h ?? 0} feitas</strong></span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <HardHat className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Prestadores: <strong>{pre.totalPresentes ?? 0} ativos</strong></span>
+                      <div className="flex items-center gap-1 truncate">
+                        <HardHat className="w-3 h-3 text-blue-600 shrink-0" />
+                        <span className="truncate">Prestadores: <strong>{pre.totalPresentes ?? 0} ativos</strong></span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
-                        <span>Ocorrências: <strong className={(oco.totalPendentes ?? p.ocorrenciasAbertas) > 0 ? 'text-red-700' : ''}>{oco.totalPendentes ?? p.ocorrenciasAbertas ?? 0} abertas</strong></span>
+                      <div className="flex items-center gap-1 truncate">
+                        <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                        <span className="truncate">Ocorrências: <strong className={(oco.totalPendentes ?? p.ocorrenciasAbertas) > 0 ? 'text-red-700' : ''}>{oco.totalPendentes ?? p.ocorrenciasAbertas ?? 0}</strong></span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <Radio className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Equipamentos: <strong>{p.materiaisOk !== false ? '100% OK' : 'Com Avaria'}</strong></span>
+                      <div className="flex items-center gap-1 truncate">
+                        <Radio className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span className="truncate">Materiais: <strong>{p.materiaisOk !== false ? 'OK' : 'Avaria'}</strong></span>
                       </div>
                     </div>
                   </div>
 
-                  <p className="text-xs text-slate-600 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    "{item.observacoes}"
-                  </p>
+                  {item.observacoes && (
+                    <p className="text-[11px] text-slate-600 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                      "{item.observacoes}"
+                    </p>
+                  )}
 
                   {item.divergencia && (
-                    <div className="text-xs text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600 mt-0.5" />
+                    <div className="text-[11px] text-amber-900 bg-amber-50 p-1.5 rounded-lg border border-amber-200 flex items-start gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 mt-0.5" />
                       <div>
-                        <strong>Divergência Registrada:</strong> {item.divergencia}
+                        <strong>Divergência:</strong> {item.divergencia}
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="pt-2.5 border-t border-slate-100 flex justify-between items-center gap-2">
+                <div className="pt-1.5 border-t border-slate-100 flex justify-between items-center gap-1.5">
                   <span className="text-[10px] text-slate-400 font-mono">
                     {new Date(item.created_at).toLocaleString('pt-BR')}
                   </span>
                   
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => setModalHistoricoDetalhes(item)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition"
-                      title="Ver Auditoria Completa dos Módulos"
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded-md text-xs flex items-center gap-1 transition cursor-pointer"
+                      title="Ver Auditoria Completa"
                     >
-                      <Eye className="w-3.5 h-3.5" /> Detalhes
+                      <Eye className="w-3 h-3" /> Detalhes
                     </button>
                     <button
                       onClick={() => setModalCompartilharWhatsApp(item)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition shadow-sm"
-                      title="Opções de Envio para WhatsApp"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-md text-xs flex items-center gap-1 transition shadow-2xs cursor-pointer"
+                      title="Opções de WhatsApp"
                     >
-                      <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                      <MessageCircle className="w-3 h-3" /> WhatsApp
                     </button>
                   </div>
                 </div>
@@ -1140,7 +1129,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
           })}
 
           {passagens.length === 0 && !loading && (
-            <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
+            <div className="col-span-full bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500 italic text-xs">
               Nenhuma passagem de posto registrada até o momento.
             </div>
           )}
