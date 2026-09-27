@@ -717,8 +717,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     }
   };
 
-  const efetivarBaixaSaida = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Alterada para aceitar eventos de clique comuns (além de form submit)
+  const efetivarBaixaSaida = async (e?: React.SyntheticEvent) => {
+    if (e) e.preventDefault();
+    
     if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Selecione os pacotes, informe o nome do retirante e tire a foto da entrega.' });
       return;
@@ -1238,21 +1240,33 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   Pacotes Retidos ({itensRetidosFiltrados.length})
                 </h4>
 
-                {itensSelecionadosIds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMoverEmLoteSelecionados(true);
-                      setItemParaMover(null);
-                      const primeiro = locaisArmazenamento.find(l => l.ativo !== false);
-                      setNovoLocalSelecionado(primeiro ? (primeiro.codigo && primeiro.nome ? `${primeiro.codigo} - ${primeiro.nome}` : primeiro.nome || primeiro) : 'Bancada Principal');
-                      setModalMoverLocal(true);
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
-                  >
-                    <Boxes className="w-3 h-3" /> Mover {itensSelecionadosIds.length} Sel.
-                  </button>
-                )}
+                {/* BOTÕES DE ATALHO ADICIONADOS AQUI */}
+                <div className="flex gap-1.5">
+                  {itensSelecionadosIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMoverEmLoteSelecionados(true);
+                        setItemParaMover(null);
+                        const primeiro = locaisArmazenamento.find(l => l.ativo !== false);
+                        setNovoLocalSelecionado(primeiro ? (primeiro.codigo && primeiro.nome ? `${primeiro.codigo} - ${primeiro.nome}` : primeiro.nome || primeiro) : 'Bancada Principal');
+                        setModalMoverLocal(true);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                    >
+                      <Boxes className="w-3 h-3" /> Mover {itensSelecionadosIds.length} Sel.
+                    </button>
+                  )}
+                  {itensSelecionadosIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={efetivarBaixaSaida}
+                      className="bg-slate-900 hover:bg-slate-800 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                    >
+                      <UserCheck className="w-3 h-3" /> Baixar Seleção
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
