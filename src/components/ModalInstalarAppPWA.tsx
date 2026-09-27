@@ -14,6 +14,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import EmblemaInfport from './EmblemaInfport';
 
 interface ModalInstalarAppPWAProps {
   aberto: boolean;
@@ -44,16 +45,14 @@ export default function ModalInstalarAppPWA({ aberto, onFechar }: ModalInstalarA
       <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 my-auto relative">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <Smartphone className="w-5 h-5" />
-            </span>
+          <div className="flex items-center gap-3">
+            <EmblemaInfport tamanho="md" comBrilho />
             <div>
               <h3 className="font-bold text-base sm:text-lg text-white flex items-center gap-2">
                 Instalar Aplicativo Oficial
               </h3>
               <p className="text-xs text-slate-400">
-                PWA Nativo sem barra de navegador, com cache offline para guarita.
+                INFPORT 1.0 — Aplicativo Nativo PWA para Guarita e Portaria
               </p>
             </div>
           </div>

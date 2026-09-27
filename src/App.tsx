@@ -16,6 +16,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import ControleFonteAcessibilidade from './components/ControleFonteAcessibilidade';
 import IndicadorConectividade from './components/IndicadorConectividade';
+import EmblemaInfport from './components/EmblemaInfport';
 import LeitorNFC from './components/LeitorNFC';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { 
@@ -338,7 +339,7 @@ export default function App() {
           <div>
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3 overflow-hidden">
-                <ShieldCheck className="w-8 h-8 text-emerald-400 shrink-0" />
+                <EmblemaInfport tamanho="md" comBrilho />
                 {menuAberto && (
                   <div>
                     <h1 className="font-bold text-base leading-tight flex items-center gap-2">
@@ -441,7 +442,7 @@ export default function App() {
               <div>
                 <div className="flex justify-between items-center pb-4 border-b border-slate-800">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                    <EmblemaInfport tamanho="sm" />
                     <span className="font-bold text-white text-sm sm:text-base">Menu INFPORT</span>
                   </div>
                   <button onClick={() => setDrawerMobileAberto(false)} className="text-slate-400 p-1">
@@ -530,7 +531,7 @@ export default function App() {
           {/* CABEÇALHO MOBILE */}
           <header className="md:hidden bg-slate-900 text-white p-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
             <div className="flex items-center gap-2.5 overflow-hidden">
-              <ShieldCheck className="w-7 h-7 text-emerald-400 shrink-0" />
+              <EmblemaInfport tamanho="sm" />
               <div className="truncate">
                 <h1 className="font-bold text-base leading-tight">INFPORT 1.0</h1>
                 <p className="text-xs text-slate-300 truncate max-w-[190px]">
@@ -773,11 +774,13 @@ export default function App() {
 
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8 my-auto">
         <div className="text-center mb-6">
-          <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
-            <ShieldCheck className="w-10 h-10 text-slate-800" />
+          <div className="w-20 h-20 mx-auto mb-3 flex items-center justify-center">
+            <EmblemaInfport tamanho="xl" comBrilho />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">INFPORT 1.0</h1>
-          <p className="text-sm font-medium text-slate-600">Acesso à Guarita / Operação</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">INFPORT 1.0</h1>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-0.5">
+            Sistema Integrado de Portaria & Segurança Patrimonial
+          </p>
         </div>
 
         {erro && (
