@@ -204,35 +204,32 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-amber-400 px-2.5 py-1 rounded flex items-center gap-1.5 w-fit">
-            <BookOpen className="w-3.5 h-3.5" /> Livro de Ocorrências Digital
-          </span>
-          <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-amber-400" /> Ocorrências Internas e de Moradores
-          </h3>
-          <p className="text-xs text-slate-300">
-            Registro auditado de irregularidades com envio rápido para grupos de WhatsApp.
-          </p>
+    <div className="space-y-3">
+      {/* Header Compacto */}
+      <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-5 h-5 text-amber-400 shrink-0" />
+          <div>
+            <h3 className="font-bold text-xs sm:text-sm text-white">Livro de Ocorrências Digital</h3>
+            <p className="text-[10px] text-slate-400">Registro auditado de irregularidades e envio rápido para WhatsApp</p>
+          </div>
         </div>
 
         <button
           onClick={() => setModalNova(true)}
-          className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition uppercase shadow-md"
+          className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition uppercase shadow-2xs cursor-pointer"
         >
-          <Plus className="w-4 h-4" /> Nova Ocorrência
+          <Plus className="w-3.5 h-3.5" /> <span>Nova Ocorrência</span>
         </button>
       </div>
 
       {ocorrenciaRecente && (
-        <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <Send className="w-6 h-6 text-amber-600 flex-shrink-0" />
+        <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <Send className="w-4 h-4 text-amber-600 shrink-0" />
             <div>
               <p className="text-xs font-bold text-amber-950">Ocorrência registrada recentemente!</p>
-              <p className="text-[11px] text-amber-800">Deseja enviar agora todos os detalhes para o grupo de WhatsApp da gestão?</p>
+              <p className="text-[10px] text-amber-800">Enviar para o grupo de WhatsApp da gestão?</p>
             </div>
           </div>
           <a
@@ -240,43 +237,43 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
             target="_blank"
             rel="noreferrer"
             onClick={() => setOcorrenciaRecente(null)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 transition shadow-sm w-full sm:w-auto justify-center"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs w-full sm:w-auto justify-center"
           >
-            <MessageCircle className="w-4 h-4" /> Enviar para WhatsApp Grupo
+            <MessageCircle className="w-3.5 h-3.5" /> Enviar para WhatsApp Grupo
           </a>
         </div>
       )}
 
       {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+        <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-medium ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
-          {mensagem.texto}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{mensagem.texto}</span>
         </div>
       )}
 
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between gap-4 items-center">
-        <div className="flex gap-1.5 bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row justify-between gap-2 items-center">
+        <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg w-full sm:w-auto">
           {['Todos', 'Interna', 'Morador'].map((t) => (
             <button
               key={t}
               onClick={() => setFiltroTipo(t)}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition ${
-                filtroTipo === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              className={`flex-1 sm:flex-none px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                filtroTipo === t ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              {t === 'Todos' ? 'Todas' : t === 'Interna' ? '⚙️ Internas (Guarita)' : '🏠 Moradores'}
+              {t === 'Todos' ? 'Todas' : t === 'Interna' ? '⚙️ Internas' : '🏠 Moradores'}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="text-xs font-bold text-slate-500">Status:</span>
           <select
             value={filtroStatus}
             onChange={(e) => setFiltroStatus(e.target.value)}
-            className="p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700"
+            className="p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700"
           >
             <option value="Todos">Todos os Status</option>
             <option value="Pendente">Pendente</option>
@@ -286,20 +283,20 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
         {ocorrencias.map((item) => (
-          <div key={item.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex justify-between items-start gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${getCorPrioridade(item.prioridade)}`}>
+          <div key={item.id} className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 flex flex-col justify-between hover:border-slate-300 transition">
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-start gap-1.5">
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${getCorPrioridade(item.prioridade)}`}>
                     {item.prioridade}
                   </span>
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${getCorStatus(item.status)}`}>
+                  <span className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border ${getCorStatus(item.status)}`}>
                     {item.status}
                   </span>
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded flex items-center gap-1">
-                    <Tag className="w-3 h-3" /> {item.tipo === 'Interna' ? 'Interna (Posto)' : 'Morador'}
+                  <span className="text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Tag className="w-3 h-3 text-slate-500" /> {item.tipo === 'Interna' ? 'Interna' : 'Morador'}
                   </span>
                 </div>
 
@@ -308,15 +305,15 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
                 </span>
               </div>
 
-              <h4 className="font-bold text-slate-900 text-sm mt-1">{item.titulo}</h4>
+              <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{item.titulo}</h4>
 
               {item.unidade_bloco && (
-                <div className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 w-fit flex items-center gap-1">
-                  <Building className="w-3.5 h-3.5" /> Unidade/Bloco: {item.unidade_bloco}
+                <div className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 w-fit flex items-center gap-1">
+                  <Building className="w-3 h-3" /> Unidade: {item.unidade_bloco}
                 </div>
               )}
 
-              <p className="text-xs text-slate-600 whitespace-pre-line bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <p className="text-xs text-slate-600 whitespace-pre-line bg-slate-50 p-2 sm:p-2.5 rounded-lg border border-slate-100 leading-relaxed">
                 {item.descricao}
               </p>
 
@@ -330,34 +327,34 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
                   <img
                     src={item.foto_url}
                     alt="Evidência"
-                    className="w-24 h-24 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition"
+                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border border-slate-200 hover:opacity-90 transition"
                   />
                 </a>
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-slate-400" /> Porteiro no Posto: <strong>{item.operador_nome || 'Portaria'}</strong>
+            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                <User className="w-3 h-3 text-slate-400" /> Posto: <strong>{item.operador_nome || 'Portaria'}</strong>
               </span>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
                 <a
                   href={gerarLinkWhatsApp(item)}
                   target="_blank"
                   rel="noreferrer"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-2 rounded-lg text-xs flex items-center gap-1 transition"
-                  title="Compartilhar Detalhes no WhatsApp"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition"
+                  title="Compartilhar no WhatsApp"
                 >
-                  <MessageCircle className="w-4 h-4" /> Disparar WhatsApp
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
                 </a>
 
                 {item.status !== 'Resolvido' && (
                   <button
                     onClick={() => alterarStatus(item.id, 'Resolvido')}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1 transition"
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 transition"
                   >
-                    <Check className="w-3.5 h-3.5" /> Resolver
+                    <Check className="w-3 h-3 text-emerald-400" /> Resolver
                   </button>
                 )}
               </div>
@@ -366,48 +363,48 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
         ))}
 
         {ocorrencias.length === 0 && !loading && (
-          <div className="col-span-full bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-500 italic text-xs">
+          <div className="col-span-full bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500 italic text-xs">
             Nenhuma ocorrência registrada para os filtros selecionados.
           </div>
         )}
       </div>
 
       {modalNova && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setModalNova(false)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-lg w-full p-3.5 sm:p-4.5 space-y-3 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setModalNova(false)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" /> Registrar Nova Ocorrência
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> Registrar Nova Ocorrência
             </h3>
 
-            <div className="bg-slate-100 p-2.5 rounded-xl text-xs text-slate-700 flex items-center gap-2">
-              <User className="w-4 h-4 text-slate-500" />
-              <span>Porteiro Responsável: <strong>{usuarioLogado?.nome || usuarioLogado?.login}</strong></span>
+            <div className="bg-slate-50 p-2 rounded-lg text-[11px] text-slate-700 flex items-center gap-1.5 border border-slate-200">
+              <User className="w-3.5 h-3.5 text-slate-500" />
+              <span>Porteiro: <strong>{usuarioLogado?.nome || usuarioLogado?.login}</strong></span>
             </div>
 
-            <form onSubmit={cadastrarOcorrencia} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={cadastrarOcorrencia} className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tipo de Ocorrência *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Tipo *</label>
                   <select
                     value={tipo}
                     onChange={(e) => setTipo(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
                   >
-                    <option value="Interna">⚙️ Interna (Posto/Guarita)</option>
-                    <option value="Morador">🏠 Reclamação / Morador</option>
+                    <option value="Interna">⚙️ Interna (Guarita)</option>
+                    <option value="Morador">🏠 Reclamação Morador</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Prioridade *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Prioridade *</label>
                   <select
                     value={prioridade}
                     onChange={(e) => setPrioridade(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
                   >
                     <option value="Baixa">Baixa</option>
                     <option value="Média">Média</option>
@@ -419,46 +416,46 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
 
               {tipo === 'Morador' && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Unidade / Bloco do Morador *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / Bloco *</label>
                   <input
                     type="text"
                     required
                     value={unidadeBloco}
                     onChange={(e) => setUnidadeBloco(e.target.value)}
                     placeholder="Ex: Bloco A - Apto 302"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Título / Resumo *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Título / Resumo *</label>
                 <input
                   type="text"
                   required
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ex: Barulho excessivo / Lâmpada queimada no portão"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  placeholder="Ex: Barulho excessivo / Lâmpada queimada"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Descrição Detalhada *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Descrição Detalhada *</label>
                 <textarea
-                  rows={4}
+                  rows={3}
                   required
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
-                  placeholder="Relate minuciosamente o ocorrido, pessoas envolvidas e providências tomadas..."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
+                  placeholder="Relate minuciosamente o ocorrido..."
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto / Evidência (Opcional)</label>
-                <label className="w-full bg-slate-900 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 text-xs transition">
-                  <Camera className="w-4 h-4 text-amber-400" />
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">Foto / Evidência (Opcional)</label>
+                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 text-xs transition">
+                  <Camera className="w-3.5 h-3.5 text-amber-400" />
                   {uploadingFoto ? 'Enviando imagem...' : 'Anexar Foto da Ocorrência'}
                   <input
                     type="file"
@@ -471,7 +468,7 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
                 </label>
 
                 {fotoUrl && (
-                  <div className="mt-2 w-20 h-20 rounded-lg overflow-hidden border-2 border-amber-500">
+                  <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border-2 border-amber-500">
                     <img src={fotoUrl} alt="Foto Ocorrência" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -480,7 +477,7 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
               <button
                 type="submit"
                 disabled={loading || uploadingFoto}
-                className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md flex items-center justify-center gap-2"
+                className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2.5 rounded-lg uppercase text-xs transition shadow-2xs flex items-center justify-center gap-1.5"
               >
                 Registrar e Preparar Disparo WhatsApp
               </button>
