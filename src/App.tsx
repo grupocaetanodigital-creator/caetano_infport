@@ -14,6 +14,8 @@ import Configuracoes from './pages/Configuracoes';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
+import ControleFonteAcessibilidade from './components/ControleFonteAcessibilidade';
+import IndicadorConectividade from './components/IndicadorConectividade';
 import LeitorNFC from './components/LeitorNFC';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { 
@@ -538,6 +540,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
+              <ControleFonteAcessibilidade />
               <PWAInstallButton />
               <button
                 onClick={() => setModalLeitorNfcGlobal(true)}
@@ -560,14 +563,20 @@ export default function App() {
             <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm">
               <button 
                 onClick={() => mudarModulo('dashboard')}
-                className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition"
+                className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
               </button>
 
-              <span className="text-xs sm:text-sm font-bold uppercase text-slate-900 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200">
-                {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold uppercase text-slate-900 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200">
+                  {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
+                </span>
+                <div className="hidden sm:flex items-center gap-2">
+                  <ControleFonteAcessibilidade />
+                  <PWAInstallButton />
+                </div>
+              </div>
             </div>
           )}
 
@@ -591,6 +600,7 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    <ControleFonteAcessibilidade />
                     <PWAInstallButton />
                     <button
                       onClick={() => setModalLeitorNfcGlobal(true)}
@@ -730,6 +740,7 @@ export default function App() {
         </nav>
 
         {/* Indicador de Status Offline e Conexão na Portaria */}
+        <IndicadorConectividade />
         <OfflineIndicator />
 
         {/* Modal Global do Leitor de Tags & Cartões NFC */}
@@ -753,8 +764,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-900 antialiased">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8">
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-slate-900 antialiased relative">
+      {/* Barra Superior de Acessibilidade e Instalação na Tela de Login */}
+      <div className="absolute top-4 right-4 flex items-center gap-2.5 z-20">
+        <ControleFonteAcessibilidade />
+        <PWAInstallButton />
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8 my-auto">
         <div className="text-center mb-6">
           <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
             <ShieldCheck className="w-10 h-10 text-slate-800" />
@@ -807,7 +824,7 @@ export default function App() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl transition text-sm sm:text-base uppercase tracking-wider shadow-md disabled:opacity-50"
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl transition text-sm sm:text-base uppercase tracking-wider shadow-md disabled:opacity-50 cursor-pointer"
           >
             {loading ? 'Autenticando...' : 'Entrar no Sistema'}
           </button>
@@ -819,6 +836,7 @@ export default function App() {
         </div>
       </div>
 
+      <IndicadorConectividade />
       <OfflineIndicator />
     </div>
   );
