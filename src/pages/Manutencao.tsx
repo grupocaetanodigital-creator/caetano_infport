@@ -277,91 +277,93 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="bg-slate-900 text-white p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
+    <div className="space-y-3">
+      {/* Header Compacto */}
+      <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
         <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-1 rounded">
-            Módulo 06 — Gestão de Manutenção
+          <span className="text-[9px] font-bold uppercase tracking-wider bg-slate-800 text-emerald-400 px-2 py-0.5 rounded">
+            Módulo 06 — Manutenção Predial
           </span>
-          <h3 className="font-bold text-lg mt-1 flex items-center gap-2">
-            <Wrench className="w-5 h-5 text-emerald-400" /> Rotinas do Manutencista & Chamados
+          <h3 className="font-bold text-sm sm:text-base mt-0.5 flex items-center gap-1.5">
+            <Wrench className="w-4 h-4 text-emerald-400" /> Rotinas do Manutencista & Chamados
           </h3>
-          <p className="text-xs text-slate-300">
+          <p className="text-[11px] text-slate-300">
             Checklist de verificação diária/semanal e ordens de serviço do condomínio.
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 w-full sm:w-auto">
           {subAba === 'checklist' ? (
             <button
               onClick={() => setModalNovaRotina(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm uppercase"
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 transition shadow-2xs uppercase"
             >
-              <Plus className="w-4 h-4" /> Adicionar na Rotina
+              <Plus className="w-3.5 h-3.5" /> Adicionar Tarefa
             </button>
           ) : (
             <button
               onClick={() => setModalNovoChamado(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm uppercase"
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 transition shadow-2xs uppercase"
             >
-              <Plus className="w-4 h-4" /> Abrir Chamado / OS
+              <Plus className="w-3.5 h-3.5" /> Abrir Chamado / OS
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex border-b border-slate-200 gap-2">
+      {/* Abas Compactas */}
+      <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1">
         <button
           onClick={() => setSubAba('checklist')}
-          className={`pb-3 px-4 font-bold text-xs uppercase flex items-center gap-2 border-b-2 transition ${
+          className={`flex-1 py-1.5 px-3 font-bold text-xs uppercase flex items-center justify-center gap-1.5 rounded-md transition ${
             subAba === 'checklist'
-              ? 'border-emerald-600 text-emerald-700 bg-slate-50'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'bg-white text-emerald-700 shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <CheckSquare className="w-4 h-4" /> Checklist & Fila do Manutencista
+          <CheckSquare className="w-3.5 h-3.5" /> Checklist & Fila
         </button>
 
         <button
           onClick={() => setSubAba('chamados')}
-          className={`pb-3 px-4 font-bold text-xs uppercase flex items-center gap-2 border-b-2 transition ${
+          className={`flex-1 py-1.5 px-3 font-bold text-xs uppercase flex items-center justify-center gap-1.5 rounded-md transition ${
             subAba === 'chamados'
-              ? 'border-emerald-600 text-emerald-700 bg-slate-50'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'bg-white text-emerald-700 shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Wrench className="w-4 h-4" /> Chamados & Ocorrências (OS)
+          <Wrench className="w-3.5 h-3.5" /> Chamados & OS
         </button>
       </div>
 
       {mensagem.texto && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 text-sm font-medium ${
+        <div className={`p-2.5 rounded-lg flex items-center gap-2 text-xs font-semibold ${
           mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
           {mensagem.texto}
         </div>
       )}
 
       {subAba === 'checklist' && (
-        <div className="space-y-4">
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3 justify-between items-center">
+        <div className="space-y-2.5">
+          <div className="bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs border border-slate-200 flex flex-col md:flex-row gap-2 justify-between items-center">
             <div className="relative w-full md:w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
                 value={buscaRotina}
                 onChange={(e) => setBuscaRotina(e.target.value)}
                 placeholder="Buscar tarefa no checklist..."
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs outline-none focus:ring-2 focus:ring-slate-900"
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs outline-none focus:ring-1 focus:ring-slate-900"
               />
             </div>
 
-            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
               <select
                 value={filtroFrequencia}
                 onChange={(e) => setFiltroFrequencia(e.target.value)}
-                className="p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700"
+                className="px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700"
               >
                 <option value="Todos">Frequência: Todas</option>
                 <option value="Diário">Diário</option>
@@ -373,7 +375,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
               <select
                 value={filtroStatusRotina}
                 onChange={(e) => setFiltroStatusRotina(e.target.value)}
-                className="p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700"
+                className="px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700"
               >
                 <option value="Todos">Status: Todos</option>
                 <option value="Pendente">Pendente</option>
@@ -385,24 +387,24 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
             {rotinasFiltradas.map((item: any) => (
               <div
                 key={item.id}
-                className={`p-4 rounded-xl border bg-white shadow-sm flex flex-col justify-between space-y-3 relative ${
+                className={`p-3 rounded-xl border bg-white shadow-2xs flex flex-col justify-between space-y-2 relative ${
                   item.status === 'OK' ? 'border-emerald-300 bg-emerald-50/20' :
                   item.status === 'Aguardando Peça' ? 'border-purple-300 bg-purple-50/20' :
                   item.status === 'Aguardando Orçamento' ? 'border-indigo-300 bg-indigo-50/20' :
                   item.prioridade === 'Urgente' ? 'border-red-400 bg-red-50/30' : 'border-slate-200'
                 }`}
               >
-                <div>
-                  <div className="flex justify-between items-start gap-2">
-                    <span className="text-[10px] font-black uppercase font-mono px-2 py-0.5 rounded bg-slate-900 text-white">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-start gap-1.5">
+                    <span className="text-[9px] font-black uppercase font-mono px-1.5 py-0.5 rounded bg-slate-900 text-white">
                       {item.frequencia}
                     </span>
 
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
                       item.status === 'OK' ? 'bg-emerald-100 text-emerald-800' :
                       item.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
                       item.status === 'Aguardando Peça' ? 'bg-purple-100 text-purple-800' :
@@ -413,12 +415,12 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
                     </span>
                   </div>
 
-                  <h4 className="font-bold text-slate-900 text-sm mt-2">{item.titulo}</h4>
+                  <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{item.titulo}</h4>
                   {item.descricao && (
-                    <p className="text-xs text-slate-600 mt-1">{item.descricao}</p>
+                    <p className="text-[11px] text-slate-600">{item.descricao}</p>
                   )}
 
-                  <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-500 font-medium">
+                  <div className="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
                     <span className={`font-bold px-1.5 py-0.5 rounded ${
                       item.prioridade === 'Urgente' ? 'bg-red-600 text-white' :
                       item.prioridade === 'Alta' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
@@ -428,18 +430,18 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
                   </div>
 
                   {item.observacao_execucao && (
-                    <div className="mt-2.5 p-2 bg-slate-50 border rounded-lg text-[11px] text-slate-700">
+                    <div className="p-1.5 bg-slate-50 border rounded-lg text-[10px] text-slate-700">
                       <strong>Obs:</strong> {item.observacao_execucao}
                     </div>
                   )}
 
                   {item.foto_url && (
-                    <img src={item.foto_url} alt="Evidência" className="w-full h-28 object-cover rounded-lg mt-2 border" />
+                    <img src={item.foto_url} alt="Evidência" className="w-full h-20 object-cover rounded-lg border" />
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400">
+                <div className="pt-2 border-t border-slate-100 flex justify-between items-center gap-2">
+                  <span className="text-[9px] text-slate-400 truncate">
                     Criado por: <strong>{item.operador_criacao}</strong>
                   </span>
 
@@ -449,7 +451,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
                       setNovoStatus(item.status);
                       setObservacaoStatus(item.observacao_execucao || '');
                     }}
-                    className="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition"
+                    className="bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded-md transition"
                   >
                     Atualizar Status
                   </button>
@@ -458,7 +460,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
             ))}
 
             {rotinasFiltradas.length === 0 && (
-              <div className="col-span-full bg-white p-8 rounded-xl border text-center text-xs text-slate-500 italic">
+              <div className="col-span-full bg-white p-6 rounded-xl border text-center text-xs text-slate-500 italic">
                 Nenhum item cadastrado nesta rotina de verificação.
               </div>
             )}
@@ -467,31 +469,31 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
       )}
 
       {subAba === 'chamados' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
             {chamados.map((item: any) => (
-              <div key={item.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-3">
-                <div className="flex justify-between items-start">
+              <div key={item.id} className="p-3 rounded-xl border bg-white shadow-2xs space-y-2">
+                <div className="flex justify-between items-start gap-1.5">
                   <div>
-                    <span className="text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                    <span className="text-[9px] font-bold uppercase bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
                       {item.categoria}
                     </span>
-                    <h4 className="font-bold text-slate-900 text-sm mt-1">{item.titulo}</h4>
-                    <p className="text-xs text-slate-500">📍 {item.localizacao}</p>
+                    <h4 className="font-bold text-slate-900 text-xs sm:text-sm mt-0.5">{item.titulo}</h4>
+                    <p className="text-[11px] text-slate-500">📍 {item.localizacao}</p>
                   </div>
-                  <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-full uppercase">
+                  <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase">
                     {item.status}
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">{item.descricao}</p>
+                <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg leading-relaxed">{item.descricao}</p>
 
-                <div className="pt-2 border-t flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400">Aberto por: {item.operador_abertura}</span>
+                <div className="pt-2 border-t flex justify-between items-center gap-2">
+                  <span className="text-[10px] text-slate-400">Aberto por: <strong>{item.operador_abertura}</strong></span>
                   {item.status !== 'Concluído' && (
                     <button
                       onClick={() => setModalConclusaoOS(item)}
-                      className="bg-emerald-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-2.5 py-1 rounded-md transition"
                     >
                       Concluir OS
                     </button>
@@ -504,36 +506,36 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
       )}
 
       {modalNovaRotina && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalNovaRotina(false)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-3.5 sm:p-4.5 space-y-3 shadow-2xl relative">
+            <button onClick={() => setModalNovaRotina(false)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" /> Adicionar Tarefa na Rotina
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <Plus className="w-4 h-4 text-emerald-600" /> Adicionar Tarefa na Rotina
             </h3>
 
-            <form onSubmit={criarRotina} className="space-y-3">
+            <form onSubmit={criarRotina} className="space-y-2.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Título da Tarefa / Inspeção *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Título da Tarefa / Inspeção *</label>
                 <input
                   type="text"
                   required
                   value={tituloRotina}
                   onChange={(e) => setTituloRotina(e.target.value)}
                   placeholder="Ex: Checar pressão da bomba d'água B2"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Frequência *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Frequência *</label>
                   <select
                     value={frequencia}
                     onChange={(e) => setFrequencia(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   >
                     <option value="Diário">Diário</option>
                     <option value="Semanal">Semanal</option>
@@ -543,11 +545,11 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Prioridade *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Prioridade *</label>
                   <select
                     value={prioridadeRotina}
                     onChange={(e) => setPrioridadeRotina(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   >
                     <option value="Baixa">Baixa</option>
                     <option value="Média">Média</option>
@@ -558,20 +560,20 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Instruções / Detalhes</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Instruções / Detalhes</label>
                 <textarea
                   rows={2}
                   value={descricaoRotina}
                   onChange={(e) => setDescricaoRotina(e.target.value)}
                   placeholder="Ex: Verificar se vazamento persiste e registrar fotos."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg uppercase text-xs transition shadow-2xs"
               >
                 Salvar na Rotina
               </button>
@@ -581,23 +583,23 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
       )}
 
       {modalStatus && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalStatus(null)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-3.5 sm:p-4.5 space-y-3 shadow-2xl relative">
+            <button onClick={() => setModalStatus(null)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <CheckSquare className="w-5 h-5 text-emerald-600" /> Atualizar Tarefa: {modalStatus.titulo}
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5 truncate">
+              <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> <span className="truncate">Atualizar Tarefa: {modalStatus.titulo}</span>
             </h3>
 
-            <form onSubmit={atualizarStatusRotina} className="space-y-3">
+            <form onSubmit={atualizarStatusRotina} className="space-y-2.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Novo Status *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Novo Status *</label>
                 <select
                   value={novoStatus}
                   onChange={(e) => setNovoStatus(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                 >
                   <option value="OK">🟢 OK / Concluído</option>
                   <option value="Pendente">🟡 Pendente</option>
@@ -609,20 +611,20 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações do Manutencista</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Observações do Manutencista</label>
                 <textarea
                   rows={2}
                   value={observacaoStatus}
                   onChange={(e) => setObservacaoStatus(e.target.value)}
-                  placeholder="Ex: Peça comprada aguardando entrega da transportadora..."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
+                  placeholder="Ex: Peça comprada aguardando entrega..."
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Foto do Serviço / Peça (Opcional)</label>
-                <label className="w-full bg-slate-900 text-white font-bold py-3 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 text-xs">
-                  <Camera className="w-4 h-4 text-emerald-400" />
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">Foto do Serviço / Peça (Opcional)</label>
+                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 text-xs transition">
+                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
                   {uploadingFoto ? 'Salvando foto...' : '📷 Anexar Foto'}
                   <input
                     type="file"
@@ -635,7 +637,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
                 </label>
 
                 {fotoRotinaUrl && (
-                  <div className="mt-2 w-20 h-20 rounded-lg overflow-hidden border-2 border-emerald-500">
+                  <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border-2 border-emerald-500">
                     <img src={fotoRotinaUrl} alt="Foto Evidência" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -644,7 +646,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
               <button
                 type="submit"
                 disabled={loading || uploadingFoto}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg uppercase text-xs transition shadow-2xs"
               >
                 Salvar Status
               </button>
@@ -654,36 +656,36 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
       )}
 
       {modalNovoChamado && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalNovoChamado(false)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-3.5 sm:p-4.5 space-y-3 shadow-2xl relative">
+            <button onClick={() => setModalNovoChamado(false)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <Wrench className="w-5 h-5 text-emerald-600" /> Abrir Chamado OS
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <Wrench className="w-4 h-4 text-emerald-600" /> Abrir Chamado OS
             </h3>
 
-            <form onSubmit={criarChamadoOS} className="space-y-3">
+            <form onSubmit={criarChamadoOS} className="space-y-2.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Título do Problema *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Título do Problema *</label>
                 <input
                   type="text"
                   required
                   value={tituloOS}
                   onChange={(e) => setTituloOS(e.target.value)}
                   placeholder="Ex: Lâmpada queimada garagem"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Categoria</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Categoria</label>
                   <select
                     value={categoriaOS}
                     onChange={(e) => setCategoriaOS(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                   >
                     <option value="Elétrica">Elétrica</option>
                     <option value="Hidráulica">Hidráulica</option>
@@ -693,11 +695,11 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Prioridade</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Prioridade</label>
                   <select
                     value={prioridadeOS}
                     onChange={(e) => setPrioridadeOS(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   >
                     <option value="Baixa">Baixa</option>
                     <option value="Média">Média</option>
@@ -708,32 +710,32 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Localização *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Localização *</label>
                 <input
                   type="text"
                   required
                   value={localizacaoOS}
                   onChange={(e) => setLocalizacaoOS(e.target.value)}
                   placeholder="Ex: Subsolo 1"
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Descrição *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Descrição *</label>
                 <textarea
                   required
                   rows={2}
                   value={descricaoOS}
                   onChange={(e) => setDescricaoOS(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg uppercase text-xs transition shadow-2xs"
               >
                 Salvar Chamado
               </button>
@@ -743,32 +745,32 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
       )}
 
       {modalConclusaoOS && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <button onClick={() => setModalConclusaoOS(null)} className="absolute top-4 right-4 text-slate-400 p-1">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-3.5 sm:p-4.5 space-y-3 shadow-2xl relative">
+            <button onClick={() => setModalConclusaoOS(null)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="font-bold text-slate-900 text-base border-b pb-3 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Finalizar OS
+            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Finalizar OS
             </h3>
 
-            <form onSubmit={concluirOS} className="space-y-3">
+            <form onSubmit={concluirOS} className="space-y-2.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Observações da Conclusão</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Observações da Conclusão</label>
                 <textarea
                   rows={2}
                   value={obsConclusaoOS}
                   onChange={(e) => setObsConclusaoOS(e.target.value)}
-                  placeholder="Ex: Reparo concluído."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
+                  placeholder="Ex: Reparo concluído com troca de reator."
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs resize-none"
                 ></textarea>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg uppercase text-xs transition shadow-2xs"
               >
                 Concluir Chamado
               </button>
