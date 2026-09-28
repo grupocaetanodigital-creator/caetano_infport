@@ -249,6 +249,7 @@ BEGIN;
 ALTER TABLE IF EXISTS configuracoes 
   ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS setores_ronda JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS dados_tenant JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS mod02_gestao_encomendas BOOLEAN DEFAULT true,
