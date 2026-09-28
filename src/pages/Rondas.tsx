@@ -26,8 +26,13 @@ import {
   Lock,
   Unlock,
   RefreshCw,
-  Smartphone
+  Smartphone,
+  Settings,
+  Sliders,
+  ListChecks
 } from 'lucide-react';
+import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
+import { SetorRonda, SETORES_RONDA_PADRAO, carregarSetoresRonda } from '../services/setoresRonda';
 
 interface RondasProps {
   usuarioLogado?: any;
@@ -91,98 +96,8 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const keyRondaAtiva = usuarioLogado?.condominio_id ? `infport_ronda_ativa_${usuarioLogado.condominio_id}` : 'infport_ronda_ativa';
   const keyUltimaRondaFim = usuarioLogado?.condominio_id ? `infport_ultima_ronda_fim_${usuarioLogado.condominio_id}` : 'infport_ultima_ronda_fim';
 
-  const setoresChecklist = [
-    {
-      id: 'SETOR_A',
-      titulo: 'SETOR A: GUARITA & ENTRADA PRINCIPAL',
-      itens: [
-        '1º Portões de pedestres e de veículos (funcionamento e fechos)',
-        '2º Sistema de CFTV (câmeras e monitoramento)',
-        '3º Interfonia da Guarita',
-        '4º Salão de Festas ao lado da guarita (iluminação, limpeza, portas e fechos)'
-      ]
-    },
-    {
-      id: 'SETOR_B',
-      titulo: 'SETOR B: TÉRREO TORRE A (ÁREAS DE LAZER INTERNAS)',
-      itens: [
-        '5º Salão Gourmet (iluminação, limpeza, organização e conservação)',
-        '6º Academia (iluminação, equipamentos, limpeza e organização)',
-        '7º Salão de Jogos (mesas, iluminação e conservação)',
-        '8º Churrasqueira 1 (pia, grelhas e limpeza geral)'
-      ]
-    },
-    {
-      id: 'SETOR_C',
-      titulo: 'SETOR C: HALL & ELEVADORES — TORRE A',
-      itens: [
-        '9º Torre A - Corredor 1-6 (1 Elevador Social + 1 Elevador Serviço)',
-        '10º Torre A - Corredor 7-10 (1 Elevador Social + 1 Elevador Serviço)',
-        '11º Quadro de Avisos exclusivo da Torre A'
-      ]
-    },
-    {
-      id: 'SETOR_D',
-      titulo: 'SETOR D: HALL & ELEVADORES — TORRE B',
-      itens: [
-        '12º Torre B - Corredor 1-6 (1 Elevador Social + 1 Elevador Serviço)',
-        '13º Torre B - Corredor 7-10 (1 Elevador Social + 1 Elevador Serviço)',
-        '14º Mercadinho da Torre B (acesso, iluminação e limpeza)'
-      ]
-    },
-    {
-      id: 'SETOR_E',
-      titulo: 'SETOR E: PASSARELA INTER-TORRES & ELEVADOR DA GARAGEM',
-      itens: [
-        '15º Passarela inter-torres de acesso aos elevadores (-1 ao -3)',
-        '16º Elevador Exclusivo do Estacionamento (botoeira, iluminação e portas)',
-        '17º Quadro de Avisos no hall do elevador',
-        '18º Escadaria 1 da Garagem (Térreo ao -3)'
-      ]
-    },
-    {
-      id: 'SETOR_F',
-      titulo: 'SETOR F: ESTACIONAMENTOS (-1, -2, -3) & ESCADARIA DE EMERGÊNCIA',
-      itens: [
-        '19º Estacionamento -1 (iluminação, sinalização, tubulações e extintores)',
-        '20º Estacionamento -2 (iluminação, ausência de vazamentos e portas corta-fogo)',
-        '21º Estacionamento -3 (poço de esgotamento/bombas, umidade e rotas de fuga)',
-        '22º Escadaria 2 da Garagem (-1 ao -3)'
-      ]
-    },
-    {
-      id: 'SETOR_G',
-      titulo: 'SETOR G: ÁREAS DE LAZER EXTERNAS',
-      itens: [
-        '23º Playground (conservação dos brinquedos)',
-        '24º Piscina (portão de acesso e deck)',
-        '25º Quadra Poliesportiva (iluminação, redes e estado geral)',
-        '26º Churrasqueira 2 (pia, grelhas e limpeza geral)'
-      ]
-    },
-    {
-      id: 'SETOR_H',
-      titulo: 'SETOR H: INCÊNDIO & HALLS — TORRE A',
-      itens: [
-        'Torre A - Corredores e portas divisórias',
-        'Torre A - Porta Corta-Fogo e Pressurização',
-        'Torre A - Caixa de Hidrante e Mangueira',
-        'Torre A - Extintores (pressão e validade)',
-        'Torre A - Sensores de fumaça e Iluminação de emergência'
-      ]
-    },
-    {
-      id: 'SETOR_I',
-      titulo: 'SETOR I: INCÊNDIO & HALLS — TORRE B',
-      itens: [
-        'Torre B - Corredores e portas divisórias',
-        'Torre B - Porta Corta-Fogo e Pressurização',
-        'Torre B - Caixa de Hidrante e Mangueira',
-        'Torre B - Extintores (pressão e validade)',
-        'Torre B - Sensores de fumaça e Iluminação de emergência'
-      ]
-    }
-  ];
+  const [setoresChecklist, setSetoresChecklist] = useState<SetorRonda[]>(SETORES_RONDA_PADRAO);
+  const [modalGerenciarSetores, setModalGerenciarSetores] = useState(false);
 
   const [respostasChecklist, setRespostasChecklist] = useState<Record<string, string>>({});
 
@@ -229,18 +144,42 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
     verificarRondaAtiva();
     carregarHistorico();
     carregarOperadores();
+    carregarSetores();
+
+    const handleSetoresAtualizados = (e: any) => {
+      if (e.detail?.setores && Array.isArray(e.detail.setores)) {
+        setSetoresChecklist(e.detail.setores);
+      }
+    };
+
+    window.addEventListener('setores_ronda_atualizados', handleSetoresAtualizados);
 
     return () => {
       pararCameraQr();
+      window.removeEventListener('setores_ronda_atualizados', handleSetoresAtualizados);
     };
   }, [usuarioLogado?.condominio_id]);
 
+  const carregarSetores = async () => {
+    try {
+      const lista = await carregarSetoresRonda(usuarioLogado?.condominio_id);
+      if (lista && lista.length > 0) {
+        setSetoresChecklist(lista);
+        if (!lista.some(s => s.id === setorPonto)) {
+          setSetorPonto(lista[0].id);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar setores:', e);
+    }
+  };
+
   const getObjetoSetor = (setorIdOuTitulo: string) => {
-    if (!setorIdOuTitulo) return setoresChecklist[0];
+    if (!setorIdOuTitulo) return setoresChecklist[0] || { id: 'GERAL', titulo: 'Setor Geral', itens: [] };
     return (
       setoresChecklist.find(
         (item) => item.id === setorIdOuTitulo || item.titulo === setorIdOuTitulo
-      ) || setoresChecklist[0]
+      ) || setoresChecklist[0] || { id: 'GERAL', titulo: 'Setor Geral', itens: [] }
     );
   };
 
@@ -1253,13 +1192,25 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
       )}
 
       <div className="bg-white rounded-xl p-3 sm:p-4 border border-slate-200 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
           <h4 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
             <QrCode className="w-4 h-4 text-blue-600" /> Pontos de Ronda Cadastrados
           </h4>
-          <span className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
-            Total: {pontos.length}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {podeGerenciarPontos && (
+              <button
+                type="button"
+                onClick={() => setModalGerenciarSetores(true)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 border border-slate-300 transition cursor-pointer"
+                title="Configurar e gerenciar setores e checklists"
+              >
+                <Sliders className="w-3.5 h-3.5 text-blue-600" /> Configurar Setores ({setoresChecklist.length})
+              </button>
+            )}
+            <span className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+              Total: {pontos.length}
+            </span>
+          </div>
         </div>
 
         {pontos.length === 0 ? (
@@ -1375,11 +1326,22 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
 
             <form onSubmit={cadastrarPonto} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Setor Pertencente</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">Setor Pertencente *</label>
+                  {podeGerenciarPontos && (
+                    <button
+                      type="button"
+                      onClick={() => setModalGerenciarSetores(true)}
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3" /> Configurar Setores
+                    </button>
+                  )}
+                </div>
                 <select
                   value={setorPonto}
                   onChange={(e) => setSetorPonto(e.target.value)}
-                  className="w-full border rounded-xl p-2.5 text-xs text-slate-800 bg-slate-50"
+                  className="w-full border rounded-xl p-2.5 text-xs text-slate-800 bg-slate-50 font-bold focus:bg-white focus:ring-1 focus:ring-blue-600"
                 >
                   {setoresChecklist.map((s) => (
                     <option key={s.id} value={s.id}>{s.titulo}</option>
@@ -1818,6 +1780,20 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
           </div>
         </div>
       )}
+
+      {/* MODAL CONFIGURAÇÃO E GESTÃO DE SETORES DE RONDA */}
+      <ModalGerenciarSetores
+        aberto={modalGerenciarSetores}
+        onFechar={() => setModalGerenciarSetores(false)}
+        condominioId={usuarioLogado?.condominio_id}
+        pontosCadastrados={pontos}
+        onSetoresAlterados={(novos) => {
+          setSetoresChecklist(novos);
+          if (!novos.some(s => s.id === setorPonto) && novos.length > 0) {
+            setSetorPonto(novos[0].id);
+          }
+        }}
+      />
     </div>
   );
 }
