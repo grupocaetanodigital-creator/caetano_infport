@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { 
   Package, 
@@ -705,6 +705,60 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       comboBlocoUnid.includes(termoSemEspaco)
     );
   });
+
+  // Resumo visual de encomendas pendentes agrupadas por unidade (com badges/contadores)
+  const resumoPendenciasPorUnidade = useMemo(() => {
+    const mapa: Record<string, {
+      chave: string;
+      unidade: string;
+      bloco: string;
+      label: string;
+      qtd: number;
+      moradoresNomes: string[];
+      itensIds: string[];
+    }> = {};
+
+    // Considera os itens retidos conforme filtro de bloco ou geral
+    const baseItens = todosItensRetidos.filter((item: any) => {
+      if (abaBlocoSelecionada !== 'TODOS') {
+        const blocoItem = item.bloco ? `Bloco ${item.bloco}` : 'Geral / Sem Bloco';
+        if (blocoItem !== abaBlocoSelecionada) return false;
+      }
+      return true;
+    });
+
+    baseItens.forEach((item: any) => {
+      const u = String(item.unidade || 'Sem Unidade').trim();
+      const b = String(item.bloco || '').trim();
+      const chave = `${u}__${b}`;
+      const label = `Apt ${u}${b ? ` - Bloco ${b}` : ''}`;
+
+      if (!mapa[chave]) {
+        mapa[chave] = {
+          chave,
+          unidade: u,
+          bloco: b,
+          label,
+          qtd: 0,
+          moradoresNomes: [],
+          itensIds: []
+        };
+      }
+
+      mapa[chave].qtd += 1;
+      mapa[chave].itensIds.push(item.id);
+      const nomeMorador = item.moradores?.nome;
+      if (nomeMorador && !mapa[chave].moradoresNomes.includes(nomeMorador)) {
+        mapa[chave].moradoresNomes.push(nomeMorador);
+      }
+    });
+
+    // Ordena priorizando unidades com maior volume de pacotes retidos
+    return Object.values(mapa).sort((a, b) => {
+      if (b.qtd !== a.qtd) return b.qtd - a.qtd;
+      return a.unidade.localeCompare(b.unidade, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }, [todosItensRetidos, abaBlocoSelecionada]);
 
   // Lista de itens candidatos ao checklist (preserva itens mesmo se desmarcados temporariamente no checklist)
   const idsParaChecklist = itensCandidatosEntrega.length > 0 
@@ -1457,6 +1511,111 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 {bloco} <span className="bg-emerald-500 text-white px-1 py-0.2 rounded text-[10px] font-mono">{statsDia.retidosPorBloco[bloco]}</span>
               </button>
             ))}
+          </div>
+
+          {/* RESUMO VISUAL DE ENCOMENDAS PENDENTES POR UNIDADE (BADGES / CONTADORES) */}
+          <div className="bg-slate-50/90 p-2 sm:p-2.5 rounded-xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <div className="flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight">
+                  Resumo de Pendências por Unidade
+                </h4>
+                <span className="bg-slate-200 text-slate-700 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono">
+                  {resumoPendenciasPorUnidade.length} {resumoPendenciasPorUnidade.length === 1 ? 'unidade' : 'unidades'}
+                </span>
+              </div>
+
+              {buscaBaixaGeral && (
+                <button
+                  type="button"
+                  onClick={() => setBuscaBaixaGeral('')}
+                  className="text-[10px] font-bold text-red-600 hover:text-red-700 flex items-center gap-1 transition cursor-pointer"
+                >
+                  <X className="w-3 h-3" /> Limpar filtro ({buscaBaixaGeral})
+                </button>
+              )}
+            </div>
+
+            {resumoPendenciasPorUnidade.length > 0 ? (
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin snap-x">
+                {resumoPendenciasPorUnidade.map((item) => {
+                  const todosSelecionados = item.itensIds.length > 0 && item.itensIds.every(id => itensSelecionadosIds.includes(id));
+                  const parcialmenteSelecionados = !todosSelecionados && item.itensIds.some(id => itensSelecionadosIds.includes(id));
+                  const isFiltroAtivo = buscaBaixaGeral.trim().toLowerCase() === item.unidade.toLowerCase();
+
+                  return (
+                    <button
+                      key={item.chave}
+                      type="button"
+                      onClick={() => {
+                        // Se já estiver selecionado e filtrado, desmarca e limpa filtro
+                        if (todosSelecionados && isFiltroAtivo) {
+                          setBuscaBaixaGeral('');
+                          setItensSelecionadosIds(prev => prev.filter(id => !item.itensIds.includes(id)));
+                          setItensCandidatosEntrega(prev => prev.filter(id => !item.itensIds.includes(id)));
+                        } else {
+                          // Filtra e seleciona os pacotes da unidade em 1 clique
+                          setBuscaBaixaGeral(item.unidade);
+                          const outrosIds = itensSelecionadosIds.filter(id => !item.itensIds.includes(id));
+                          const novosIds = [...outrosIds, ...item.itensIds];
+                          setItensSelecionadosIds(novosIds);
+                          setItensCandidatosEntrega(novosIds);
+                        }
+                      }}
+                      className={`p-2 rounded-xl border transition flex flex-col justify-between text-left shrink-0 min-w-[135px] max-w-[170px] snap-start cursor-pointer ${
+                        todosSelecionados
+                          ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500/30 shadow-xs'
+                          : parcialmenteSelecionados
+                          ? 'bg-blue-50/70 border-blue-300'
+                          : isFiltroAtivo
+                          ? 'bg-slate-100 border-slate-400 shadow-2xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-2xs'
+                      }`}
+                      title={`Clique para selecionar os ${item.qtd} pacote(s) do Apt ${item.unidade}`}
+                    >
+                      <div className="flex items-center justify-between gap-1 w-full mb-1">
+                        <span className="text-[11px] font-black text-slate-900 truncate">
+                          Apt {item.unidade}
+                        </span>
+                        {/* BADGE / CONTADOR DE ENCOMENDAS PENDENTES */}
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono flex items-center gap-0.5 shrink-0 ${
+                          item.qtd > 1 
+                            ? 'bg-amber-500 text-white shadow-2xs' 
+                            : 'bg-emerald-600 text-white'
+                        }`}>
+                          <Package className="w-2.5 h-2.5" />
+                          {item.qtd} {item.qtd === 1 ? 'pct' : 'pcts'}
+                        </span>
+                      </div>
+
+                      {item.bloco && (
+                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded w-fit mb-0.5">
+                          Bloco {item.bloco}
+                        </span>
+                      )}
+
+                      <p className="text-[10px] text-slate-600 font-medium truncate w-full">
+                        {item.moradoresNomes.length > 0 ? item.moradoresNomes.join(', ') : 'Morador não vinculado'}
+                      </p>
+
+                      <div className="mt-1 pt-1 border-t border-slate-100 flex items-center justify-between text-[9px] w-full font-bold">
+                        <span className={todosSelecionados ? 'text-emerald-700' : 'text-slate-400'}>
+                          {todosSelecionados ? '✓ Selecionado' : 'Clique p/ selecionar'}
+                        </span>
+                        <span className="font-mono text-slate-400">
+                          {todosSelecionados ? `${item.qtd}/${item.qtd}` : `0/${item.qtd}`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-2.5 text-center text-slate-500 text-xs bg-white rounded-lg border border-dashed border-slate-200">
+                Nenhuma encomenda pendente aguardando retirada.
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
