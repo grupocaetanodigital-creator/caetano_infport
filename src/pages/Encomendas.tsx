@@ -21,7 +21,9 @@ import {
   Boxes,
   MapPin,
   Edit3,
-  Layers
+  Layers,
+  ClipboardCheck,
+  Check
 } from 'lucide-react';
 
 interface EncomendasProps {
@@ -81,6 +83,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [buscaBaixaGeral, setBuscaBaixaGeral] = useState('');
   const [abaBlocoSelecionada, setAbaBlocoSelecionada] = useState('TODOS');
   const [itensSelecionadosIds, setItensSelecionadosIds] = useState<string[]>([]);
+  const [itensCandidatosEntrega, setItensCandidatosEntrega] = useState<string[]>([]);
+  const [modalFotoAmpliada, setModalFotoAmpliada] = useState<string | null>(null);
   const [modalBaixaAberta, setModalBaixaAberta] = useState(false);
   const [nomeRetirante, setNomeRetirante] = useState('');
   const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
@@ -702,7 +706,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     );
   });
 
+  // Lista de itens candidatos ao checklist (preserva itens mesmo se desmarcados temporariamente no checklist)
+  const idsParaChecklist = itensCandidatosEntrega.length > 0 
+    ? itensCandidatosEntrega 
+    : itensSelecionadosIds;
+
+  const itensCandidatosObjetos = todosItensRetidos.filter(i => idsParaChecklist.includes(i.id));
   const itensSelecionadosObjetos = todosItensRetidos.filter(i => itensSelecionadosIds.includes(i.id));
+
   const moradoresDasUnidadesBaixa = moradores.filter(m => 
     itensSelecionadosObjetos.some(item => 
       String(item.unidade).toLowerCase() === String(m.unidade).toLowerCase() &&
@@ -712,16 +723,224 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const toggleItemSelecao = (id: string) => {
     if (itensSelecionadosIds.includes(id)) {
-      setItensSelecionadosIds(itensSelecionadosIds.filter(item => item !== id));
+      const novos = itensSelecionadosIds.filter(item => item !== id);
+      setItensSelecionadosIds(novos);
+      setItensCandidatosEntrega(novos);
     } else {
-      setItensSelecionadosIds([...itensSelecionadosIds, id]);
+      const novos = [...itensSelecionadosIds, id];
+      setItensSelecionadosIds(novos);
+      setItensCandidatosEntrega(novos);
     }
+  };
+
+  const abrirModalBaixa = () => {
+    setItensCandidatosEntrega([...itensSelecionadosIds]);
+    setModalBaixaAberta(true);
+  };
+
+  const alternarItemChecklist = (id: string) => {
+    if (itensSelecionadosIds.includes(id)) {
+      setItensSelecionadosIds(prev => prev.filter(item => item !== id));
+    } else {
+      setItensSelecionadosIds(prev => [...prev, id]);
+    }
+  };
+
+  const removerItemDoChecklist = (id: string) => {
+    setItensCandidatosEntrega(prev => prev.filter(item => item !== id));
+    setItensSelecionadosIds(prev => prev.filter(item => item !== id));
+  };
+
+  const selecionarTodosChecklist = () => {
+    const todosIds = itensCandidatosObjetos.map((i: any) => i.id);
+    setItensSelecionadosIds(todosIds);
+  };
+
+  const desmarcarTodosChecklist = () => {
+    setItensSelecionadosIds([]);
+  };
+
+  const renderChecklistConferencia = (isModal: boolean = false) => {
+    if (itensCandidatosObjetos.length === 0) return null;
+
+    const totalCandidatos = itensCandidatosObjetos.length;
+    const totalConferidos = itensSelecionadosIds.length;
+    const todosMarcados = totalConferidos === totalCandidatos && totalCandidatos > 0;
+
+    return (
+      <div className="border border-slate-200 rounded-xl bg-slate-50/90 p-2.5 sm:p-3 space-y-2.5 shadow-2xs">
+        <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/80 flex-wrap gap-1">
+          <div className="flex items-center gap-1.5">
+            <ClipboardCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <h5 className="text-[11px] sm:text-xs font-black text-slate-900 uppercase tracking-tight">
+                Checklist de Conferência da Entrega
+              </h5>
+              <p className="text-[10px] text-slate-500">
+                Confira os volumes físicos com o morador para evitar erro de baixa
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 text-[10px]">
+            <button
+              type="button"
+              onClick={selecionarTodosChecklist}
+              className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold transition cursor-pointer shadow-2xs"
+            >
+              Marcar Todos
+            </button>
+            <button
+              type="button"
+              onClick={desmarcarTodosChecklist}
+              className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-medium transition cursor-pointer shadow-2xs"
+            >
+              Desmarcar
+            </button>
+          </div>
+        </div>
+
+        {/* Banner de status da conferência */}
+        <div className={`p-2 rounded-lg text-[11px] font-bold flex items-center justify-between gap-1.5 transition ${
+          totalConferidos === 0
+            ? 'bg-amber-100/80 text-amber-900 border border-amber-300'
+            : todosMarcados
+            ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300'
+            : 'bg-blue-100/90 text-blue-900 border border-blue-300'
+        }`}>
+          <span className="flex items-center gap-1.5">
+            {totalConferidos === 0 ? (
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            ) : todosMarcados ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <ClipboardCheck className="w-4 h-4 text-blue-600 shrink-0" />
+            )}
+            {totalConferidos === 0 ? (
+              'Atenção: Marque ao menos um pacote no checklist para liberar a entrega!'
+            ) : todosMarcados ? (
+              `Pronto: Todos os ${totalCandidatos} pacote(s) conferidos para baixa!`
+            ) : (
+              `${totalConferidos} de ${totalCandidatos} pacote(s) marcados (${totalCandidatos - totalConferidos} ficarão retidos na portaria)`
+            )}
+          </span>
+          <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-300 text-xs text-slate-800 shrink-0">
+            {totalConferidos}/{totalCandidatos}
+          </span>
+        </div>
+
+        {/* Lista de itens do checklist */}
+        <div className={`space-y-1.5 overflow-y-auto pr-0.5 ${isModal ? 'max-h-56 sm:max-h-64' : 'max-h-60'}`}>
+          {itensCandidatosObjetos.map((item: any, idx: number) => {
+            const isConferido = itensSelecionadosIds.includes(item.id);
+            return (
+              <div
+                key={item.id}
+                onClick={() => alternarItemChecklist(item.id)}
+                className={`p-2 rounded-xl border text-left cursor-pointer transition flex items-start gap-2.5 relative ${
+                  isConferido
+                    ? 'bg-white border-emerald-400 ring-1 ring-emerald-500/25 shadow-xs'
+                    : 'bg-slate-100/80 border-dashed border-slate-300 opacity-60 hover:opacity-90'
+                }`}
+              >
+                {/* Checkbox visual interativo */}
+                <div className="mt-0.5 shrink-0">
+                  {isConferido ? (
+                    <div className="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </div>
+                  ) : (
+                    <div className="w-5 h-5 rounded-md border-2 border-slate-400 bg-white flex items-center justify-center">
+                      <Square className="w-3.5 h-3.5 text-transparent" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Conteúdo completo e legível */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase text-slate-900 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                        #{idx + 1} Apt {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
+                        isConferido 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                          : 'bg-slate-200 text-slate-600 border border-slate-300'
+                      }`}>
+                        {isConferido ? '✓ Entregar' : '○ Não Entregar'}
+                      </span>
+                    </div>
+
+                    <span className="text-[9px] font-mono text-slate-400">
+                      Chegada: {new Date(item.created_at).toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {item.moradores?.nome || 'Morador não vinculado'}
+                  </p>
+
+                  <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                    {/* Local Físico Destacado */}
+                    <span className="bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <Boxes className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span>{item.local_armazenamento || 'Bancada Principal'}</span>
+                    </span>
+
+                    {/* Código de Rastreio */}
+                    {item.codigo_barras && (
+                      <span className="font-mono text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 truncate max-w-[140px]" title={item.codigo_barras}>
+                        📦 {item.codigo_barras}
+                      </span>
+                    )}
+
+                    {/* Foto da Etiqueta */}
+                    {item.foto_etiqueta_url && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModalFotoAmpliada(item.foto_etiqueta_url);
+                        }}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded transition cursor-pointer"
+                      >
+                        <Camera className="w-2.5 h-2.5" /> Ver Foto
+                      </button>
+                    )}
+                  </div>
+
+                  {item.observacoes && (
+                    <p className="text-[10px] text-slate-600 italic bg-white p-1 rounded border border-slate-100">
+                      Obs: {item.observacoes}
+                    </p>
+                  )}
+                </div>
+
+                {/* Botão de excluir este item do checklist */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removerItemDoChecklist(item.id);
+                  }}
+                  className="text-slate-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50 transition cursor-pointer shrink-0"
+                  title="Remover este pacote da entrega atual"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const efetivarBaixaSaida = async (e: React.FormEvent) => {
     e.preventDefault();
     if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione os pacotes, informe o nome do retirante e tire a foto da entrega.' });
+      setMensagem({ tipo: 'erro', texto: 'Selecione e marque os pacotes no checklist, informe o nome do retirante e tire a foto da entrega.' });
       return;
     }
     setLoading(true);
@@ -742,13 +961,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       const primeiroItem = todosItensRetidos.find(i => i.id === itensSelecionadosIds[0]);
       const telMorador = primeiroItem?.moradores?.telefone?.replace(/\D/g, '') || '';
-      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${primeiroItem?.unidade || ''}${primeiroItem?.bloco ? ' - Bloco ' + primeiroItem.bloco : ''}\n\nInformamos que o(s) pacote(s) foram RETIRADOS da portaria:\n• Qtd de Volumes Retirados: ${itensSelecionadosIds.length}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      
+      const volumesDetalhados = itensSelecionadosObjetos.map((it: any, idx: number) => {
+        const cod = it.codigo_barras ? ` (Cód: ${it.codigo_barras})` : '';
+        const loc = it.local_armazenamento ? ` [${it.local_armazenamento}]` : '';
+        return `  ${idx + 1}. Apt ${it.unidade}${it.bloco ? ' Bloco ' + it.bloco : ''}${cod}${loc}`;
+      }).join('\n');
+
+      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${primeiroItem?.unidade || ''}${primeiroItem?.bloco ? ' - Bloco ' + primeiroItem.bloco : ''}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
 
       setBaixaConcluidaWhats({
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
       });
 
       setItensSelecionadosIds([]);
+      setItensCandidatosEntrega([]);
       setModalBaixaAberta(false);
       setNomeRetirante(''); setFotoRetiranteUrl('');
       carregarDadosBase();
@@ -1244,7 +1471,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setModalBaixaAberta(true)}
+                      onClick={abrirModalBaixa}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
                     >
                       <UserCheck className="w-3 h-3" /> Finalizar ({itensSelecionadosIds.length})
@@ -1353,16 +1580,23 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             </div>
 
             <div className="bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 space-y-2.5">
-              <h4 className="text-xs font-bold text-slate-700 border-b border-slate-200 pb-1 uppercase">Finalizar Entrega (Baixa)</h4>
-              
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500">Pacotes Selecionados:</span>
-                <span className="bg-slate-900 text-white font-bold px-2 py-0.5 rounded text-sm">{itensSelecionadosIds.length}</span>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  Finalizar Entrega (Baixa)
+                </h4>
+                {itensSelecionadosIds.length > 0 && (
+                  <span className="bg-emerald-600 text-white font-black px-2 py-0.5 rounded text-[10px]">
+                    {itensSelecionadosIds.length} marcado(s)
+                  </span>
+                )}
               </div>
 
-              {itensSelecionadosIds.length > 0 ? (
+              {itensCandidatosObjetos.length > 0 ? (
                 <form onSubmit={efetivarBaixaSaida} className="space-y-2.5 pt-1">
-                  
+                  {/* CHECKLIST DE CONFERÊNCIA DOS PACOTES */}
+                  {renderChecklistConferencia(false)}
+
                   {moradoresDasUnidadesBaixa.length > 0 && (
                     <div className="space-y-1">
                       <label className="block text-[10px] font-bold text-slate-700 uppercase">Preencher com Morador:</label>
@@ -1372,9 +1606,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                             key={m.id}
                             type="button"
                             onClick={() => setNomeRetirante(m.nome)}
-                            className="bg-white border border-slate-300 text-slate-700 hover:bg-blue-50 text-[11px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer"
+                            className="bg-white border border-slate-300 text-slate-700 hover:bg-emerald-50 text-[11px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer font-medium"
                           >
-                            <User className="w-3 h-3" /> {m.nome}
+                            <User className="w-3 h-3 text-emerald-600" /> {m.nome}
                           </button>
                         ))}
                       </div>
@@ -1420,8 +1654,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     )}
                   </div>
 
-                  <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs">
-                    {loading ? 'Processando...' : <><UserCheck className="w-4 h-4" /> Confirmar Entrega</>}
+                  <button 
+                    type="submit" 
+                    disabled={loading || itensSelecionadosIds.length === 0} 
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs"
+                  >
+                    {loading ? 'Processando...' : (
+                      <>
+                        <UserCheck className="w-4 h-4" /> 
+                        {itensSelecionadosIds.length > 0 
+                          ? `Confirmar Entrega (${itensSelecionadosIds.length} ${itensSelecionadosIds.length === 1 ? 'volume' : 'volumes'})`
+                          : 'Marque ao menos 1 volume no checklist'}
+                      </>
+                    )}
                   </button>
                 </form>
               ) : (
@@ -1452,12 +1697,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             </div>
             <div>
               <p className="font-bold text-xs text-white">Pacotes Selecionados</p>
-              <p className="text-[10px] text-slate-400">Prontos para dar baixa</p>
+              <p className="text-[10px] text-slate-400">Prontos para conferência</p>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setModalBaixaAberta(true)}
+            onClick={abrirModalBaixa}
             className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 transition"
           >
             <UserCheck className="w-3.5 h-3.5" /> Finalizar Entrega
@@ -1465,95 +1710,120 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         </div>
       )}
 
-      {/* MODAL / BOTTOM SHEET DE BAIXA / FINALIZAÇÃO DE ENTREGA */}
+      {/* MODAL / BOTTOM SHEET DE BAIXA / FINALIZAÇÃO DE ENTREGA COM CHECKLIST */}
       {modalBaixaAberta && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-md w-full p-4 space-y-3 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150 my-auto">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[92vh] flex flex-col p-4 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150 my-auto">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2.5 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg">
                   <UserCheck className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm">Finalizar Entrega (Baixa)</h3>
-                  <p className="text-[10px] text-slate-500">{itensSelecionadosIds.length} pacote(s) selecionado(s)</p>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    {itensSelecionadosIds.length} de {itensCandidatosObjetos.length} volume(s) conferido(s)
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setModalBaixaAberta(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {itensSelecionadosIds.length > 0 ? (
-              <form onSubmit={efetivarBaixaSaida} className="space-y-2.5">
-                {moradoresDasUnidadesBaixa.length > 0 && (
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase">Preencher com Morador:</label>
-                    <div className="flex flex-wrap gap-1">
-                      {moradoresDasUnidadesBaixa.map((m: any) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setNomeRetirante(m.nome)}
-                          className="bg-slate-50 border border-slate-300 text-slate-700 hover:bg-emerald-50 text-[11px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <User className="w-3 h-3 text-emerald-600" /> {m.nome}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3 pt-2">
+              {itensCandidatosObjetos.length > 0 ? (
+                <form onSubmit={efetivarBaixaSaida} className="space-y-3">
+                  {/* CHECKLIST DE CONFERÊNCIA DOS VOLUMES */}
+                  {renderChecklistConferencia(true)}
 
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase">Quem está retirando? (Nome / RG) *</label>
-                  <input
-                    type="text"
-                    value={nomeRetirante}
-                    onChange={(e) => setNomeRetirante(e.target.value)}
-                    placeholder="Nome de quem pegou o pacote..."
-                    required
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase">Comprovante de Entrega (Foto) *</label>
-                  {!fotoRetiranteUrl ? (
-                    <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition text-xs font-bold text-slate-700">
-                      <Camera className="w-4 h-4 text-emerald-600" />
-                      <span>{uploadingFoto ? 'Enviando...' : '📷 Foto Assinatura / Retirante'}</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        capture="environment" 
-                        className="hidden" 
-                        onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
-                        disabled={uploadingFoto} 
-                      />
-                    </label>
-                  ) : (
-                    <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
-                      <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-24 rounded object-cover" />
-                      <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                  {moradoresDasUnidadesBaixa.length > 0 && (
+                    <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                        Preencher com Morador da Unidade:
+                      </label>
+                      <div className="flex flex-wrap gap-1">
+                        {moradoresDasUnidadesBaixa.map((m: any) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setNomeRetirante(m.nome)}
+                            className="bg-white border border-slate-300 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300 text-[11px] px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <User className="w-3 h-3 text-emerald-600" /> {m.nome}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs">
-                  {loading ? 'Processando...' : <><UserCheck className="w-4 h-4" /> Confirmar Entrega</>}
-                </button>
-              </form>
-            ) : (
-              <div className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs text-center">
-                Selecione ao menos um pacote na lista para efetuar a entrega.
-              </div>
-            )}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                      Quem está retirando? (Nome / RG) *
+                    </label>
+                    <input
+                      type="text"
+                      value={nomeRetirante}
+                      onChange={(e) => setNomeRetirante(e.target.value)}
+                      placeholder="Nome de quem pegou o pacote..."
+                      required
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                      Comprovante de Entrega (Foto) *
+                    </label>
+                    {!fotoRetiranteUrl ? (
+                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50 cursor-pointer rounded-lg p-3 flex items-center justify-center gap-2 transition text-xs font-bold text-slate-700">
+                        <Camera className="w-4 h-4 text-emerald-600" />
+                        <span>{uploadingFoto ? 'Enviando...' : '📷 Foto Assinatura / Retirante'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          capture="environment" 
+                          className="hidden" 
+                          onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
+                          disabled={uploadingFoto} 
+                        />
+                      </label>
+                    ) : (
+                      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
+                        <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-24 rounded object-cover" />
+                        <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={loading || itensSelecionadosIds.length === 0} 
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs"
+                  >
+                    {loading ? 'Processando...' : (
+                      <>
+                        <UserCheck className="w-4 h-4" /> 
+                        {itensSelecionadosIds.length > 0 
+                          ? `Confirmar Entrega (${itensSelecionadosIds.length} ${itensSelecionadosIds.length === 1 ? 'volume' : 'volumes'})`
+                          : 'Selecione ao menos 1 volume no checklist'}
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <div className="p-4 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs text-center space-y-1">
+                  <p className="font-bold">Nenhum pacote selecionado</p>
+                  <p className="text-[11px] text-amber-700">Selecione ao menos um pacote na lista para efetuar a entrega.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1741,6 +2011,45 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               >
                 <CheckCircle2 className="w-4 h-4" />
                 {loading ? 'Salvando...' : 'Confirmar Novo Local'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA VISUALIZAR FOTO DA ETIQUETA / PACOTE EM ALTA RESOLUÇÃO */}
+      {modalFotoAmpliada && (
+        <div 
+          className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs z-60 flex items-center justify-center p-3 sm:p-4 cursor-pointer animate-in fade-in duration-150"
+          onClick={() => setModalFotoAmpliada(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-lg w-full p-3 sm:p-4 space-y-3 shadow-2xl overflow-hidden cursor-default animate-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-emerald-600" />
+                Foto da Etiqueta / Pacote
+              </h4>
+              <button 
+                type="button" 
+                onClick={() => setModalFotoAmpliada(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex justify-center bg-slate-100 rounded-xl overflow-hidden max-h-[70vh] border border-slate-200">
+              <img src={modalFotoAmpliada} alt="Etiqueta Ampliada" className="w-full h-auto object-contain max-h-[70vh]" />
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setModalFotoAmpliada(null)}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+              >
+                Fechar
               </button>
             </div>
           </div>
