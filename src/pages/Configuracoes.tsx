@@ -32,10 +32,13 @@ import {
   Edit3,
   ToggleLeft,
   ToggleRight,
-  X
+  X,
+  ListChecks
 } from 'lucide-react';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
+import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
 import { generateMigrationSql } from '../services/databaseDoctor';
+import { SetorRonda, carregarSetoresRonda } from '../services/setoresRonda';
 
 export interface LocalArmazenamento {
   id: string;
@@ -62,7 +65,7 @@ interface ConfiguracoesProps {
 }
 
 export default function Configuracoes({ usuarioLogado, onConfigSalva }: ConfiguracoesProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'supabase' | 'locais_triagem'>('flags');
+  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'supabase' | 'locais_triagem' | 'setores_ronda'>('flags');
   const [loading, setLoading] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
@@ -71,6 +74,11 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
 
   const [listaCondominios, setListaCondominios] = useState<any[]>([]);
   const [condominioBackupId, setCondominioBackupId] = useState(usuarioLogado?.condominio_id || '');
+
+  // Estado para Setores de Ronda (Tabela & Checklist)
+  const [setoresRonda, setSetoresRonda] = useState<SetorRonda[]>([]);
+  const [modalSetoresRondaAberto, setModalSetoresRondaAberto] = useState(false);
+  const [pontosRondaLista, setPontosRondaLista] = useState<any[]>([]);
 
   const [config, setConfig] = useState<Record<string, any>>({
     id: null,
@@ -188,8 +196,35 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       carregarTemplates();
       carregarContatosEmergencia();
       carregarLocaisArmazenamento();
+      carregarSetoresRondaConfig();
     }
+
+    const handleSetoresAtualizados = (e: any) => {
+      if (e.detail?.setores && Array.isArray(e.detail.setores)) {
+        setSetoresRonda(e.detail.setores);
+      }
+    };
+    window.addEventListener('setores_ronda_atualizados', handleSetoresAtualizados);
+    return () => {
+      window.removeEventListener('setores_ronda_atualizados', handleSetoresAtualizados);
+    };
   }, [usuarioLogado?.condominio_id]);
+
+  const carregarSetoresRondaConfig = async () => {
+    try {
+      const lista = await carregarSetoresRonda(usuarioLogado?.condominio_id);
+      setSetoresRonda(lista);
+      if (usuarioLogado?.condominio_id) {
+        const { data: pts } = await supabase
+          .from('rondas_pontos')
+          .select('id, setor_id, nome_ponto')
+          .eq('condominio_id', usuarioLogado.condominio_id);
+        if (pts) setPontosRondaLista(pts);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const carregarCondominios = async () => {
     try {
@@ -902,6 +937,15 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         >
           <Boxes className="w-3.5 h-3.5 text-emerald-600" /> 11.6 Locais de Triagem
         </button>
+
+        <button
+          onClick={() => setAbaAtiva('setores_ronda')}
+          className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition ${
+            abaAtiva === 'setores_ronda' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:bg-white/50'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-blue-600" /> 11.7 Setores de Ronda
+        </button>
       </div>
 
       {/* ABA 11.1: PARAMETRIZAÇÃO */}
@@ -1591,6 +1635,113 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
           )}
         </div>
       )}
+
+      {/* ABA 11.7: SETORES DE RONDA (GESTÃO ADMINISTRATIVA E CHECKLISTS) */}
+      {abaAtiva === 'setores_ronda' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-blue-600" /> 11.7 Gestão dos Setores de Ronda Patrimonial & Checklists
+                </h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Configure os setores aos quais os pontos de ronda pertencem e personalize a lista de itens inspecionados em cada ronda.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalSetoresRondaAberto(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Gerenciar Setores
+                </button>
+              </div>
+            </div>
+
+            {/* KPIs dos Setores */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70">
+                <span className="text-[11px] font-bold text-slate-500 uppercase block">Setores Ativos</span>
+                <strong className="text-xl font-black text-slate-900 mt-1 block">{setoresRonda.length}</strong>
+                <span className="text-[10px] text-slate-500">Divisões patrimoniais</span>
+              </div>
+
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70">
+                <span className="text-[11px] font-bold text-slate-500 uppercase block">Itens de Inspeção</span>
+                <strong className="text-xl font-black text-blue-700 mt-1 block">
+                  {setoresRonda.reduce((acc, s) => acc + (s.itens?.length || 0), 0)}
+                </strong>
+                <span className="text-[10px] text-slate-500">Checklists cadastrados</span>
+              </div>
+
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70">
+                <span className="text-[11px] font-bold text-slate-500 uppercase block">Pontos Vinculados</span>
+                <strong className="text-xl font-black text-emerald-700 mt-1 block">
+                  {pontosRondaLista.length}
+                </strong>
+                <span className="text-[10px] text-slate-500">Tags/Pontos nos setores</span>
+              </div>
+            </div>
+
+            {/* Tabela Resumo dos Setores */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-black uppercase text-slate-800 tracking-wide flex items-center gap-1.5">
+                  <ListChecks className="w-4 h-4 text-blue-600" /> Setores Configurados ({setoresRonda.length})
+                </h5>
+                <button
+                  type="button"
+                  onClick={() => setModalSetoresRondaAberto(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                >
+                  Abrir Painel Completo de Edição &rarr;
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {setoresRonda.map((s, idx) => {
+                  const pts = pontosRondaLista.filter(p => p.setor_id === s.id || p.setor_id === s.titulo);
+                  return (
+                    <div key={s.id || idx} className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[10px] font-black uppercase bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded">
+                          {s.codigo || s.id}
+                        </span>
+                        <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                          {s.itens?.length || 0} itens
+                        </span>
+                      </div>
+                      <h6 className="font-bold text-slate-900 text-xs">{s.titulo}</h6>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                        <span>{pts.length} ponto(s) cadastrado(s)</span>
+                        <button
+                          type="button"
+                          onClick={() => setModalSetoresRondaAberto(true)}
+                          className="text-blue-600 hover:text-blue-800 font-bold"
+                        >
+                          Configurar
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GERENCIAR SETORES */}
+      <ModalGerenciarSetores
+        aberto={modalSetoresRondaAberto}
+        onFechar={() => setModalSetoresRondaAberto(false)}
+        condominioId={usuarioLogado?.condominio_id}
+        pontosCadastrados={pontosRondaLista}
+        onSetoresAlterados={(novos) => setSetoresRonda(novos)}
+      />
 
       {/* MODAL SUPABASE DOCTOR */}
       <SupabaseDoctorModal 
