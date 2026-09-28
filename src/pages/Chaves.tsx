@@ -39,10 +39,22 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const [unidade, setUnidade] = useState('');
   const [tempoLimiteHoras, setTempoLimiteHoras] = useState<number | string>(2);
 
+  const [moradores, setMoradores] = useState<any[]>([]);
+  const [colaboradores, setColaboradores] = useState<any[]>([]);
+  const [blocosDisponiveis, setBlocosDisponiveis] = useState<string[]>([]);
+
   const [tipoRetirante, setTipoRetirante] = useState('Morador');
   const [retiranteNome, setRetiranteNome] = useState('');
   const [retiranteDoc, setRetiranteDoc] = useState('');
   const [retiranteTel, setRetiranteTel] = useState('');
+  const [retiranteUnidade, setRetiranteUnidade] = useState('');
+  const [retiranteBloco, setRetiranteBloco] = useState('');
+  const [retiranteFuncao, setRetiranteFuncao] = useState('');
+  const [retiranteEmpresa, setRetiranteEmpresa] = useState('');
+  const [fotoDocTerceiroUrl, setFotoDocTerceiroUrl] = useState('');
+  const [prazoModo, setPrazoModo] = useState<string>('chave');
+  const [prazoHorasCustom, setPrazoHorasCustom] = useState<number | string>(2);
+
   const [fotoRetiradaUrl, setFotoRetiradaUrl] = useState('');
   const [whatsEmprestimo, setWhatsEmprestimo] = useState<any | null>(null);
 
@@ -73,6 +85,26 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
         .order('data_hora_retirada', { ascending: false });
 
       if (errMov) throw errMov;
+
+      // Buscar moradores e colaboradores para agilizar o atendimento
+      const { data: morData } = await supabase
+        .from('moradores')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .order('nome');
+
+      const mList = morData || [];
+      setMoradores(mList);
+      const blocos = Array.from(new Set(mList.map((m: any) => m.bloco?.trim()).filter(Boolean))) as string[];
+      blocos.sort();
+      setBlocosDisponiveis(blocos.length > 0 ? blocos : ['A', 'B', 'C', 'D']);
+
+      const { data: colabData } = await supabase
+        .from('colaboradores')
+        .select('*')
+        .eq('condominio_id', usuarioLogado.condominio_id)
+        .order('nome');
+      setColaboradores(colabData || []);
 
       const agora = new Date();
       
@@ -231,6 +263,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
       setModalRetirada(null);
       setRetiranteNome(''); setRetiranteDoc(''); setRetiranteTel(''); setFotoRetiradaUrl(''); setTipoRetirante('Morador');
+      setRetiranteUnidade(''); setRetiranteBloco(''); setRetiranteFuncao(''); setRetiranteEmpresa(''); setFotoDocTerceiroUrl('');
       carregarQuadroChaves();
       setMensagem({ tipo: 'sucesso', texto: 'Empréstimo registrado com sucesso!' });
     } catch (err: any) {
@@ -238,6 +271,23 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const abrirEmprestimo = (chave: any) => {
+    setModalRetirada(chave);
+    setTipoRetirante('Morador');
+    setRetiranteNome('');
+    setRetiranteDoc('');
+    setRetiranteTel('');
+    setRetiranteUnidade(chave.unidade || '');
+    setRetiranteBloco(chave.bloco || '');
+    setRetiranteFuncao('');
+    setRetiranteEmpresa('');
+    setFotoDocTerceiroUrl('');
+    setFotoRetiradaUrl('');
+    setPrazoModo('chave');
+    setPrazoHorasCustom(chave.tempo_limite_horas || 2);
+    setWhatsEmprestimo(null);
   };
 
   const efetivarDevolucao = async (e: React.FormEvent) => {
@@ -383,7 +433,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
               <div className="mt-2 pt-1.5 border-t border-slate-200/60">
                 {chave.status === 'Disponível' ? (
                   <button
-                    onClick={() => setModalRetirada(chave)}
+                    onClick={() => abrirEmprestimo(chave)}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 rounded-md transition cursor-pointer"
                   >
                     Emprestar
@@ -470,21 +520,25 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / AP</label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     value={unidade}
-                    onChange={(e) => setUnidade(e.target.value)}
+                    onChange={(e) => setUnidade(e.target.value.replace(/\D/g, ''))}
                     placeholder="Ex: 101"
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Bloco</label>
-                  <input
-                    type="text"
+                  <select
                     value={bloco}
                     onChange={(e) => setBloco(e.target.value)}
-                    placeholder="Ex: A"
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
-                  />
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                  >
+                    <option value="">Área Comum / Sem Bloco</option>
+                    {blocosDisponiveis.map((b) => (
+                      <option key={b} value={b}>Bloco {b}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -509,117 +563,366 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
         </div>
       )}
 
-      {modalRetirada && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-4 space-y-3 shadow-2xl relative">
-            <button onClick={() => setModalRetirada(null)} className="absolute top-3 right-3 text-slate-400 p-1">
-              <X className="w-4 h-4" />
-            </button>
+      {modalRetirada && (() => {
+        const moradoresDaUnidade = moradores.filter(
+          (m) => m.unidade && String(m.unidade) === String(retiranteUnidade) && (!retiranteBloco || m.bloco === retiranteBloco)
+        );
 
-            <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
-              <Key className="w-4 h-4 text-emerald-600" /> Retirada da Chave {modalRetirada.codigo_chave}
-            </h3>
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-xl max-w-md w-full p-4 space-y-3 shadow-2xl relative my-auto">
+              <button onClick={() => setModalRetirada(null)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-4 h-4" />
+              </button>
 
-            <form onSubmit={efetivarRetirada} className="space-y-2.5">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Tipo de Retirante *</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {['Morador', 'Colaborador', 'Terceiros'].map((tipo) => (
-                    <button
-                      key={tipo}
-                      type="button"
-                      onClick={() => setTipoRetirante(tipo)}
-                      className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition cursor-pointer ${
-                        tipoRetirante === tipo
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      {tipo}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <h3 className="font-bold text-slate-900 text-sm border-b pb-2 flex items-center gap-1.5">
+                <Key className="w-4 h-4 text-emerald-600" /> Retirada da Chave {modalRetirada.codigo_chave}
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {modalRetirada.nome_chave} {modalRetirada.unidade ? `(Ap ${modalRetirada.unidade}${modalRetirada.bloco ? ` Bl.${modalRetirada.bloco}` : ''})` : ''}
+              </p>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Nome do Retirante *</label>
-                <input
-                  type="text"
-                  required
-                  value={retiranteNome}
-                  onChange={(e) => setRetiranteNome(e.target.value)}
-                  placeholder="Ex: Carlos Santos"
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+              <form onSubmit={efetivarRetirada} className="space-y-2.5">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">RG / CPF (Opcional)</label>
-                  <input
-                    type="text"
-                    value={retiranteDoc}
-                    onChange={(e) => setRetiranteDoc(e.target.value)}
-                    placeholder="Ex: 12.345.678-9"
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
-                  />
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Tipo de Retirante *</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {['Morador', 'Colaborador', 'Terceiros'].map((tipo) => (
+                      <button
+                        key={tipo}
+                        type="button"
+                        onClick={() => {
+                          setTipoRetirante(tipo);
+                          setRetiranteNome('');
+                          setRetiranteDoc('');
+                          setRetiranteTel('');
+                        }}
+                        className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition cursor-pointer ${
+                          tipoRetirante === tipo
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        {tipo}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">WhatsApp (Opcional)</label>
-                  <input
-                    type="text"
-                    value={retiranteTel}
-                    onChange={(e) => setRetiranteTel(e.target.value)}
-                    placeholder="Ex: 11940609960"
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs"
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase">Foto da Entrega (Opcional)</label>
-                <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs">
-                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                  {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto (Opcional)'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null, 'chaves_retirada', setFotoRetiradaUrl)}
-                    className="hidden"
-                    disabled={uploadingFoto}
-                  />
-                </label>
+                {/* FORM ESPECÍFICO: MORADOR */}
+                {tipoRetirante === 'Morador' && (
+                  <div className="space-y-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Unidade / AP *</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={retiranteUnidade}
+                          onChange={(e) => setRetiranteUnidade(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Ex: 101"
+                          required
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Bloco</label>
+                        <select
+                          value={retiranteBloco}
+                          onChange={(e) => setRetiranteBloco(e.target.value)}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                        >
+                          <option value="">Selecione...</option>
+                          {blocosDisponiveis.map((b) => (
+                            <option key={b} value={b}>Bloco {b}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
 
-                {fotoRetiradaUrl && (
-                  <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border border-emerald-500">
-                    <img src={fotoRetiradaUrl} alt="Foto Retirada" className="w-full h-full object-cover" />
+                    {moradoresDaUnidade.length > 0 && (
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-emerald-800 uppercase">
+                          Moradores do Ap {retiranteUnidade}:
+                        </label>
+                        <div className="flex flex-wrap gap-1">
+                          {moradoresDaUnidade.map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setRetiranteNome(m.nome);
+                                if (m.telefone) setRetiranteTel(m.telefone);
+                              }}
+                              className="px-2 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-md text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                            >
+                              👤 {m.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Nome do Morador *</label>
+                      <input
+                        type="text"
+                        required
+                        value={retiranteNome}
+                        onChange={(e) => setRetiranteNome(e.target.value)}
+                        placeholder="Nome completo do morador..."
+                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">WhatsApp Morador (Opcional)</label>
+                      <input
+                        type="text"
+                        value={retiranteTel}
+                        onChange={(e) => setRetiranteTel(e.target.value)}
+                        placeholder="Ex: 11999998888"
+                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                      />
+                    </div>
                   </div>
                 )}
-              </div>
 
-              <button
-                type="submit"
-                disabled={loading || uploadingFoto}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg uppercase text-xs transition cursor-pointer"
-              >
-                Efetivar Empréstimo
-              </button>
-            </form>
+                {/* FORM ESPECÍFICO: COLABORADOR */}
+                {tipoRetirante === 'Colaborador' && (
+                  <div className="space-y-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                    {colaboradores.length > 0 && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                          Colaborador Registrado (Opcional):
+                        </label>
+                        <select
+                          onChange={(e) => {
+                            const c = colaboradores.find((x) => x.id === e.target.value);
+                            if (c) {
+                              setRetiranteNome(c.nome);
+                              setRetiranteFuncao(c.cargo || c.funcao || '');
+                              if (c.telefone) setRetiranteTel(c.telefone);
+                            }
+                          }}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+                        >
+                          <option value="">-- Selecione ou digite abaixo --</option>
+                          {colaboradores.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nome} {c.cargo ? `(${c.cargo})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-            {whatsEmprestimo && (
-              <a
-                href={whatsEmprestimo.link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-emerald-700 transition w-full justify-center"
-              >
-                <MessageCircle className="w-3.5 h-3.5" /> Enviar Comprovante no WhatsApp <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Nome do Colaborador *</label>
+                      <input
+                        type="text"
+                        required
+                        value={retiranteNome}
+                        onChange={(e) => setRetiranteNome(e.target.value)}
+                        placeholder="Ex: José Silva (Zelador)"
+                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Função / Cargo</label>
+                        <input
+                          type="text"
+                          value={retiranteFuncao}
+                          onChange={(e) => setRetiranteFuncao(e.target.value)}
+                          placeholder="Ex: Limpeza, Manutenção"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Telefone / WhatsApp</label>
+                        <input
+                          type="text"
+                          value={retiranteTel}
+                          onChange={(e) => setRetiranteTel(e.target.value)}
+                          placeholder="Ex: 11988887777"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* FORM ESPECÍFICO: TERCEIROS */}
+                {tipoRetirante === 'Terceiros' && (
+                  <div className="space-y-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Nome do Retirante *</label>
+                        <input
+                          type="text"
+                          required
+                          value={retiranteNome}
+                          onChange={(e) => setRetiranteNome(e.target.value)}
+                          placeholder="Ex: Marcos Santos"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Empresa / Terceiro *</label>
+                        <input
+                          type="text"
+                          required
+                          value={retiranteEmpresa}
+                          onChange={(e) => setRetiranteEmpresa(e.target.value)}
+                          placeholder="Ex: Enel, Sabesp, Vidraçaria"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Documento (RG / CPF) *</label>
+                        <input
+                          type="text"
+                          required
+                          value={retiranteDoc}
+                          onChange={(e) => setRetiranteDoc(e.target.value)}
+                          placeholder="Ex: 12.345.678-9"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">WhatsApp para Contato</label>
+                        <input
+                          type="text"
+                          value={retiranteTel}
+                          onChange={(e) => setRetiranteTel(e.target.value)}
+                          placeholder="Ex: 11988887777"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Foto Documento Terceiro */}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase">Foto do Documento (RG / CNH)</label>
+                      <label className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 px-2.5 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs">
+                        <Camera className="w-3.5 h-3.5 text-amber-400" />
+                        {uploadingFoto ? 'Processando foto...' : '📷 Tirar Foto do Documento'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null, 'chaves_doc_terceiro', setFotoDocTerceiroUrl)}
+                          className="hidden"
+                          disabled={uploadingFoto}
+                        />
+                      </label>
+
+                      {fotoDocTerceiroUrl && (
+                        <div className="mt-1 w-16 h-16 rounded-lg overflow-hidden border border-amber-400 relative">
+                          <img src={fotoDocTerceiroUrl} alt="Doc Terceiro" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TEMPO LIMITE / PRAZO DE DEVOLUÇÃO FIXO E FLEXÍVEL */}
+                <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                    Tempo Limite / Prazo de Devolução *
+                  </label>
+                  <div className="grid grid-cols-4 gap-1">
+                    {[
+                      { id: 'chave', label: `Padrão (${modalRetirada.tempo_limite_horas || 2}h)` },
+                      { id: '1h', label: '1 hora' },
+                      { id: '2h', label: '2 horas' },
+                      { id: '4h', label: '4 horas' },
+                      { id: '8h', label: '8 horas' },
+                      { id: '12h', label: 'Plantão (12h)' },
+                      { id: '24h', label: '1 dia (24h)' },
+                      { id: 'custom', label: 'Outro...' }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setPrazoModo(opt.id)}
+                        className={`py-1 px-1 text-[10px] font-bold rounded border transition text-center truncate ${
+                          prazoModo === opt.id
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {prazoModo === 'custom' && (
+                    <div className="pt-1 flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-600">Definir Horas:</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="72"
+                        value={prazoHorasCustom}
+                        onChange={(e) => setPrazoHorasCustom(e.target.value)}
+                        className="w-20 p-1 bg-white border border-slate-300 rounded text-xs font-bold text-center"
+                      />
+                      <span className="text-[10px] text-slate-500">horas limite</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Foto da Entrega (Opcional) */}
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase">Foto da Entrega da Chave (Opcional)</label>
+                  <label className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-1.5 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs">
+                    <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                    {uploadingFoto ? 'Processando foto...' : '📷 Foto do Retirante / Chave'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null, 'chaves_retirada', setFotoRetiradaUrl)}
+                      className="hidden"
+                      disabled={uploadingFoto}
+                    />
+                  </label>
+
+                  {fotoRetiradaUrl && (
+                    <div className="mt-1 w-14 h-14 rounded-lg overflow-hidden border border-emerald-500">
+                      <img src={fotoRetiradaUrl} alt="Foto Retirada" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || uploadingFoto}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg uppercase text-xs transition cursor-pointer shadow-2xs"
+                >
+                  Efetivar Empréstimo
+                </button>
+              </form>
+
+              {whatsEmprestimo && (
+                <a
+                  href={whatsEmprestimo.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-emerald-700 transition w-full justify-center"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" /> Enviar Comprovante no WhatsApp <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {modalDevolucao && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">

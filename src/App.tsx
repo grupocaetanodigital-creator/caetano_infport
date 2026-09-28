@@ -11,7 +11,6 @@ import Ocorrencias from './pages/Ocorrencias';
 import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
-import ModalMeuPerfil from './components/ModalMeuPerfil';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -19,6 +18,7 @@ import ControleFonteAcessibilidade from './components/ControleFonteAcessibilidad
 import IndicadorConectividade from './components/IndicadorConectividade';
 import EmblemaInfport from './components/EmblemaInfport';
 import LeitorNFC from './components/LeitorNFC';
+import ModalMeuPerfil from './components/ModalMeuPerfil';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { 
   ShieldCheck, 
@@ -46,23 +46,23 @@ import {
   HardHat,
   PackageCheck,
   ClipboardList,
-  Eye,
-  EyeOff,
   KeyRound,
-  UserCheck
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
+const CHAVE_SESSAO = 'infport_sessao_ativa_v1';
+
 export default function App() {
-  const CHAVE_SESSAO = 'infport_sessao_operador';
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
-  const [restaurandoSessao, setRestaurandoSessao] = useState(true);
-  const [lembrarAcesso, setLembrarAcesso] = useState(true);
-  const [mostrarSenhaLogin, setMostrarSenhaLogin] = useState(false);
-  const [modalMeuPerfilAberto, setModalMeuPerfilAberto] = useState(false);
   const [operador, setOperador] = useState<any | null>(null);
   const [condominio, setCondominio] = useState<any | null>(null);
   const [modalLeitorNfcGlobal, setModalLeitorNfcGlobal] = useState(false);
+  const [modalMeuPerfilAberto, setModalMeuPerfilAberto] = useState(false);
+  const [mostrarSenhaLogin, setMostrarSenhaLogin] = useState(false);
+  const [lembrarAcesso, setLembrarAcesso] = useState(true);
+  const [restaurandoSessao, setRestaurandoSessao] = useState(true);
   
   const [listaCondominios, setListaCondominios] = useState<any[]>([]);
   const [condominioAtivoId, setCondominioAtivoId] = useState('');
@@ -86,51 +86,28 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
+  const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
+  const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
 
-  // Restaurar sessão persistente no carregamento inicial (PWA / Refresh / Mobile)
   useEffect(() => {
     let montado = true;
     const restaurarSessaoSalva = async () => {
       try {
         const sessaoRaw = localStorage.getItem(CHAVE_SESSAO);
-        if (!sessaoRaw) {
-          if (montado) setRestaurandoSessao(false);
-          return;
-        }
-
-        const sessao = JSON.parse(sessaoRaw);
-        if (sessao?.operador?.id) {
-          if (montado) {
-            setOperador(sessao.operador);
-            if (sessao.condominio) setCondominio(sessao.condominio);
-            setCondominioAtivoId(sessao.condominioAtivoId || sessao.operador.condominio_id || '');
-            if (sessao.moduloAtual && sessao.moduloAtual !== 'login') {
-              setModuloAtual(sessao.moduloAtual);
-            }
-          }
-
-          // Validação assíncrona no Supabase para garantir que o operador ainda existe e está ativo
-          try {
-            const { data: opAtual, error: opErr } = await supabase
+        if (sessaoRaw) {
+          const sessao = JSON.parse(sessaoRaw);
+          if (sessao.operadorId) {
+            const { data: opData } = await supabase
               .from('operadores')
-              .select('id, nome, login, nivel_acesso, ativo, condominio_id')
-              .eq('id', sessao.operador.id)
+              .select('*')
+              .eq('id', sessao.operadorId)
+              .eq('ativo', true)
               .maybeSingle();
 
-            if (opErr || !opAtual || opAtual.ativo === false) {
-              console.warn('Sessão invalidada pelo banco:', opErr || 'Operador inativo');
-              localStorage.removeItem(CHAVE_SESSAO);
-              if (montado) {
-                setOperador(null);
-                setCondominio(null);
-                setErro('Sessão expirada ou operador desativado pela administração.');
-              }
-            } else if (montado) {
-              const opCompleto = { ...sessao.operador, ...opAtual };
-              setOperador(opCompleto);
-              
-              // Atualiza condomínio se aplicável
-              const targetCondo = opAtual.condominio_id || sessao.condominioAtivoId;
+            if (opData && montado) {
+              setOperador(opData);
+              const targetCondo = sessao.condominioId || opData.condominio_id;
+              setCondominioAtivoId(targetCondo || '');
               if (targetCondo) {
                 const { data: cData } = await supabase
                   .from('condominios')
@@ -140,12 +117,10 @@ export default function App() {
                 if (cData && montado) setCondominio(cData);
               }
             }
-          } catch (valErr) {
-            console.warn('Erro ao validar operador online (modo offline tolerante):', valErr);
           }
         }
       } catch (err) {
-        console.warn('Falha ao ler sessão local:', err);
+        console.warn('Falha ao restaurar sessão salva:', err);
       } finally {
         if (montado) setRestaurandoSessao(false);
       }
@@ -154,25 +129,6 @@ export default function App() {
     restaurarSessaoSalva();
     return () => { montado = false; };
   }, []);
-
-  // Mantém os dados da sessão local atualizados conforme o usuário navega
-  useEffect(() => {
-    if (!operador) return;
-    try {
-      const sessaoRaw = localStorage.getItem(CHAVE_SESSAO);
-      if (sessaoRaw) {
-        const sessao = JSON.parse(sessaoRaw);
-        sessao.moduloAtual = moduloAtual;
-        sessao.condominioAtivoId = condominioAtivoId;
-        sessao.condominio = condominio;
-        sessao.atualizadoEm = new Date().toISOString();
-        localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
-      }
-    } catch {}
-  }, [moduloAtual, condominioAtivoId, condominio, operador]);
-
-  const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
-  const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
 
   useEffect(() => {
     if (!operador) return;
@@ -366,6 +322,18 @@ export default function App() {
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
       setCondominioAtivoId(opData.condominio_id || '');
+
+      if (lembrarAcesso) {
+        localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+          operadorId: opData.id,
+          login: opData.login,
+          condominioId: opData.condominio_id,
+          salvoEm: new Date().toISOString()
+        }));
+      } else {
+        localStorage.removeItem(CHAVE_SESSAO);
+      }
+
       mudarModulo('dashboard');
     } catch (err: any) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
@@ -375,6 +343,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem(CHAVE_SESSAO);
     setOperador(null);
     setCondominio(null);
     setLogin('');
@@ -509,12 +478,12 @@ export default function App() {
             </nav>
           </div>
 
-          <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+          <div className="p-2.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between gap-1">
             {menuAberto && (
-              <div 
+              <div
                 onClick={() => setModalMeuPerfilAberto(true)}
                 className="flex items-center gap-2 overflow-hidden cursor-pointer hover:opacity-85 transition group"
-                title="Clique para abrir Meu Perfil & Alterar Senha"
+                title="Meu Perfil & Alterar Senha"
               >
                 <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition">
                   {operador.nome?.charAt(0)}
@@ -534,7 +503,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setModalMeuPerfilAberto(true)}
-                className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800 p-2 rounded-xl transition font-bold text-xs"
+                className="text-slate-400 hover:text-emerald-400 hover:bg-slate-800 p-2 rounded-xl transition font-bold text-xs cursor-pointer"
                 title="Meu Perfil & Senha"
               >
                 <KeyRound className="w-4 h-4" />
@@ -542,7 +511,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="bg-red-600/90 hover:bg-red-700 text-white p-2.5 rounded-xl transition font-bold text-xs"
+                className="bg-red-600/90 hover:bg-red-700 text-white p-2 rounded-xl transition font-bold text-xs cursor-pointer"
                 title="Sair do Sistema"
               >
                 <LogOut className="w-4 h-4" />
@@ -897,13 +866,13 @@ export default function App() {
   if (restaurandoSessao) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white">
-        <div className="w-20 h-20 mb-4 animate-pulse flex items-center justify-center">
+        <div className="w-16 h-16 mb-3 animate-pulse flex items-center justify-center">
           <EmblemaInfport tamanho="xl" comBrilho />
         </div>
-        <h1 className="text-xl font-bold tracking-tight">INFPORT 1.0</h1>
+        <h1 className="text-lg font-bold tracking-tight">INFPORT 1.0</h1>
         <p className="text-xs text-slate-400 mt-2 flex items-center gap-2 font-medium">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-          Conectando ao banco de dados e restaurando sessão segura...
+          Restaurando sessão segura...
         </p>
       </div>
     );
@@ -969,7 +938,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setMostrarSenhaLogin(!mostrarSenhaLogin)}
-                className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
                 title={mostrarSenhaLogin ? "Ocultar senha" : "Ver senha"}
               >
                 {mostrarSenhaLogin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}

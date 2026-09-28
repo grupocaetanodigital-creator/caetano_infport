@@ -134,6 +134,16 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
     }
   };
 
+  const blocosDisponiveis = Array.from(new Set(moradores.map((m: any) => m.bloco?.trim()).filter(Boolean))).sort() as string[];
+  const listaBlocos = blocosDisponiveis.length > 0 ? blocosDisponiveis : ['A', 'B', 'C', 'D'];
+
+  const moradoresOrigemFiltrados = moradores.filter(
+    (m) => origemUnidade && m.unidade && String(m.unidade) === String(origemUnidade) && (!origemBloco || m.bloco === origemBloco)
+  );
+  const moradoresDestinoFiltrados = moradores.filter(
+    (m) => destinoUnidade && m.unidade && String(m.unidade) === String(destinoUnidade) && (!destinoBloco || m.bloco === destinoBloco)
+  );
+
   const salvarEntradaCustodia = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!descricaoItem.trim() || !fotoEntradaUrl.trim() || !origemNome.trim() || !destinoNome.trim()) {
@@ -329,24 +339,57 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                         <label className="block text-[10px] font-bold text-slate-600 uppercase">Unidade / AP *</label>
                         <input
                           type="text"
+                          inputMode="numeric"
                           required
                           value={origemUnidade}
-                          onChange={(e) => selecionarOrigemMorador(e.target.value, origemBloco)}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, '');
+                            selecionarOrigemMorador(v, origemBloco);
+                          }}
                           placeholder="Ex: 24"
                           className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
                         />
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-600 uppercase">Bloco</label>
-                        <input
-                          type="text"
+                        <select
                           value={origemBloco}
-                          onChange={(e) => { setOrigemBloco(e.target.value); selecionarOrigemMorador(origemUnidade, e.target.value); }}
-                          placeholder="Ex: A"
-                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
-                        />
+                          onChange={(e) => {
+                            setOrigemBloco(e.target.value);
+                            selecionarOrigemMorador(origemUnidade, e.target.value);
+                          }}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                        >
+                          <option value="">Todos / Sem Bloco</option>
+                          {listaBlocos.map((b) => (
+                            <option key={b} value={b}>Bloco {b}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
+
+                    {moradoresOrigemFiltrados.length > 0 && (
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-emerald-800 uppercase">
+                          Moradores do Ap {origemUnidade}:
+                        </label>
+                        <div className="flex flex-wrap gap-1">
+                          {moradoresOrigemFiltrados.map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setOrigemNome(m.nome);
+                                if (m.telefone) setOrigemWhats(m.telefone);
+                              }}
+                              className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                            >
+                              👤 {m.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 uppercase">Nome do Morador *</label>
@@ -398,24 +441,57 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                         <label className="block text-[11px] font-bold text-slate-600 uppercase">Unidade / AP *</label>
                         <input
                           type="text"
+                          inputMode="numeric"
                           required
                           value={destinoUnidade}
-                          onChange={(e) => selecionarDestinoMorador(e.target.value, destinoBloco)}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, '');
+                            selecionarDestinoMorador(v, destinoBloco);
+                          }}
                           placeholder="Ex: 24"
                           className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
                         />
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 uppercase">Bloco</label>
-                        <input
-                          type="text"
+                        <select
                           value={destinoBloco}
-                          onChange={(e) => { setDestinoBloco(e.target.value); selecionarDestinoMorador(destinoUnidade, e.target.value); }}
-                          placeholder="Ex: A"
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs"
-                        />
+                          onChange={(e) => {
+                            setDestinoBloco(e.target.value);
+                            selecionarDestinoMorador(destinoUnidade, e.target.value);
+                          }}
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                        >
+                          <option value="">Todos / Sem Bloco</option>
+                          {listaBlocos.map((b) => (
+                            <option key={b} value={b}>Bloco {b}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
+
+                    {moradoresDestinoFiltrados.length > 0 && (
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-blue-800 uppercase">
+                          Moradores do Ap {destinoUnidade}:
+                        </label>
+                        <div className="flex flex-wrap gap-1">
+                          {moradoresDestinoFiltrados.map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setDestinoNome(m.nome);
+                                if (m.telefone) setDestinoWhats(m.telefone);
+                              }}
+                              className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                            >
+                              👤 {m.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 uppercase">Nome do Morador Destinatário *</label>
@@ -586,40 +662,50 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
           </div>
 
           {itemSelecionadoSaida && (
-            <form onSubmit={efetivarSaidaCustodia} className="p-5 bg-slate-900 text-white rounded-2xl space-y-4 max-w-2xl animate-in fade-in">
-              <h4 className="font-bold text-sm border-b border-slate-700 pb-2 text-emerald-400">
-                Registrar Retirada — {itemSelecionadoSaida.codigo_custodia} ({itemSelecionadoSaida.descricao})
-              </h4>
+            <form onSubmit={efetivarSaidaCustodia} className="p-3 sm:p-3.5 bg-slate-900 text-white rounded-xl space-y-2.5 max-w-2xl shadow-2xs animate-in fade-in border border-slate-800">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                <h4 className="font-bold text-xs sm:text-sm text-emerald-400 flex items-center gap-1.5">
+                  <PackageCheck className="w-4 h-4 text-emerald-400" />
+                  Retirada: {itemSelecionadoSaida.codigo_custodia} ({itemSelecionadoSaida.descricao})
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setItemSelecionadoSaida(null)}
+                  className="text-slate-400 hover:text-white p-1 text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold uppercase mb-1 text-slate-300">Nome de Quem Retirou *</label>
+                  <label className="block text-[10px] font-bold uppercase mb-0.5 text-slate-300">Nome de Quem Retirou *</label>
                   <input
                     type="text"
                     required
                     value={recebedorNome}
                     onChange={(e) => setRecebedorNome(e.target.value)}
                     placeholder="Ex: Maria (Própria Moradora)"
-                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs"
+                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs font-medium focus:border-emerald-500 transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase mb-1 text-slate-300">Documento / RG (Opcional)</label>
+                  <label className="block text-[10px] font-bold uppercase mb-0.5 text-slate-300">Documento / RG (Opcional)</label>
                   <input
                     type="text"
                     value={recebedorDoc}
                     onChange={(e) => setRecebedorDoc(e.target.value)}
                     placeholder="Ex: 12.345.678-9"
-                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs"
+                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs font-mono focus:border-emerald-500 transition"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold uppercase text-slate-300">Foto do Retirante com o Objeto *</label>
-                <label className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition text-xs shadow-sm">
-                  <Camera className="w-5 h-5" />
-                  {uploadingFoto ? 'Salvando comprovante...' : '📷 Tirar Foto da Devolução / Retirante'}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase text-slate-300">Foto do Retirante com o Objeto *</label>
+                <label className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs border border-slate-700 shadow-2xs">
+                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{uploadingFoto ? 'Salvando comprovante...' : '📷 Tirar Foto da Devolução / Retirante'}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -631,7 +717,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                 </label>
 
                 {fotoSaidaUrl && (
-                  <div className="mt-2 relative w-28 h-28 rounded-lg overflow-hidden border-2 border-emerald-400 shadow-sm">
+                  <div className="mt-1 relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-400 shadow-2xs">
                     <img src={fotoSaidaUrl} alt="Foto Retirada" className="w-full h-full object-cover" />
                   </div>
                 )}
@@ -640,7 +726,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
               <button
                 type="submit"
                 disabled={loading || uploadingFoto}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-4 rounded-xl transition shadow-md uppercase text-xs"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg transition shadow-2xs uppercase text-xs cursor-pointer"
               >
                 Efetivar Baixa de Devolução
               </button>

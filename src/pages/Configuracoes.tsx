@@ -288,8 +288,6 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     }
   };
 
-  const isUuid = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
-
   const carregarLocaisArmazenamento = async () => {
     const targetCondoId = usuarioLogado?.condominio_id;
     if (!targetCondoId) return;
@@ -308,81 +306,82 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         }
       }
 
-      // 2. Busca diretamente da tabela oficial dedicada \x27locais_armazenamento\x27
+      // 2. Tenta buscar da tabela dedicada locais_armazenamento
       const { data: locaisTabela, error: errTabela } = await supabase
         .from('locais_armazenamento')
         .select('*')
         .eq('condominio_id', targetCondoId)
         .order('codigo', { ascending: true });
 
-      if (!errTabela && locaisTabela) {
-        if (locaisTabela.length > 0) {
-          setLocaisArmazenamento(locaisTabela);
-          localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(locaisTabela));
-          return;
-        } else if (!cached) {
-          setLocaisArmazenamento([]);
-        }
+      if (!errTabela && locaisTabela && locaisTabela.length > 0) {
+        setLocaisArmazenamento(locaisTabela);
+        localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(locaisTabela));
+        return;
       }
+
+      // 3. Fallback: Tenta buscar da coluna locais_armazenamento na tabela configuracoes
+      const { data: configData } = await supabase
+        .from('configuracoes')
+        .select('locais_armazenamento')
+        .eq('condominio_id', targetCondoId)
+        .maybeSingle();
+
+      if (configData?.locais_armazenamento && Array.isArray(configData.locais_armazenamento) && configData.locais_armazenamento.length > 0) {
+        setLocaisArmazenamento(configData.locais_armazenamento);
+        localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(configData.locais_armazenamento));
+        return;
+      }
+
+      // 4. Se não existir nada cadastrado ainda, inicializa com os locais padrão
+      setLocaisArmazenamento(LOCAIS_ARMAZENAMENTO_PADRAO);
+      localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(LOCAIS_ARMAZENAMENTO_PADRAO));
     } catch (err) {
       console.error('Erro ao carregar locais de armazenamento:', err);
+      if (locaisArmazenamento.length === 0) {
+        setLocaisArmazenamento(LOCAIS_ARMAZENAMENTO_PADRAO);
+      }
     }
   };
 
-  const popularLocaisPadraoNoBanco = async () => {
-    const targetCondoId = usuarioLogado?.condominio_id;
-    if (!targetCondoId) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione um condomínio ativo para inicializar os locais.' });
-      return;
-    }
-
-    setLoading(true);
-    setMensagem({ tipo: '', texto: '' });
-    try {
-      const novosRegistros = LOCAIS_ARMAZENAMENTO_PADRAO.map(l => ({
-        id: crypto.randomUUID(),
-        condominio_id: targetCondoId,
-        codigo: l.codigo,
-        nome: l.nome,
-        categoria: l.categoria,
-        capacidade: l.capacidade,
-        observacao: l.observacao,
-        ativo: true
-      }));
-
-      const { data, error } = await supabase
-        .from('locais_armazenamento')
-        .insert(novosRegistros)
-        .select();
-
-      if (error) throw error;
-
-      const listaFinal = (data && data.length > 0) ? data : novosRegistros;
-      setLocaisArmazenamento(listaFinal);
-      localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(listaFinal));
-
-      window.dispatchEvent(new CustomEvent('locais_armazenamento_atualizados', {
-        detail: { condominio_id: targetCondoId, locais: listaFinal }
-      }));
-
-      setMensagem({ tipo: 'sucesso', texto: '6 locais de armazenamento padrão inseridos com sucesso no Supabase!' });
-    } catch (err: any) {
-      setMensagem({ tipo: 'erro', texto: `Falha ao popular tabela no banco: ${err.message || 'Erro desconhecido'}` });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const persistirLocaisCache = (novosLocais: LocalArmazenamento[]) => {
+  const persistirLocais = async (novosLocais: LocalArmazenamento[]) => {
     const targetCondoId = usuarioLogado?.condominio_id;
     if (!targetCondoId) return;
 
     setLocaisArmazenamento(novosLocais);
     localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(novosLocais));
 
+    // Notifica outros módulos (como Encomendas) em tempo real
     window.dispatchEvent(new CustomEvent('locais_armazenamento_atualizados', {
       detail: { condominio_id: targetCondoId, locais: novosLocais }
     }));
+
+    // Tenta salvar no Supabase
+    try {
+      // Salva na tabela configuracoes (JSONB)
+      await supabase
+        .from('configuracoes')
+        .upsert([
+          { condominio_id: targetCondoId, locais_armazenamento: novosLocais }
+        ], { onConflict: 'condominio_id' });
+
+      // Salva na tabela dedicada se existir
+      await supabase
+        .from('locais_armazenamento')
+        .upsert(
+          novosLocais.map(l => ({
+            id: l.id && l.id.length > 10 ? l.id : undefined,
+            condominio_id: targetCondoId,
+            codigo: l.codigo,
+            nome: l.nome,
+            categoria: l.categoria,
+            capacidade: l.capacidade || '',
+            observacao: l.observacao || '',
+            ativo: l.ativo
+          }))
+        );
+    } catch (e) {
+      console.warn('Aviso de persistência de locais:', e);
+    }
   };
 
   const abrirModalNovoLocal = () => {
@@ -406,152 +405,73 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       categoria: local.categoria || 'Prateleira',
       capacidade: local.capacidade || '',
       observacao: local.observacao || '',
-      ativo: local.ativo ?? true
+      ativo: local.ativo
     });
     setModalLocalAberto(true);
   };
 
   const salvarLocalArmazenamento = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetCondoId = usuarioLogado?.condominio_id;
-    if (!targetCondoId) {
-      setMensagem({ tipo: 'erro', texto: 'Nenhum condomínio ativo selecionado.' });
-      return;
-    }
-
     if (!formLocal.codigo.trim() || !formLocal.nome.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Informe o código e o nome do local de armazenamento.' });
       return;
     }
 
     const codigoFormatado = formLocal.codigo.trim().toUpperCase();
-    setLoading(true);
+    let atualizados: LocalArmazenamento[] = [];
 
-    try {
-      if (editandoLocalId) {
-        if (isUuid(editandoLocalId)) {
-          const { error } = await supabase
-            .from('locais_armazenamento')
-            .update({
-              codigo: codigoFormatado,
-              nome: formLocal.nome.trim(),
-              categoria: formLocal.categoria,
-              capacidade: formLocal.capacidade.trim(),
-              observacao: formLocal.observacao.trim(),
-              ativo: formLocal.ativo
-            })
-            .eq('id', editandoLocalId);
-
-          if (error) throw error;
-        }
-
-        const atualizados = locaisArmazenamento.map(l => {
-          if (l.id === editandoLocalId) {
-            return {
-              ...l,
-              codigo: codigoFormatado,
-              nome: formLocal.nome.trim(),
-              categoria: formLocal.categoria,
-              capacidade: formLocal.capacidade.trim(),
-              observacao: formLocal.observacao.trim(),
-              ativo: formLocal.ativo
-            };
-          }
-          return l;
-        });
-
-        persistirLocaisCache(atualizados);
-        setMensagem({ tipo: 'sucesso', texto: `Local "${formLocal.nome}" atualizado na tabela com sucesso!` });
-      } else {
-        const novoId = crypto.randomUUID();
-        const novoRegistro: LocalArmazenamento = {
-          id: novoId,
-          codigo: codigoFormatado,
-          nome: formLocal.nome.trim(),
-          categoria: formLocal.categoria,
-          capacidade: formLocal.capacidade.trim(),
-          observacao: formLocal.observacao.trim(),
-          ativo: formLocal.ativo
-        };
-
-        const { error } = await supabase
-          .from('locais_armazenamento')
-          .insert([{
-            id: novoId,
-            condominio_id: targetCondoId,
+    if (editandoLocalId) {
+      atualizados = locaisArmazenamento.map(l => {
+        if (l.id === editandoLocalId) {
+          return {
+            ...l,
             codigo: codigoFormatado,
             nome: formLocal.nome.trim(),
             categoria: formLocal.categoria,
             capacidade: formLocal.capacidade.trim(),
             observacao: formLocal.observacao.trim(),
             ativo: formLocal.ativo
-          }]);
-
-        if (error) throw error;
-
-        const atualizados = [...locaisArmazenamento, novoRegistro];
-        persistirLocaisCache(atualizados);
-        setMensagem({ tipo: 'sucesso', texto: `Novo local "${formLocal.nome}" cadastrado com sucesso no Supabase!` });
-      }
-
-      setModalLocalAberto(false);
-    } catch (err: any) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao gravar local no banco: ${err.message || 'Erro desconhecido'}` });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleStatusLocal = async (id: string) => {
-    const targetCondoId = usuarioLogado?.condominio_id;
-    const local = locaisArmazenamento.find(l => l.id === id);
-    if (!local) return;
-
-    const novoStatus = !local.ativo;
-
-    try {
-      if (isUuid(id)) {
-        await supabase
-          .from('locais_armazenamento')
-          .update({ ativo: novoStatus })
-          .eq('id', id);
-      }
-
-      const atualizados = locaisArmazenamento.map(l => {
-        if (l.id === id) {
-          return { ...l, ativo: novoStatus };
+          };
         }
         return l;
       });
-
-      persistirLocaisCache(atualizados);
-    } catch (err) {
-      console.warn('Erro ao alternar status do local:', err);
+      setMensagem({ tipo: 'sucesso', texto: `Local "${formLocal.nome}" atualizado na tabela com sucesso!` });
+    } else {
+      const novoLocal: LocalArmazenamento = {
+        id: Date.now().toString(),
+        codigo: codigoFormatado,
+        nome: formLocal.nome.trim(),
+        categoria: formLocal.categoria,
+        capacidade: formLocal.capacidade.trim(),
+        observacao: formLocal.observacao.trim(),
+        ativo: formLocal.ativo
+      };
+      atualizados = [...locaisArmazenamento, novoLocal];
+      setMensagem({ tipo: 'sucesso', texto: `Novo local "${formLocal.nome}" cadastrado na tabela!` });
     }
+
+    await persistirLocais(atualizados);
+    setModalLocalAberto(false);
+  };
+
+  const toggleStatusLocal = async (id: string) => {
+    const atualizados = locaisArmazenamento.map(l => {
+      if (l.id === id) {
+        return { ...l, ativo: !l.ativo };
+      }
+      return l;
+    });
+    await persistirLocais(atualizados);
   };
 
   const excluirLocalArmazenamento = async (id: string) => {
-    const targetCondoId = usuarioLogado?.condominio_id;
     const local = locaisArmazenamento.find(l => l.id === id);
-    if (!window.confirm(`Tem certeza que deseja remover o local "${local?.nome || id}" da tabela do banco de dados?`)) return;
+    if (!window.confirm(`Tem certeza que deseja remover o local "${local?.nome || id}" da tabela?`)) return;
 
-    try {
-      if (isUuid(id)) {
-        const { error } = await supabase
-          .from('locais_armazenamento')
-          .delete()
-          .eq('id', id);
-        if (error) throw error;
-      }
-
-      const atualizados = locaisArmazenamento.filter(l => l.id !== id);
-      persistirLocaisCache(atualizados);
-      setMensagem({ tipo: 'sucesso', texto: 'Local de armazenamento removido da tabela com sucesso!' });
-    } catch (err: any) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao remover do Supabase: ${err.message}` });
-    }
+    const atualizados = locaisArmazenamento.filter(l => l.id !== id);
+    await persistirLocais(atualizados);
+    setMensagem({ tipo: 'sucesso', texto: 'Local de armazenamento removido da tabela com sucesso!' });
   };
-
 
   const salvarParametrizacao = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1393,25 +1313,13 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={popularLocaisPadraoNoBanco}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 shadow-sm transition whitespace-nowrap"
-                  title="Popular tabela locais_armazenamento no Supabase com os 6 locais padrão"
-                >
-                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                  Popular Locais Padrão
-                </button>
-                <button
-                  type="button"
-                  onClick={abrirModalNovoLocal}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 shadow-sm transition whitespace-nowrap"
-                >
-                  <Plus className="w-4 h-4" /> Novo Local de Guarda
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={abrirModalNovoLocal}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 shadow-sm transition whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" /> Novo Local de Guarda
+              </button>
             </div>
 
             {/* Métricas Rápidas */}
@@ -1554,29 +1462,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
             </div>
 
             {locaisArmazenamento.length === 0 && (
-              <div className="p-8 sm:p-12 text-center space-y-3 bg-slate-50/50">
-                <Boxes className="w-12 h-12 text-slate-300 mx-auto" />
-                <h5 className="font-bold text-slate-700 text-sm">Tabela locais_armazenamento vazia no banco</h5>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  A tabela <code>locais_armazenamento</code> no Supabase ainda não possui registros para este condomínio. Você pode cadastrar manualmente ou popular instantaneamente os 6 locais recomendados (Prateleiras, Armário, Gaveta, Chão, Bancada) com 1 clique!
-                </p>
-                <div className="pt-2 flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={popularLocaisPadraoNoBanco}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-sm transition cursor-pointer"
-                  >
-                    <Sparkles className="w-4 h-4" /> Popular com 6 Locais Padrão no Supabase
-                  </button>
-                  <button
-                    type="button"
-                    onClick={abrirModalNovoLocal}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-sm transition cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" /> Criar Novo Local
-                  </button>
-                </div>
+              <div className="p-8 text-center text-slate-400 text-xs">
+                Nenhum local cadastrado na tabela. Clique em "+ Novo Local de Guarda" para criar.
               </div>
             )}
           </div>

@@ -37,14 +37,6 @@ export const CANONICAL_SCHEMA_MAP: TableDiagnostic[] = [
     notes: 'As tabelas avulsas "blocos" e "unidades" são legadas; moradores armazena diretamente bloco e unidade.'
   },
   {
-    canonicalName: 'locais_armazenamento',
-    duplicateOrLegacyNames: [],
-    purpose: 'Locais físicos de armazenamento e triagem de encomendas na portaria (prateleiras, armários, gavetas)',
-    category: 'Módulo 02 - Encomendas',
-    status: 'checking',
-    notes: 'Tabela oficial de locais de guarda na portaria com código, nome, categoria e capacidade.'
-  },
-  {
     canonicalName: 'encomendas_itens',
     duplicateOrLegacyNames: ['encomendas'],
     purpose: 'Itens individuais triados e retidos na portaria',

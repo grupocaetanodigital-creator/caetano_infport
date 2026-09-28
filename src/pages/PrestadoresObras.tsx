@@ -105,6 +105,42 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     });
   };
 
+  const uploadFoto = async (file: File | null, callback: (url: string) => void) => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
+      const fileName = `prestadores/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('encomendas')
+        .upload(fileName, file);
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage
+          .from('encomendas')
+          .getPublicUrl(fileName);
+        callback(urlData.publicUrl);
+        setMensagem({ tipo: 'sucesso', texto: 'Foto capturada com sucesso!' });
+      } else {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          callback(reader.result as string);
+          setMensagem({ tipo: 'sucesso', texto: 'Foto salva com sucesso!' });
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        callback(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCadastrar = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -245,17 +281,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          {/* Botão de Destaque: Leitor OCR com Câmera */}
-          <button
-            type="button"
-            onClick={() => setModalOcrAberto(true)}
-            className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span>Ler Documento (OCR)</span>
-          </button>
-
-          {/* Botão Novo Prestador Manual */}
+          {/* Botão Principal: Novo Cadastro Direto */}
           <button
             type="button"
             onClick={() => {
@@ -266,9 +292,20 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
               setFotoRosto('');
               setModalCadastro(true);
             }}
-            className="flex-1 sm:flex-initial bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 transition cursor-pointer"
+            className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
           >
-            <Plus className="w-3.5 h-3.5" /> <span>Novo Manual</span>
+            <Plus className="w-3.5 h-3.5" /> <span>Cadastrar Prestador</span>
+          </button>
+
+          {/* Botão Auxiliar Opcional: Leitor OCR com Câmera */}
+          <button
+            type="button"
+            onClick={() => setModalOcrAberto(true)}
+            className="flex-1 sm:flex-initial bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            title="Preenchimento automático via câmera ou upload do documento"
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Preencher via OCR</span>
           </button>
         </div>
       </div>
@@ -568,6 +605,71 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 </div>
               </div>
 
+              {/* Captura Direta de Fotos do Documento e do Profissional (Sem burocracia) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                    Foto do Documento (RG / CNH)
+                  </label>
+                  <label className="w-full bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold py-1.5 px-2.5 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs shadow-2xs">
+                    <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{fotoDocumento ? '📷 Alterar Foto Doc' : '📷 Tirar Foto Doc'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null, setFotoDocumento)}
+                      className="hidden"
+                      disabled={loading}
+                    />
+                  </label>
+                  {fotoDocumento && (
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-2xs mt-1">
+                      <img src={fotoDocumento} alt="Doc" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFotoDocumento('')}
+                        className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 cursor-pointer shadow-xs"
+                        title="Remover foto"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                    Foto do Rosto / Crachá
+                  </label>
+                  <label className="w-full bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold py-1.5 px-2.5 rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition text-xs shadow-2xs">
+                    <Camera className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{fotoRosto ? '📷 Alterar Rosto' : '📷 Tirar Foto Rosto'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => uploadFoto(e.target.files ? e.target.files[0] : null, setFotoRosto)}
+                      className="hidden"
+                      disabled={loading}
+                    />
+                  </label>
+                  {fotoRosto && (
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-blue-500 shadow-2xs mt-1">
+                      <img src={fotoRosto} alt="Rosto" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFotoRosto('')}
+                        className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 cursor-pointer shadow-xs"
+                        title="Remover foto"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Checkbox Serviço Condomínio */}
               <div className="bg-purple-50 p-2 rounded-lg border border-purple-200 flex items-center justify-between">
                 <div>
@@ -599,9 +701,10 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                     <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / Apto *</label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       required={!atendeCondominio}
                       value={unidadeDestino}
-                      onChange={(e) => setUnidadeDestino(e.target.value)}
+                      onChange={(e) => setUnidadeDestino(e.target.value.replace(/\D/g, ''))}
                       placeholder="Ex: 102"
                       className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium focus:border-emerald-500 transition"
                     />
