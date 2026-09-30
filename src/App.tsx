@@ -11,6 +11,7 @@ import Ocorrencias from './pages/Ocorrencias';
 import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
+import HistoricoAbsoluto from './pages/HistoricoAbsoluto';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -21,6 +22,7 @@ import LeitorNFC from './components/LeitorNFC';
 import ModalMeuPerfil from './components/ModalMeuPerfil';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
+import { registrarAtividade } from './services/auditoriaService';
 import { 
   ShieldCheck, 
   Lock, 
@@ -49,7 +51,8 @@ import {
   ClipboardList,
   KeyRound,
   Eye,
-  EyeOff
+  EyeOff,
+  History
 } from 'lucide-react';
 
 const CHAVE_SESSAO = 'infport_sessao_ativa_v1';
@@ -342,6 +345,18 @@ export default function App() {
         localStorage.removeItem(CHAVE_SESSAO);
       }
 
+      // Registra login no Histórico Absoluto
+      registrarAtividade({
+        modulo: 'Sistema',
+        acao: 'LOGIN',
+        descricao: `Operador ${opData.nome || opData.login} iniciou sessão no sistema.`,
+        detalhes: { operadorId: opData.id, perfil: opData.perfil, condominioId: opData.condominio_id },
+        operador_nome: opData.nome || opData.login,
+        operador_id: opData.id,
+        operador_login: opData.login,
+        condominio_id: opData.condominio_id
+      });
+
       mudarModulo('dashboard');
     } catch (err: any) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
@@ -351,6 +366,19 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (operador) {
+      registrarAtividade({
+        modulo: 'Sistema',
+        acao: 'LOGOUT',
+        descricao: `Operador ${operador.nome || operador.login} encerrou a sessão.`,
+        detalhes: { operadorId: operador.id, login: operador.login },
+        operador_nome: operador.nome || operador.login,
+        operador_id: operador.id,
+        operador_login: operador.login,
+        condominio_id: operador.condominio_id
+      });
+    }
+
     localStorage.removeItem(CHAVE_SESSAO);
     setOperador(null);
     setCondominio(null);
@@ -386,6 +414,7 @@ export default function App() {
     { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
     { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
     { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
+    { id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   ];
 
   // Se o módulo ativo no momento for desativado nas flags, redireciona para o dashboard
@@ -766,6 +795,13 @@ export default function App() {
             )}
             {moduloAtual === 'cadastros' && (
               <Cadastros usuarioLogado={operadorContextoGlobal} />
+            )}
+            {moduloAtual === 'historico_absoluto' && (
+              <HistoricoAbsoluto 
+                operadorLogado={operadorContextoGlobal} 
+                condominioAtivo={condominio} 
+                listaCondominios={listaCondominios} 
+              />
             )}
             {moduloAtual === 'configuracoes' && podeAcessarConfiguracoes && (
               <Configuracoes 
