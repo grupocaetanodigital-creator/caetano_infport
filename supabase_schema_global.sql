@@ -418,6 +418,29 @@ CREATE TABLE IF NOT EXISTS agenda_emergencia (
 );
 
 -- ==============================================================================
+-- 18.1. TABELA: historico_absoluto (Auditoria Global do Sistema em Tempo Real)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS historico_absoluto (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  condominio_id UUID,
+  operador_id UUID,
+  operador_nome TEXT NOT NULL,
+  operador_login TEXT,
+  modulo TEXT NOT NULL,
+  acao TEXT NOT NULL,
+  descricao TEXT NOT NULL,
+  detalhes JSONB DEFAULT '{}'::jsonb,
+  ip TEXT,
+  criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hist_abs_condominio ON historico_absoluto(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_modulo ON historico_absoluto(modulo);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_acao ON historico_absoluto(acao);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_operador ON historico_absoluto(operador_id);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_criado_em ON historico_absoluto(criado_em DESC);
+
+-- ==============================================================================
 -- 19. SANEAMENTO SEGURO: MIGRAÇÃO E LIMPEZA DE TABELAS DUPLICADAS / FANTASMAS
 -- ==============================================================================
 -- Copia materiais antigos para materiais_posto caso a tabela antiga exista
@@ -489,6 +512,7 @@ ALTER TABLE prestadores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE configuracoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE templates_whatsapp ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agenda_emergencia ENABLE ROW LEVEL SECURITY;
+ALTER TABLE historico_absoluto ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de acesso total para as operações do sistema da portaria
 DO $$

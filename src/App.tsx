@@ -1044,67 +1044,7 @@ export default function App() {
             {loading ? 'Autenticando...' : 'Entrar no Sistema'}
           </button>
         </form>
-
-        {/* Acesso Rápido a Contas Cadastradas no Banco */}
-        <div className="mt-5 pt-4 border-t border-slate-100">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
-            Acesso Rápido para Testes & Demonstração
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => { setLogin('admin'); setSenha('2468'); }}
-              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
-            >
-              <div className="font-bold text-slate-800">admin</div>
-              <div className="text-[10px] text-slate-500">Administrador Geral</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLogin('Laurindo'); setSenha('2468'); }}
-              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
-            >
-              <div className="font-bold text-slate-800">Laurindo</div>
-              <div className="text-[10px] text-slate-500">Sr. Laurindo Caetano</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLogin('jaq'); setSenha('918802'); }}
-              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
-            >
-              <div className="font-bold text-slate-800">jaq</div>
-              <div className="text-[10px] text-slate-500">Jaqueline (Admin)</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLogin('MTESTE'); setSenha('681487'); }}
-              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
-            >
-              <div className="font-bold text-slate-800">MTESTE</div>
-              <div className="text-[10px] text-slate-500">Maria Teste (Portaria)</div>
-            </button>
-          </div>
-        </div>
-
-        {/* Botão de Auditoria e Diagnóstico do Supabase na tela inicial */}
-        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-          <button
-            type="button"
-            onClick={() => setModalSupabaseDoctorAberto(true)}
-            className="flex items-center gap-1.5 text-sky-600 hover:text-sky-800 font-bold hover:underline transition cursor-pointer"
-          >
-            <Database className="w-4 h-4 text-sky-500" />
-            <span>Auditoria & Doctor Supabase</span>
-          </button>
-          <span className="text-slate-400 font-mono text-[11px]">PostgREST v2</span>
-        </div>
       </div>
-
-      {/* Modal do Supabase Doctor acessível da tela de Login */}
-      <SupabaseDoctorModal
-        isOpen={modalSupabaseDoctorAberto}
-        onClose={() => setModalSupabaseDoctorAberto(false)}
-      />
 
       <IndicadorConectividade />
       <OfflineIndicator />

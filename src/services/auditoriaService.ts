@@ -26,12 +26,14 @@ const CHAVE_STORAGE_HISTORICO = 'infport_historico_absoluto_cache_v1';
 const LIMITE_CACHE_LOCAL = 1000;
 
 export const SQL_CRIACAO_HISTORICO_ABSOLUTO = `-- ====================================================================
--- INFPORT 1.0 - TABELA DE HISTÓRICO ABSOLUTO & AUDITORIA EM TEMPO REAL
+-- INFPORT 1.0 - TABELA DEFINITIVA DE HISTÓRICO ABSOLUTO & AUDITORIA
 -- ====================================================================
--- Execute este script no SQL Editor do seu painel Supabase para criar
--- a tabela definitiva de rastreamento de todas as atividades.
+-- Execute este script no SQL Editor do seu painel Supabase:
+-- https://supabase.com/dashboard/project/_/sql
 
-CREATE TABLE IF NOT EXISTS historico_absoluto (
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.historico_absoluto (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID,
   operador_id UUID,
@@ -46,27 +48,42 @@ CREATE TABLE IF NOT EXISTS historico_absoluto (
 );
 
 -- Índices de alta performance para busca e filtros rápidos
-CREATE INDEX IF NOT EXISTS idx_historico_absoluto_condominio ON historico_absoluto(condominio_id);
-CREATE INDEX IF NOT EXISTS idx_historico_absoluto_modulo ON historico_absoluto(modulo);
-CREATE INDEX IF NOT EXISTS idx_historico_absoluto_acao ON historico_absoluto(acao);
-CREATE INDEX IF NOT EXISTS idx_historico_absoluto_operador ON historico_absoluto(operador_id);
-CREATE INDEX IF NOT EXISTS idx_historico_absoluto_criado_em ON historico_absoluto(criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_condominio ON public.historico_absoluto(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_modulo ON public.historico_absoluto(modulo);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_acao ON public.historico_absoluto(acao);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_operador ON public.historico_absoluto(operador_id);
+CREATE INDEX IF NOT EXISTS idx_hist_abs_criado_em ON public.historico_absoluto(criado_em DESC);
 
 -- Habilitar RLS (Row Level Security)
-ALTER TABLE historico_absoluto ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.historico_absoluto ENABLE ROW LEVEL SECURITY;
 
--- Política de Leitura e Inserção para operadores autenticados/anon do sistema
-CREATE POLICY "Permitir leitura de historico_absoluto" 
-ON historico_absoluto FOR SELECT USING (true);
+-- Política de Acesso Total para a Portaria
+DROP POLICY IF EXISTS "Acesso total portaria historico_absoluto" ON public.historico_absoluto;
+CREATE POLICY "Acesso total portaria historico_absoluto" 
+  ON public.historico_absoluto 
+  FOR ALL 
+  USING (true) 
+  WITH CHECK (true);
 
-CREATE POLICY "Permitir insercao de historico_absoluto" 
-ON historico_absoluto FOR INSERT WITH CHECK (true);
+-- Habilitar Realtime do Supabase com proteção contra duplicação
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'historico_absoluto'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.historico_absoluto;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Publicação supabase_realtime já configurada.';
+END $$;
 
-CREATE POLICY "Permitir exclusao controlada de historico_absoluto apenas por adm" 
-ON historico_absoluto FOR DELETE USING (true);
+COMMIT;
 
--- Habilitar Realtime para a tabela historico_absoluto
-ALTER PUBLICATION supabase_realtime ADD TABLE historico_absoluto;
+-- Recarregar o cache do PostgREST imediatamente
+NOTIFY pgrst, 'reload schema';
 `;
 
 /**
@@ -269,9 +286,15 @@ export async function registrarAtividade(params: {
 
   // 3. Persistência na tabela do Supabase (assíncrona e resiliente)
   try {
+    const sanitizeUuid = (val: any): string | null => {
+      if (!val || typeof val !== 'string') return null;
+      const limpo = val.trim();
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(limpo) ? limpo : null;
+    };
+
     const payloadSupabase = {
-      condominio_id: registro.condominio_id,
-      operador_id: registro.operador_id,
+      condominio_id: sanitizeUuid(registro.condominio_id),
+      operador_id: sanitizeUuid(registro.operador_id),
       operador_nome: registro.operador_nome,
       operador_login: registro.operador_login,
       modulo: registro.modulo,
