@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -106,21 +107,27 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido (sem comentários e sem bloco de c
 });
 
 async function start() {
+  const server = http.createServer(app);
+
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(process.cwd(), 'dist')));
     app.get('*', (_req, res) => {
       res.sendFile(path.resolve(process.cwd(), 'dist', 'index.html'));
     });
   } else {
+    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   }
 
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`[INFPORT 1.0] Servidor com OCR Gemini rodando em http://localhost:${port}`);
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`[INFPORT 1.0] Servidor rodando em http://localhost:${port}`);
   });
 }
 

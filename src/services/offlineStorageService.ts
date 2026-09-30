@@ -55,7 +55,8 @@ export function obterDataUltimoCache(chave: string, condominioId: string = 'glob
  * Registra o Service Worker do PWA
  */
 export async function registrarPwaServiceWorker(): Promise<void> {
-  if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  // O Service Worker só deve ser ativado em build de produção para evitar conflitos no iframe de desenvolvimento
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env?.PROD) {
     try {
       // Import dinâmico do virtual:pwa-register fornecido pelo vite-plugin-pwa
       const { registerSW } = await import('virtual:pwa-register');
