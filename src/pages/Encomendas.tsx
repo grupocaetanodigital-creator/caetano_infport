@@ -32,6 +32,7 @@ interface EncomendasProps {
 }
 
 export default function Encomendas({ usuarioLogado }: EncomendasProps) {
+  const idCondominioAtivo = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id || '';
   const [etapa, setEtapa] = useState<'1' | '2' | '3'>('1');
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -603,7 +604,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_id: usuarioLogado?.id,
         operador_login: usuarioLogado?.login,
-        condominio_id: idCondominioAtivo
+        condominio_id: usuarioLogado?.condominio_id
       });
 
       const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Local Físico de Guarda: ${localArmazenar}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria informando seu apartamento!`;
@@ -1047,7 +1048,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_id: usuarioLogado?.id,
         operador_login: usuarioLogado?.login,
-        condominio_id: idCondominioAtivo
+        condominio_id: usuarioLogado?.condominio_id
       });
 
       const primeiroItem = todosItensRetidos.find(i => i.id === itensSelecionadosIds[0]);

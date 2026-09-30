@@ -126,6 +126,13 @@ async function start() {
       },
       appType: 'spa',
     });
+    // Garante que o navegador e o iframe do AI Studio sempre recebam a versão atualizada
+    app.use((_req, res, next) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      next();
+    });
     app.use(vite.middlewares);
   }
 

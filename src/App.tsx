@@ -20,6 +20,7 @@ import IndicadorConectividade from './components/IndicadorConectividade';
 import EmblemaInfport from './components/EmblemaInfport';
 import LeitorNFC from './components/LeitorNFC';
 import ModalMeuPerfil from './components/ModalMeuPerfil';
+import SupabaseDoctorModal from './components/SupabaseDoctorModal';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
 import { registrarAtividade } from './services/auditoriaService';
@@ -64,6 +65,7 @@ export default function App() {
   const [condominio, setCondominio] = useState<any | null>(null);
   const [modalLeitorNfcGlobal, setModalLeitorNfcGlobal] = useState(false);
   const [modalMeuPerfilAberto, setModalMeuPerfilAberto] = useState(false);
+  const [modalSupabaseDoctorAberto, setModalSupabaseDoctorAberto] = useState(false);
   const [mostrarSenhaLogin, setMostrarSenhaLogin] = useState(false);
   const [lembrarAcesso, setLembrarAcesso] = useState(true);
   const [restaurandoSessao, setRestaurandoSessao] = useState(true);
@@ -95,6 +97,12 @@ export default function App() {
 
   useEffect(() => {
     let montado = true;
+
+    // Timer de segurança para NUNCA travar a tela em caso de lentidão de rede
+    const safetyTimer = setTimeout(() => {
+      if (montado) setRestaurandoSessao(false);
+    }, 800);
+
     const restaurarSessaoSalva = async () => {
       try {
         const sessaoRaw = localStorage.getItem(CHAVE_SESSAO);
@@ -131,7 +139,10 @@ export default function App() {
     };
 
     restaurarSessaoSalva();
-    return () => { montado = false; };
+    return () => {
+      montado = false;
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   // Garante a autonomia de 3 horas em cache local para o condomínio ativo
@@ -205,6 +216,14 @@ export default function App() {
       window.removeEventListener('modulos_atualizados', handleAtualizacaoModulos);
     };
   }, [operador?.condominio_id, condominioAtivoId, eAdmin]);
+
+  // Mantém a variável global idCondominioAtivo sempre sincronizada para prevenir ReferenceError em todo o sistema
+  useEffect(() => {
+    const idAtivo = condominioAtivoId || operador?.condominio_id || '';
+    if (typeof window !== 'undefined') {
+      (window as any).idCondominioAtivo = idAtivo;
+    }
+  }, [condominioAtivoId, operador?.condominio_id]);
 
   const carregarCondominiosHeader = async () => {
     try {
@@ -667,6 +686,15 @@ export default function App() {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
+                onClick={() => setModalSupabaseDoctorAberto(true)}
+                className="p-1.5 text-sky-400 hover:text-white bg-slate-800 hover:bg-sky-600 rounded-lg transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                title="Diagnóstico & Sincronização do Supabase"
+              >
+                <Database className="w-4 h-4 text-sky-400" />
+                <span className="hidden lg:inline text-[11px]">Banco Supabase</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setModalMeuPerfilAberto(true)}
                 className="p-1.5 text-slate-300 hover:text-emerald-400 bg-slate-800 hover:bg-slate-700 rounded-lg transition cursor-pointer"
                 title="Meu Perfil & Senha"
@@ -903,6 +931,12 @@ export default function App() {
           />
         )}
 
+        {/* Modal Global do Supabase Doctor */}
+        <SupabaseDoctorModal
+          isOpen={modalSupabaseDoctorAberto}
+          onClose={() => setModalSupabaseDoctorAberto(false)}
+        />
+
       </div>
     );
   }
@@ -1011,11 +1045,66 @@ export default function App() {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500 font-medium">
-          <span>INFPORT 1.0 — Guarita</span>
-          <span>Sistema Operacional</span>
+        {/* Acesso Rápido a Contas Cadastradas no Banco */}
+        <div className="mt-5 pt-4 border-t border-slate-100">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
+            Acesso Rápido para Testes & Demonstração
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => { setLogin('admin'); setSenha('2468'); }}
+              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
+            >
+              <div className="font-bold text-slate-800">admin</div>
+              <div className="text-[10px] text-slate-500">Administrador Geral</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLogin('Laurindo'); setSenha('2468'); }}
+              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
+            >
+              <div className="font-bold text-slate-800">Laurindo</div>
+              <div className="text-[10px] text-slate-500">Sr. Laurindo Caetano</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLogin('jaq'); setSenha('918802'); }}
+              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
+            >
+              <div className="font-bold text-slate-800">jaq</div>
+              <div className="text-[10px] text-slate-500">Jaqueline (Admin)</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLogin('MTESTE'); setSenha('681487'); }}
+              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-left transition cursor-pointer"
+            >
+              <div className="font-bold text-slate-800">MTESTE</div>
+              <div className="text-[10px] text-slate-500">Maria Teste (Portaria)</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Botão de Auditoria e Diagnóstico do Supabase na tela inicial */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+          <button
+            type="button"
+            onClick={() => setModalSupabaseDoctorAberto(true)}
+            className="flex items-center gap-1.5 text-sky-600 hover:text-sky-800 font-bold hover:underline transition cursor-pointer"
+          >
+            <Database className="w-4 h-4 text-sky-500" />
+            <span>Auditoria & Doctor Supabase</span>
+          </button>
+          <span className="text-slate-400 font-mono text-[11px]">PostgREST v2</span>
         </div>
       </div>
+
+      {/* Modal do Supabase Doctor acessível da tela de Login */}
+      <SupabaseDoctorModal
+        isOpen={modalSupabaseDoctorAberto}
+        onClose={() => setModalSupabaseDoctorAberto(false)}
+      />
 
       <IndicadorConectividade />
       <OfflineIndicator />

@@ -52,28 +52,16 @@ export function obterDataUltimoCache(chave: string, condominioId: string = 'glob
 }
 
 /**
- * Registra o Service Worker do PWA
+ * Registra o Service Worker do PWA usando a API padrão do navegador
  */
 export async function registrarPwaServiceWorker(): Promise<void> {
   // O Service Worker só deve ser ativado em build de produção para evitar conflitos no iframe de desenvolvimento
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env?.PROD) {
     try {
-      // Import dinâmico do virtual:pwa-register fornecido pelo vite-plugin-pwa
-      const { registerSW } = await import('virtual:pwa-register');
-      registerSW({
-        immediate: true,
-        onNeedRefresh() {
-          console.log('[PWA] Nova versão do INFPORT disponível. Atualizando automaticamente...');
-        },
-        onOfflineReady() {
-          console.log('[PWA] INFPORT pronto para funcionamento offline na portaria!');
-        },
-        onRegisterError(error: any) {
-          console.warn('[PWA] Erro no registro do Service Worker:', error);
-        }
-      });
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      console.log('[PWA] INFPORT pronto para funcionamento offline na portaria! Escopo:', reg.scope);
     } catch (e) {
-      console.warn('[PWA] Falha ao inicializar virtual:pwa-register:', e);
+      console.warn('[PWA] Falha ao inicializar Service Worker:', e);
     }
   }
 }

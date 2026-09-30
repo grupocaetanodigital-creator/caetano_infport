@@ -2,6 +2,9 @@
 <html lang="pt-BR">
   <head>
     <script>
+      // Blindagem global no navegador contra ReferenceError de escopos legados
+      window.idCondominioAtivo = window.idCondominioAtivo || '';
+
       // Diretriz do AI Studio: HMR desativado no ambiente embutido em iframe. Ignora erros inofensivos de WebSocket.
       (function() {
         var _err = console.error;
@@ -25,9 +28,30 @@
           return _warn.apply(console, arguments);
         };
       })();
+
+      // Desregistra Service Workers legados e limpa caches antigos para carregar o bundle atualizado
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (var reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var name of names) {
+            if (name.includes('workbox') || name.includes('precache') || name.includes('infport')) {
+              caches.delete(name);
+            }
+          }
+        });
+      }
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>INFPORT 1.0 - Sistema Integrado de Portaria</title>
     <meta name="description" content="Sistema integrado de portaria, controle de acesso, rondas patrimoniais, encomendas, custódia e assistente de organização do Supabase." />
     <meta property="og:title" content="INFPORT 1.0 - Sistema Integrado de Portaria" />
@@ -41,11 +65,9 @@
     <meta name="apple-mobile-web-app-title" content="INFPORT" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="manifest" href="/manifest.json" />
   </head>
   <body class="bg-slate-900 text-slate-100 antialiased select-none">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
