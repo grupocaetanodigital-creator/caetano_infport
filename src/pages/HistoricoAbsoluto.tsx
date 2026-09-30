@@ -52,6 +52,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const [fonteDados, setFonteDados] = useState<'supabase' | 'cache_local'>('supabase');
 
   // Filtros do Feed
+  const [filtroCondominio, setFiltroCondominio] = useState<string>('todos');
   const [filtroModulo, setFiltroModulo] = useState('todos');
   const [filtroAcao, setFiltroAcao] = useState('todas');
   const [termoBusca, setTermoBusca] = useState('');
@@ -79,14 +80,18 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const carregarFeed = async () => {
     setLoading(true);
     try {
+      const condoIdBusca = filtroCondominio === 'todos' 
+        ? undefined 
+        : (filtroCondominio || condominioAtivo?.id || undefined);
+
       const res = await buscarHistoricoAbsoluto({
-        condominio_id: condominioAtivo?.id,
+        condominio_id: condoIdBusca,
         modulo: filtroModulo,
         acao: filtroAcao,
         dataInicio,
         dataFim,
         termoBusca,
-        limite: 150
+        limite: 200
       });
       setRegistros(res.registros);
       setFonteDados(res.fonte);
@@ -108,15 +113,13 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
 
     window.addEventListener('infport_historico_novo', handleNovoHistorico);
 
-    // Canal Realtime do Supabase (quando conectado ao backend)
+    // Canal Realtime do Supabase (atualiza automaticamente ao receber novos registros)
     let canal: any = null;
     try {
       canal = supabase
-        .channel('historico_absoluto_realtime')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'historico_absoluto' }, (payload) => {
-          if (payload.new) {
-            setRegistros(prev => [payload.new as RegistroAuditoria, ...prev.filter(r => r.id !== (payload.new as any).id)]);
-          }
+        .channel(`historico_absoluto_realtime_${Date.now()}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'historico_absoluto' }, () => {
+          carregarFeed();
         })
         .subscribe();
     } catch (e) {
@@ -127,7 +130,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
       window.removeEventListener('infport_historico_novo', handleNovoHistorico);
       if (canal) supabase.removeChannel(canal);
     };
-  }, [condominioAtivo?.id, filtroModulo, filtroAcao, dataInicio, dataFim]);
+  }, [condominioAtivo?.id, filtroCondominio, filtroModulo, filtroAcao, dataInicio, dataFim]);
 
   // Consulta quantidade de registros na tabela antes de limpar
   const handleConsultarPeriodo = async () => {
@@ -383,7 +386,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
         <div className="space-y-4">
           {/* Barra de Filtros */}
           <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Busca por texto */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
@@ -399,6 +402,25 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                     className="w-full bg-slate-950 text-white text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              {/* Condomínio */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                  Condomínio
+                </label>
+                <select
+                  value={filtroCondominio}
+                  onChange={(e) => setFiltroCondominio(e.target.value)}
+                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  <option value="todos">🌐 Todos os Condomínios (Visão Global)</option>
+                  {listaCondominios.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      🏢 {c.nome}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Módulo */}
@@ -553,6 +575,19 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                         <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
                           {reg.modulo}
                         </span>
+
+                        {(() => {
+                          const condoObj = reg.condominio_id ? listaCondominios.find(c => c.id === reg.condominio_id) : null;
+                          return condoObj ? (
+                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
+                              🏢 {condoObj.nome}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                              🌐 Sistema / Geral
+                            </span>
+                          );
+                        })()}
 
                         <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
                           <Clock className="w-3 h-3 text-slate-400" />

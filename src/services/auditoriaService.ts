@@ -262,6 +262,11 @@ export async function registrarAtividade(params: {
     } catch {}
   }
 
+  // Fallback para idCondominioAtivo global caso não tenha sido explicitamente passado
+  if (!condoId && typeof window !== 'undefined') {
+    condoId = (window as any).idCondominioAtivo || null;
+  }
+
   const registro: RegistroAuditoria = {
     id,
     condominio_id: condoId || null,
@@ -341,8 +346,9 @@ export async function buscarHistoricoAbsoluto(filtros: {
       .order('criado_em', { ascending: false })
       .limit(limite);
 
-    if (filtros.condominio_id) {
-      query = query.eq('condominio_id', filtros.condominio_id);
+    if (filtros.condominio_id && filtros.condominio_id !== 'todos') {
+      // Retorna eventos do condomínio selecionado E também eventos globais do sistema (onde condominio_id é null)
+      query = query.or(`condominio_id.eq.${filtros.condominio_id},condominio_id.is.null`);
     }
     if (filtros.modulo && filtros.modulo !== 'todos') {
       query = query.eq('modulo', filtros.modulo);
@@ -366,10 +372,10 @@ export async function buscarHistoricoAbsoluto(filtros: {
 
     const { data, count, error } = await query;
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return {
         registros: data as RegistroAuditoria[],
-        total: count || data.length,
+        total: count ?? data.length,
         fonte: 'supabase'
       };
     }

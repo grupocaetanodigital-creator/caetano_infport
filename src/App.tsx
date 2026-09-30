@@ -490,7 +490,12 @@ export default function App() {
                 </label>
                 <select
                   value={condominioAtivoId}
-                  onChange={(e) => setCondominioAtivoId(e.target.value)}
+                  onChange={(e) => {
+                    const novoId = e.target.value;
+                    setCondominioAtivoId(novoId);
+                    const cObj = listaCondominios.find(c => c.id === novoId);
+                    if (cObj) setCondominio(cObj);
+                  }}
                   className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-600 focus:outline-none"
                 >
                   <option value="">🏢 Todos (Visão Global)</option>
@@ -596,7 +601,12 @@ export default function App() {
                     <label className="text-xs font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
                     <select
                       value={condominioAtivoId}
-                      onChange={(e) => setCondominioAtivoId(e.target.value)}
+                      onChange={(e) => {
+                        const novoId = e.target.value;
+                        setCondominioAtivoId(novoId);
+                        const cObj = listaCondominios.find(c => c.id === novoId);
+                        if (cObj) setCondominio(cObj);
+                      }}
                       className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-700"
                     >
                       <option value="">🏢 Todos os Condomínios</option>
@@ -827,7 +837,7 @@ export default function App() {
             {moduloAtual === 'historico_absoluto' && (
               <HistoricoAbsoluto 
                 operadorLogado={operadorContextoGlobal} 
-                condominioAtivo={condominio} 
+                condominioAtivo={objCondominioSelecionado || condominio || { id: condominioAtivoId, nome: 'Condomínio Ativo' }} 
                 listaCondominios={listaCondominios} 
               />
             )}
