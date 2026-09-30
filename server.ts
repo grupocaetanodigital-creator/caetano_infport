@@ -1,3 +1,6 @@
+delete (globalThis as any).__dirname;
+delete (globalThis as any).__filename;
+
 import express from 'express';
 import http from 'http';
 import { createServer as createViteServer } from 'vite';
@@ -119,7 +122,7 @@ async function start() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: isHmrDisabled ? false : { server },
+        hmr: isHmrDisabled ? false : { server, clientPort: 443 },
       },
       appType: 'spa',
     });

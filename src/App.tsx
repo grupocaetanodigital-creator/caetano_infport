@@ -20,6 +20,7 @@ import EmblemaInfport from './components/EmblemaInfport';
 import LeitorNFC from './components/LeitorNFC';
 import ModalMeuPerfil from './components/ModalMeuPerfil';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
+import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
 import { 
   ShieldCheck, 
   Lock, 
@@ -129,6 +130,13 @@ export default function App() {
     restaurarSessaoSalva();
     return () => { montado = false; };
   }, []);
+
+  // Garante a autonomia de 3 horas em cache local para o condomínio ativo
+  useEffect(() => {
+    if (condominioAtivoId) {
+      atualizarCacheAutonomia3Horas(condominioAtivoId);
+    }
+  }, [condominioAtivoId]);
 
   useEffect(() => {
     if (!operador) return;
