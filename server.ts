@@ -1,5 +1,6 @@
 delete (globalThis as any).__dirname;
 delete (globalThis as any).__filename;
+process.env.DISABLE_HMR = 'true';
 
 import express from 'express';
 import http from 'http';
@@ -118,11 +119,10 @@ async function start() {
       res.sendFile(path.resolve(process.cwd(), 'dist', 'index.html'));
     });
   } else {
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: isHmrDisabled ? false : { server, clientPort: 443 },
+        hmr: false,
       },
       appType: 'spa',
     });

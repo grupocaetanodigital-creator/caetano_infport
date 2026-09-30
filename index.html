@@ -1,6 +1,31 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
+    <script>
+      // Diretriz do AI Studio: HMR desativado no ambiente embutido em iframe. Ignora erros inofensivos de WebSocket.
+      (function() {
+        var _err = console.error;
+        var _warn = console.warn;
+        console.error = function() {
+          var str = Array.prototype.slice.call(arguments).map(function(a) {
+            return (a && a.message) ? a.message : String(a);
+          }).join(' ');
+          if (str.indexOf('[vite]') !== -1 && (str.indexOf('websocket') !== -1 || str.indexOf('WebSocket') !== -1 || str.indexOf('ws://') !== -1 || str.indexOf('wss://') !== -1)) {
+            return;
+          }
+          return _err.apply(console, arguments);
+        };
+        console.warn = function() {
+          var str = Array.prototype.slice.call(arguments).map(function(a) {
+            return (a && a.message) ? a.message : String(a);
+          }).join(' ');
+          if (str.indexOf('[vite]') !== -1 && (str.indexOf('websocket') !== -1 || str.indexOf('WebSocket') !== -1 || str.indexOf('ws://') !== -1 || str.indexOf('wss://') !== -1)) {
+            return;
+          }
+          return _warn.apply(console, arguments);
+        };
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>INFPORT 1.0 - Sistema Integrado de Portaria</title>
