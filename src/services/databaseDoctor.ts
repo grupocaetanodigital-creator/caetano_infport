@@ -61,6 +61,14 @@ export const CANONICAL_SCHEMA_MAP: TableDiagnostic[] = [
     notes: 'Contém nome, empresa e documento.'
   },
   {
+    canonicalName: 'locais_armazenamento',
+    duplicateOrLegacyNames: [],
+    purpose: 'Locais físicos de triagem e armazenamento de encomendas (Bancadas, Prateleiras, Armários)',
+    category: 'Módulo 02 - Encomendas',
+    status: 'checking',
+    notes: 'Permite cadastro dinâmico dos locais de guarda da portaria.'
+  },
+  {
     canonicalName: 'custodia',
     duplicateOrLegacyNames: ['custodia_itens'],
     purpose: 'Guarda temporária de itens deixados na portaria (chaves, pacotes, objetos)',
@@ -131,6 +139,14 @@ export const CANONICAL_SCHEMA_MAP: TableDiagnostic[] = [
     category: 'Módulo 07 - Rondas',
     status: 'checking',
     notes: 'A tabela "registros_ronda" é duplicata legada.'
+  },
+  {
+    canonicalName: 'rondas_setores',
+    duplicateOrLegacyNames: [],
+    purpose: 'Setores patrimoniais pertencentes e checklists personalizados de inspeção',
+    category: 'Módulo 07 - Rondas',
+    status: 'checking',
+    notes: 'Configuração dos setores com seus respectivos itens de conferência.'
   },
   {
     canonicalName: 'ocorrencias',
@@ -289,6 +305,27 @@ ALTER TABLE IF EXISTS prestadores
   ADD COLUMN IF NOT EXISTS foto_documento TEXT,
   ADD COLUMN IF NOT EXISTS foto_rosto TEXT,
   ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'CPF';
+
+-- 0.4 Garantir tabela dedicada de rondas_setores e coluna setor_id em rondas_pontos
+ALTER TABLE IF EXISTS rondas_pontos
+  ADD COLUMN IF NOT EXISTS setor_id TEXT DEFAULT 'SETOR_A';
+
+CREATE TABLE IF NOT EXISTS rondas_setores (
+  id TEXT NOT NULL,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  codigo TEXT,
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  itens JSONB DEFAULT '[]'::jsonb,
+  ativo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (id, condominio_id)
+);
+
+ALTER TABLE rondas_setores ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total rondas_setores" ON rondas_setores;
+CREATE POLICY "Acesso total rondas_setores" ON rondas_setores FOR ALL USING (true) WITH CHECK (true);
 
 -- 1. Tentativa de cópia segura de materiais (se as colunas existirem, migra; senão, ignora com segurança)
 DO $$

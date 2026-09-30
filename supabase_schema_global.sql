@@ -276,6 +276,20 @@ CREATE TABLE IF NOT EXISTS rondas_registros (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Tabela dedicada de setores de ronda e checklists de inspeção
+CREATE TABLE IF NOT EXISTS rondas_setores (
+  id TEXT NOT NULL,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  codigo TEXT,
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  itens JSONB DEFAULT '[]'::jsonb,
+  ativo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (id, condominio_id)
+);
+
 -- ==============================================================================
 -- 14. TABELA: passagens_posto (Troca de Turno da Portaria)
 -- ==============================================================================
@@ -360,6 +374,7 @@ CREATE TABLE IF NOT EXISTS configuracoes (
   condominio_id UUID UNIQUE REFERENCES condominios(id) ON DELETE CASCADE,
   feature_flags JSONB DEFAULT '{}'::jsonb,
   locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  setores_ronda JSONB DEFAULT '[]'::jsonb,
   turnos_plantao JSONB DEFAULT '{}'::jsonb,
   dados_tenant JSONB DEFAULT '{}'::jsonb,
   mod02_gestao_encomendas BOOLEAN DEFAULT true,
@@ -373,6 +388,11 @@ CREATE TABLE IF NOT EXISTS configuracoes (
   mod10_prestadores_servico BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Garante as colunas JSONB de locais e setores na tabela configuracoes caso já existisse
+ALTER TABLE configuracoes
+  ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS setores_ronda JSONB DEFAULT '[]'::jsonb;
 
 -- ==============================================================================
 -- 18. TABELAS: templates_whatsapp e agenda_emergencia

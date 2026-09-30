@@ -100,7 +100,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       setBlocosDisponiveis(blocos.length > 0 ? blocos : ['A', 'B', 'C', 'D']);
 
       const { data: colabData } = await supabase
-        .from('colaboradores')
+        .from('operadores')
         .select('*')
         .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
@@ -700,7 +700,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                             const c = colaboradores.find((x) => x.id === e.target.value);
                             if (c) {
                               setRetiranteNome(c.nome);
-                              setRetiranteFuncao(c.cargo || c.funcao || '');
+                              setRetiranteFuncao(c.cargo || c.funcao || c.nivel_acesso || 'Operador / Colaborador');
                               if (c.telefone) setRetiranteTel(c.telefone);
                             }
                           }}
@@ -709,7 +709,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                           <option value="">-- Selecione ou digite abaixo --</option>
                           {colaboradores.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.nome} {c.cargo ? `(${c.cargo})` : ''}
+                              {c.nome} {c.nivel_acesso ? `(${c.nivel_acesso})` : (c.cargo ? `(${c.cargo})` : '')}
                             </option>
                           ))}
                         </select>
