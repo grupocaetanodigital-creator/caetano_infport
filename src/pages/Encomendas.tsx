@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../services/supabase';
+import { registrarAtividade } from '../services/auditoriaService';
 import { 
   Package, 
   Truck, 
@@ -585,6 +586,26 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
       const nomeDestinatario = moradorSelecionado ? moradorSelecionado.nome : 'Morador';
 
+      // Registra evento no Histórico Absoluto
+      registrarAtividade({
+        modulo: 'Encomendas',
+        acao: 'CRIAR',
+        descricao: `Recebeu e triou encomenda para ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' Bloco ' + blocoTriagem : ''}) - Lote ${loteAtivo.codigo_re}. Local de guarda: ${localArmazenar}.`,
+        detalhes: {
+          loteId: loteAtivo.id,
+          codigoRe: loteAtivo.codigo_re,
+          unidade: unidadeTriagem,
+          bloco: blocoTriagem,
+          destinatario: nomeDestinatario,
+          localGuarda: localArmazenar,
+          codigoRastreio: codigoBarras || 'N/A'
+        },
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
+        operador_id: usuarioLogado?.id,
+        operador_login: usuarioLogado?.login,
+        condominio_id: idCondominioAtivo
+      });
+
       const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Local Físico de Guarda: ${localArmazenar}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria informando seu apartamento!`;
 
       setItemTriadoWhats({
@@ -1012,6 +1033,22 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         .in('id', itensSelecionadosIds);
 
       if (error) throw error;
+
+      // Registra baixa / entrega no Histórico Absoluto
+      registrarAtividade({
+        modulo: 'Encomendas',
+        acao: 'BAIXA',
+        descricao: `Entregou ${itensSelecionadosIds.length} encomenda(s) para o retirante: ${nomeRetirante.trim()}.`,
+        detalhes: {
+          totalItens: itensSelecionadosIds.length,
+          itensIds: itensSelecionadosIds,
+          retiradoPor: nomeRetirante.trim()
+        },
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
+        operador_id: usuarioLogado?.id,
+        operador_login: usuarioLogado?.login,
+        condominio_id: idCondominioAtivo
+      });
 
       const primeiroItem = todosItensRetidos.find(i => i.id === itensSelecionadosIds[0]);
       const telMorador = primeiroItem?.moradores?.telefone?.replace(/\D/g, '') || '';
