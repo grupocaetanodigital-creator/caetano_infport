@@ -819,7 +819,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
               >
                 <option value="3">Nível 3 - Operador (Portaria)</option>
                 <option value="2">Nível 2 - Supervisor</option>
-                {eAdmin && <option value="1">Nível 1 - Master (Síndico)</option>}
+                <option value="4">Nível 4 - Síndico (Consulta Exclusiva / Somente Leitura)</option>
+                {eAdmin && <option value="1">Nível 1 - Master</option>}
                 {eAdmin && <option value="0">Nível 0 - Administrador Dev</option>}
               </select>
             </div>
@@ -860,9 +861,10 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       op.nivel_acesso === 0 ? 'bg-purple-100 text-purple-800' :
                       op.nivel_acesso === 1 ? 'bg-indigo-100 text-indigo-800' :
-                      op.nivel_acesso === 2 ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                      op.nivel_acesso === 2 ? 'bg-amber-100 text-amber-800' :
+                      op.nivel_acesso === 4 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {op.nivel_acesso === 0 ? 'Dev Admin' : op.nivel_acesso === 1 ? 'Master' : op.nivel_acesso === 2 ? 'Supervisor' : 'Operador'}
+                      {op.nivel_acesso === 0 ? 'Dev Admin' : op.nivel_acesso === 1 ? 'Master' : op.nivel_acesso === 2 ? 'Supervisor' : op.nivel_acesso === 4 ? '🛡️ Síndico (Consulta)' : 'Operador'}
                     </span>
                   </div>
                 </div>

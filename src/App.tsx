@@ -12,6 +12,7 @@ import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
 import Configuracoes from './pages/Configuracoes';
 import HistoricoAbsoluto from './pages/HistoricoAbsoluto';
+import PainelSindico from './pages/PainelSindico';
 import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -93,7 +94,13 @@ export default function App() {
   const [erro, setErro] = useState('');
 
   const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
-  const podeAcessarConfiguracoes = eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1;
+  const eSindico = operador?.nivel_acesso === 4 || 
+                   operador?.perfil === 'sindico' || 
+                   operador?.perfil === 'Síndico' || 
+                   operador?.funcao?.toLowerCase() === 'síndico' || 
+                   operador?.funcao?.toLowerCase() === 'sindico';
+  const podeAcessarConfiguracoes = (eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1) && !eSindico;
+  const podeAcessarCadastros = !eSindico;
 
   useEffect(() => {
     let montado = true;
@@ -118,6 +125,13 @@ export default function App() {
 
             if (opData && montado) {
               setOperador(opData);
+              const ehSindicoOp = opData.nivel_acesso === 4 || 
+                                  opData.perfil === 'sindico' || 
+                                  opData.funcao?.toLowerCase() === 'síndico' || 
+                                  opData.funcao?.toLowerCase() === 'sindico';
+              if (ehSindicoOp) {
+                setModuloAtual('painel_sindico');
+              }
               const targetCondo = sessao.condominioId || opData.condominio_id;
               setCondominioAtivoId(targetCondo || '');
               if (targetCondo) {
@@ -173,9 +187,15 @@ export default function App() {
   }, [operador, moduloAtual]);
 
   const mudarModulo = (novoModulo: string) => {
-    setModuloAtual(novoModulo);
+    let modDestino = novoModulo;
+    if (eSindico) {
+      if (modDestino === 'cadastros' || modDestino === 'configuracoes') {
+        modDestino = 'painel_sindico';
+      }
+    }
+    setModuloAtual(modDestino);
     setDrawerMobileAberto(false);
-    window.history.pushState({ modulo: novoModulo }, '');
+    window.history.pushState({ modulo: modDestino }, '');
   };
 
   useEffect(() => {
@@ -376,7 +396,11 @@ export default function App() {
         condominio_id: opData.condominio_id
       });
 
-      mudarModulo('dashboard');
+      const ehSindicoOp = opData.nivel_acesso === 4 || 
+                          opData.perfil === 'sindico' || 
+                          opData.funcao?.toLowerCase() === 'síndico' || 
+                          opData.funcao?.toLowerCase() === 'sindico';
+      mudarModulo(ehSindicoOp ? 'painel_sindico' : 'dashboard');
     } catch (err: any) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
     } finally {
@@ -416,13 +440,28 @@ export default function App() {
 
   const operadorContextoGlobal = operador ? {
     ...operador,
+    somenteLeitura: eSindico,
+    eSindico: eSindico,
     condominio_id: eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id,
     condominio_nome: eAdmin 
       ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos)'))
       : (condominio?.nome || 'Condomínio Geral')
   } : null;
 
-  const modulosDisponiveis = [
+  const modulosDisponiveis = eSindico ? [
+    { id: 'painel_sindico', titulo: 'Portal do Síndico', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' },
+    { id: 'encomendas', titulo: 'Encomendas (Consulta)', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
+    { id: 'ocorrencias', titulo: 'Ocorrências (Consulta)', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
+    { id: 'rondas', titulo: 'Rondas QR (Auditoria)', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
+    { id: 'chaves', titulo: 'Quadro Chaves (Consulta)', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+    { id: 'prestadores', titulo: 'Prestadores (Consulta)', icone: HardHat, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-amber-50 text-amber-700 border-amber-300' },
+    { id: 'passagem', titulo: 'Passagem Posto (Auditoria)', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+    { id: 'custodia', titulo: 'Custódia (Consulta)', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { id: 'materiais', titulo: 'Materiais Posto (Consulta)', icone: ClipboardList, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-teal-50 text-teal-700 border-teal-200' },
+    { id: 'manutencao', titulo: 'Manutenção OS (Consulta)', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
+    { id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  ] : [
+    ...(eAdmin ? [{ id: 'painel_sindico', titulo: 'Portal Síndico (Visão)', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }] : []),
     { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
     { id: 'custodia', titulo: 'Custódia Itens', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     { id: 'prestadores', titulo: 'Prestadores & Obras', icone: HardHat, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-amber-50 text-amber-700 border-amber-300' },
@@ -432,7 +471,7 @@ export default function App() {
     { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
     { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
     { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-    { id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' },
+    ...(podeAcessarCadastros ? [{ id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' }] : []),
     { id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   ];
 
@@ -555,7 +594,7 @@ export default function App() {
                     <KeyRound className="w-3 h-3 text-slate-500 group-hover:text-emerald-400" />
                   </p>
                   <p className="text-[10px] text-slate-400 uppercase font-mono">
-                    {eAdmin ? 'DEV ADMIN' : `NÍVEL ${operador.nivel_acesso ?? 3}`}
+                    {eAdmin ? 'DEV ADMIN' : (eSindico ? '🛡️ SÍNDICO (CONSULTA)' : `NÍVEL ${operador.nivel_acesso ?? 3}`)}
                   </p>
                 </div>
               </div>
@@ -674,10 +713,12 @@ export default function App() {
         {/* CONTEÚDO PRINCIPAL */}
         <div className="flex-1 flex flex-col min-w-0">
           
-          <AlertaRondaGlobal 
-            onNavegarRondas={() => mudarModulo('rondas')} 
-            usuarioLogado={operadorContextoGlobal} 
-          />
+          {!eSindico && (
+            <AlertaRondaGlobal 
+              onNavegarRondas={() => mudarModulo('rondas')} 
+              usuarioLogado={operadorContextoGlobal} 
+            />
+          )}
 
           {/* CABEÇALHO MOBILE */}
           <header className="md:hidden bg-slate-900 text-white px-3 py-2 flex items-center justify-between sticky top-0 z-30 shadow-md border-b border-slate-800">
@@ -804,48 +845,59 @@ export default function App() {
               </div>
             )}
 
-            {moduloAtual === 'encomendas' && featureFlags.mod02_gestao_encomendas && (
-              <Encomendas usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'custodia' && featureFlags.mod03_custodia_itens && (
-              <Custodia usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'materiais' && featureFlags.mod04_materiais_posto && (
-              <Materiais usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'chaves' && featureFlags.mod05_quadro_chaves && (
-              <Chaves usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'manutencao' && featureFlags.mod06_gestao_manutencao && (
-              <Manutencao usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'rondas' && featureFlags.mod07_gestao_ronda && (
-              <Rondas usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'ocorrencias' && featureFlags.mod08_livro_ocorrencias && (
-              <Ocorrencias usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'passagem' && featureFlags.mod09_passagem_posto && (
-              <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />
-            )}
-            {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
-              <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'cadastros' && (
-              <Cadastros usuarioLogado={operadorContextoGlobal} />
-            )}
-            {moduloAtual === 'historico_absoluto' && (
-              <HistoricoAbsoluto 
-                operadorLogado={operadorContextoGlobal} 
-                condominioAtivo={objCondominioSelecionado || condominio || { id: condominioAtivoId, nome: 'Condomínio Ativo' }} 
-                listaCondominios={listaCondominios} 
+            {(eSindico || moduloAtual === 'painel_sindico') ? (
+              <PainelSindico
+                usuarioLogado={operadorContextoGlobal}
+                condominioAtivo={objCondominioSelecionado || condominio || { id: condominioAtivoId, nome: 'Condomínio Ativo' }}
+                listaCondominios={listaCondominios}
+                abaInicial={moduloAtual === 'painel_sindico' || moduloAtual === 'dashboard' ? 'resumo' : moduloAtual}
               />
-            )}
-            {moduloAtual === 'configuracoes' && podeAcessarConfiguracoes && (
-              <Configuracoes 
-                usuarioLogado={operadorContextoGlobal} 
-                onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
-              />
+            ) : (
+              <>
+                {moduloAtual === 'encomendas' && featureFlags.mod02_gestao_encomendas && (
+                  <Encomendas usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'custodia' && featureFlags.mod03_custodia_itens && (
+                  <Custodia usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'materiais' && featureFlags.mod04_materiais_posto && (
+                  <Materiais usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'chaves' && featureFlags.mod05_quadro_chaves && (
+                  <Chaves usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'manutencao' && featureFlags.mod06_gestao_manutencao && (
+                  <Manutencao usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'rondas' && featureFlags.mod07_gestao_ronda && (
+                  <Rondas usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'ocorrencias' && featureFlags.mod08_livro_ocorrencias && (
+                  <Ocorrencias usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'passagem' && featureFlags.mod09_passagem_posto && (
+                  <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />
+                )}
+                {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
+                  <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'cadastros' && podeAcessarCadastros && (
+                  <Cadastros usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'historico_absoluto' && (
+                  <HistoricoAbsoluto 
+                    operadorLogado={operadorContextoGlobal} 
+                    condominioAtivo={objCondominioSelecionado || condominio || { id: condominioAtivoId, nome: 'Condomínio Ativo' }} 
+                    listaCondominios={listaCondominios} 
+                  />
+                )}
+                {moduloAtual === 'configuracoes' && podeAcessarConfiguracoes && (
+                  <Configuracoes 
+                    usuarioLogado={operadorContextoGlobal} 
+                    onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
+                  />
+                )}
+              </>
             )}
           </main>
 
@@ -854,13 +906,13 @@ export default function App() {
         {/* BARRA INFERIOR MOBILE COMPACTA & MODERNA */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-300 flex justify-around items-center h-12 z-40 px-1 shadow-xl">
           <button
-            onClick={() => mudarModulo('dashboard')}
+            onClick={() => mudarModulo(eSindico ? 'painel_sindico' : 'dashboard')}
             className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
-              moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-100'
+              (moduloAtual === 'dashboard' || moduloAtual === 'painel_sindico') ? 'text-emerald-400' : 'hover:text-slate-100'
             }`}
           >
-            <Home className="w-4 h-4 mb-0.5" />
-            Início
+            {eSindico ? <ShieldCheck className="w-4 h-4 mb-0.5" /> : <Home className="w-4 h-4 mb-0.5" />}
+            {eSindico ? 'Portal' : 'Início'}
           </button>
 
           {featureFlags.mod02_gestao_encomendas && (
