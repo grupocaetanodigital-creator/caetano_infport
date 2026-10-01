@@ -449,17 +449,7 @@ export default function App() {
   } : null;
 
   const modulosDisponiveis = eSindico ? [
-    { id: 'painel_sindico', titulo: 'Portal do Síndico', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' },
-    { id: 'encomendas', titulo: 'Encomendas (Consulta)', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
-    { id: 'ocorrencias', titulo: 'Ocorrências (Consulta)', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
-    { id: 'rondas', titulo: 'Rondas QR (Auditoria)', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
-    { id: 'chaves', titulo: 'Quadro Chaves (Consulta)', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-    { id: 'prestadores', titulo: 'Prestadores (Consulta)', icone: HardHat, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-amber-50 text-amber-700 border-amber-300' },
-    { id: 'passagem', titulo: 'Passagem Posto (Auditoria)', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-    { id: 'custodia', titulo: 'Custódia (Consulta)', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-    { id: 'materiais', titulo: 'Materiais Posto (Consulta)', icone: ClipboardList, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-teal-50 text-teal-700 border-teal-200' },
-    { id: 'manutencao', titulo: 'Manutenção OS (Consulta)', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
-    { id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    { id: 'painel_sindico', titulo: 'Portal do Síndico', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }
   ] : [
     ...(eAdmin ? [{ id: 'painel_sindico', titulo: 'Portal Síndico (Visão)', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }] : []),
     { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
@@ -522,7 +512,7 @@ export default function App() {
               </button>
             </div>
 
-            {eAdmin && menuAberto && (
+            {eAdmin && !eSindico && menuAberto && (
               <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
                 <label className="block text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
                   <Filter className="w-3.5 h-3.5" /> Condomínio Ativo
@@ -546,17 +536,19 @@ export default function App() {
             )}
 
             <nav className="p-3 space-y-1.5 overflow-y-auto max-h-[calc(100vh-250px)]">
-              <button
-                onClick={() => mudarModulo('dashboard')}
-                className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-between transition ${
-                  moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Home className="w-5 h-5 shrink-0" />
-                  {menuAberto && <span>Painel Principal</span>}
-                </div>
-              </button>
+              {!eSindico && (
+                <button
+                  onClick={() => mudarModulo('dashboard')}
+                  className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-between transition ${
+                    moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Home className="w-5 h-5 shrink-0" />
+                    {menuAberto && <span>Painel Principal</span>}
+                  </div>
+                </button>
+              )}
 
               {modulosDisponiveis.filter(m => m.flag).map((item) => {
                 const IconeComponente = item.icone;
@@ -635,7 +627,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {eAdmin && (
+                {eAdmin && !eSindico && (
                   <div className="my-3 p-2.5 bg-slate-800 rounded-xl space-y-1">
                     <label className="text-xs font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
                     <select
@@ -657,14 +649,16 @@ export default function App() {
                 )}
 
                 <div className="py-3 space-y-1 overflow-y-auto max-h-[55vh]">
-                  <button
-                    onClick={() => mudarModulo('dashboard')}
-                    className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-3 ${
-                      moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    <Home className="w-5 h-5" /> Painel Geral
-                  </button>
+                  {!eSindico && (
+                    <button
+                      onClick={() => mudarModulo('dashboard')}
+                      className={`w-full p-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-3 ${
+                        moduloAtual === 'dashboard' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <Home className="w-5 h-5" /> Painel Geral
+                    </button>
+                  )}
 
                   {modulosDisponiveis.filter(m => m.flag).map((item) => {
                     const Icone = item.icone;
@@ -735,15 +729,17 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setModalSupabaseDoctorAberto(true)}
-                className="p-1.5 text-sky-400 hover:text-white bg-slate-800 hover:bg-sky-600 rounded-lg transition cursor-pointer flex items-center gap-1 text-xs font-bold"
-                title="Diagnóstico & Sincronização do Supabase"
-              >
-                <Database className="w-4 h-4 text-sky-400" />
-                <span className="hidden lg:inline text-[11px]">Banco Supabase</span>
-              </button>
+              {!eSindico && (
+                <button
+                  type="button"
+                  onClick={() => setModalSupabaseDoctorAberto(true)}
+                  className="p-1.5 text-sky-400 hover:text-white bg-slate-800 hover:bg-sky-600 rounded-lg transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="Diagnóstico & Sincronização do Supabase"
+                >
+                  <Database className="w-4 h-4 text-sky-400" />
+                  <span className="hidden lg:inline text-[11px]">Banco Supabase</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setModalMeuPerfilAberto(true)}
@@ -752,17 +748,19 @@ export default function App() {
               >
                 <KeyRound className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => setModalLeitorNfcGlobal(true)}
-                className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition cursor-pointer"
-                title="Leitor de Tags & Cartões NFC"
-              >
-                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              </button>
+              {!eSindico && (
+                <button
+                  onClick={() => setModalLeitorNfcGlobal(true)}
+                  className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition cursor-pointer"
+                  title="Leitor de Tags & Cartões NFC"
+                >
+                  <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                </button>
+              )}
             </div>
           </header>
 
-          {moduloAtual !== 'dashboard' && (
+          {moduloAtual !== 'dashboard' && !eSindico && (
             <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between shadow-xs">
               <button 
                 onClick={() => mudarModulo('dashboard')}
@@ -905,59 +903,80 @@ export default function App() {
 
         {/* BARRA INFERIOR MOBILE COMPACTA & MODERNA */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 text-slate-300 flex justify-around items-center h-12 z-40 px-1 shadow-xl">
-          <button
-            onClick={() => mudarModulo(eSindico ? 'painel_sindico' : 'dashboard')}
-            className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
-              (moduloAtual === 'dashboard' || moduloAtual === 'painel_sindico') ? 'text-emerald-400' : 'hover:text-slate-100'
-            }`}
-          >
-            {eSindico ? <ShieldCheck className="w-4 h-4 mb-0.5" /> : <Home className="w-4 h-4 mb-0.5" />}
-            {eSindico ? 'Portal' : 'Início'}
-          </button>
+          {eSindico ? (
+            <>
+              <button
+                onClick={() => mudarModulo('painel_sindico')}
+                className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold text-emerald-400 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 mb-0.5" />
+                Portal do Síndico
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold text-rose-400 hover:text-rose-300 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4 mb-0.5" />
+                Sair
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => mudarModulo('dashboard')}
+                className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
+                  moduloAtual === 'dashboard' ? 'text-emerald-400' : 'hover:text-slate-100'
+                }`}
+              >
+                <Home className="w-4 h-4 mb-0.5" />
+                Início
+              </button>
 
-          {featureFlags.mod02_gestao_encomendas && (
-            <button
-              onClick={() => mudarModulo('encomendas')}
-              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
-                moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-100'
-              }`}
-            >
-              <Package className="w-4 h-4 mb-0.5" />
-              Encomendas
-            </button>
+              {featureFlags.mod02_gestao_encomendas && (
+                <button
+                  onClick={() => mudarModulo('encomendas')}
+                  className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
+                    moduloAtual === 'encomendas' ? 'text-emerald-400' : 'hover:text-slate-100'
+                  }`}
+                >
+                  <Package className="w-4 h-4 mb-0.5" />
+                  Encomendas
+                </button>
+              )}
+
+              {featureFlags.mod05_quadro_chaves && (
+                <button
+                  onClick={() => mudarModulo('chaves')}
+                  className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
+                    moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-100'
+                  }`}
+                >
+                  <Key className="w-4 h-4 mb-0.5" />
+                  Chaves
+                </button>
+              )}
+
+              {featureFlags.mod07_gestao_ronda && (
+                <button
+                  onClick={() => mudarModulo('rondas')}
+                  className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
+                    moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-100'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4 mb-0.5" />
+                  Rondas
+                </button>
+              )}
+
+              <button
+                onClick={() => setDrawerMobileAberto(true)}
+                className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold hover:text-slate-100 text-slate-300 transition cursor-pointer"
+              >
+                <Grid className="w-4 h-4 mb-0.5" />
+                Módulos
+              </button>
+            </>
           )}
-
-          {featureFlags.mod05_quadro_chaves && (
-            <button
-              onClick={() => mudarModulo('chaves')}
-              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
-                moduloAtual === 'chaves' ? 'text-emerald-400' : 'hover:text-slate-100'
-              }`}
-            >
-              <Key className="w-4 h-4 mb-0.5" />
-              Chaves
-            </button>
-          )}
-
-          {featureFlags.mod07_gestao_ronda && (
-            <button
-              onClick={() => mudarModulo('rondas')}
-              className={`flex flex-col items-center justify-center w-full h-full text-[10px] font-bold transition cursor-pointer ${
-                moduloAtual === 'rondas' ? 'text-emerald-400' : 'hover:text-slate-100'
-              }`}
-            >
-              <QrCode className="w-4 h-4 mb-0.5" />
-              Rondas
-            </button>
-          )}
-
-          <button
-            onClick={() => setDrawerMobileAberto(true)}
-            className="flex flex-col items-center justify-center w-full h-full text-[10px] font-bold hover:text-slate-100 text-slate-300 transition cursor-pointer"
-          >
-            <Grid className="w-4 h-4 mb-0.5" />
-            Módulos
-          </button>
         </nav>
 
         {/* Indicador de Status Offline e Conexão na Portaria */}

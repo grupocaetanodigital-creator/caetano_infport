@@ -79,7 +79,7 @@ export default function PainelSindico({
   // Carrega todos os dados do condomínio para consulta
   const carregarDadosSindico = async () => {
     setLoading(true);
-    const idCondo = condominioFiltro || condominioAtivo?.id;
+    const idCondo = usuarioLogado?.condominio_id || condominioAtivo?.id || condominioFiltro;
 
     try {
       // 1. Encomendas
@@ -271,23 +271,15 @@ export default function PainelSindico({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {/* Seletor de Condomínio caso haja mais de um */}
-            {listaCondominios.length > 1 && (
-              <select
-                value={condominioFiltro}
-                onChange={(e) => setCondominioFiltro(e.target.value)}
-                className="bg-slate-900 text-white text-xs font-bold px-3 py-2.5 rounded-xl border border-emerald-500/40 focus:outline-none"
-              >
-                {listaCondominios.map((c) => (
-                  <option key={c.id} value={c.id}>🏢 {c.nome}</option>
-                ))}
-              </select>
-            )}
+            <div className="px-3.5 py-2 bg-slate-900/90 border border-emerald-500/40 rounded-xl text-xs font-bold text-emerald-300 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-emerald-400" />
+              <span>{condoNomeAtual}</span>
+            </div>
 
             <button
               onClick={carregarDadosSindico}
               disabled={loading}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer active:scale-95 disabled:opacity-50"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer active:scale-95 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>{loading ? 'Atualizando...' : 'Atualizar Dados'}</span>
