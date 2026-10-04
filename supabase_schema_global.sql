@@ -357,14 +357,51 @@ CREATE TABLE IF NOT EXISTS prestadores (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Garante as colunas de OCR e fotos caso a tabela já existisse
+-- Garante as colunas de OCR, fotos, perfis e validade caso a tabela já existisse
 ALTER TABLE prestadores
   ADD COLUMN IF NOT EXISTS foto_documento TEXT,
   ADD COLUMN IF NOT EXISTS foto_rosto TEXT,
   ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'CPF',
   ADD COLUMN IF NOT EXISTS cracha_atribuido TEXT,
   ADD COLUMN IF NOT EXISTS data_hora_entrada TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS data_hora_saida TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS data_hora_saida TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS perfil_acesso TEXT DEFAULT 'prestador_unidade',
+  ADD COLUMN IF NOT EXISTS parentesco_vinculo TEXT,
+  ADD COLUMN IF NOT EXISTS telefone TEXT,
+  ADD COLUMN IF NOT EXISTS placa_veiculo TEXT,
+  ADD COLUMN IF NOT EXISTS tipo_validade TEXT DEFAULT 'hoje',
+  ADD COLUMN IF NOT EXISTS data_validade_inicio TIMESTAMPTZ DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS data_validade_fim TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS tempo_maximo_minutos INTEGER DEFAULT 240,
+  ADD COLUMN IF NOT EXISTS limite_permanencia_ate TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS operador_entrada_nome TEXT,
+  ADD COLUMN IF NOT EXISTS operador_saida_nome TEXT;
+
+-- Tabela de Histórico e Auditoria de Acessos / Permanência
+CREATE TABLE IF NOT EXISTS prestadores_acessos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  prestador_id UUID REFERENCES prestadores(id) ON DELETE CASCADE,
+  perfil_acesso TEXT NOT NULL,
+  nome_completo TEXT NOT NULL,
+  documento TEXT,
+  empresa TEXT,
+  parentesco_vinculo TEXT,
+  unidade TEXT,
+  bloco TEXT,
+  foto_rosto TEXT,
+  cracha TEXT,
+  placa_veiculo TEXT,
+  data_hora_entrada TIMESTAMPTZ DEFAULT NOW(),
+  tempo_maximo_minutos INTEGER DEFAULT 240,
+  limite_permanencia_ate TIMESTAMPTZ,
+  data_hora_saida TIMESTAMPTZ,
+  status_acesso TEXT DEFAULT 'DENTRO',
+  operador_entrada_nome TEXT,
+  operador_saida_nome TEXT,
+  observacoes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- ==============================================================================
 -- 17. TABELA: configuracoes (Feature Flags e Parametrizações dos Módulos)
