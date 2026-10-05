@@ -54,7 +54,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  History
+  History,
+  UserCheck
 } from 'lucide-react';
 
 const CHAVE_SESSAO = 'infport_sessao_ativa_v1';
@@ -454,7 +455,7 @@ export default function App() {
     ...(eAdmin ? [{ id: 'painel_sindico', titulo: 'Portal Síndico (Visão)', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }] : []),
     { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
     { id: 'custodia', titulo: 'Custódia Itens', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-    { id: 'prestadores', titulo: 'Prestadores & Obras', icone: HardHat, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-amber-50 text-amber-700 border-amber-300' },
+    { id: 'prestadores', titulo: 'Autorizados', icone: UserCheck, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-purple-50 text-purple-700 border-purple-200' },
     { id: 'materiais', titulo: 'Materiais Posto', icone: ClipboardList, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-teal-50 text-teal-700 border-teal-200' },
     { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
     { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
@@ -710,6 +711,7 @@ export default function App() {
           {!eSindico && (
             <AlertaRondaGlobal 
               onNavegarRondas={() => mudarModulo('rondas')} 
+              onNavegarModulo={(mod) => mudarModulo(mod)}
               usuarioLogado={operadorContextoGlobal} 
             />
           )}

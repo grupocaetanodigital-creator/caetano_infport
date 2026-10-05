@@ -310,15 +310,6 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Exportar CSV</span>
           </button>
-
-          <button
-            onClick={copiarSql}
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition flex items-center gap-2 shadow-md active:scale-95 cursor-pointer"
-            title="Copiar comando SQL de criação da tabela no Supabase"
-          >
-            {copiadoSql ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Database className="w-3.5 h-3.5" />}
-            <span>{copiadoSql ? 'SQL Copiado!' : 'SQL do Supabase'}</span>
-          </button>
         </div>
       </div>
 
@@ -366,18 +357,6 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
         >
           <Sparkles className="w-4 h-4" />
           <span>Métricas & Indicadores</span>
-        </button>
-
-        <button
-          onClick={() => setAbaAtiva('sql')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
-            abaAtiva === 'sql'
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-              : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          <Database className="w-4 h-4" />
-          <span>Estrutura Supabase</span>
         </button>
       </div>
 
@@ -888,39 +867,6 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
               <li><strong>Cache Local Instantâneo:</strong> Até 1.000 registros mais recentes são persistidos na memória do navegador para que, mesmo em caso de queda de internet de 3 horas, a portaria continue registrando e visualizando tudo.</li>
               <li><strong>Sincronização em Tempo Real:</strong> Novos eventos propagam instantaneamente para todos os computadores e celulares conectados.</li>
             </ul>
-          </div>
-        </div>
-      )}
-
-      {/* ABA 4: ESTRUTURA DO BANCO DE DADOS SUPABASE */}
-      {abaAtiva === 'sql' && (
-        <div className="space-y-4">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-white uppercase flex items-center gap-2">
-                  <Database className="w-5 h-5 text-indigo-400" />
-                  Script SQL para Criação da Tabela no Supabase
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Copie e execute o comando abaixo no <strong>SQL Editor</strong> do painel Supabase para criar a tabela definitiva <code className="text-indigo-300 font-mono">historico_absoluto</code>.
-                </p>
-              </div>
-
-              <button
-                onClick={copiarSql}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-lg active:scale-95 cursor-pointer"
-              >
-                {copiadoSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-                <span>{copiadoSql ? 'Copiado para a Área de Transferência!' : 'Copiar Script SQL Completo'}</span>
-              </button>
-            </div>
-
-            <div className="relative">
-              <pre className="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-2xl border border-slate-800 overflow-x-auto max-h-[450px] leading-relaxed select-all">
-                {SQL_CRIACAO_HISTORICO_ABSOLUTO}
-              </pre>
-            </div>
           </div>
         </div>
       )}

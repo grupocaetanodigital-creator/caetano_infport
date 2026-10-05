@@ -3,7 +3,6 @@ import { supabase } from '../services/supabase';
 import ModalLeitorDocumentoOCR from '../components/ModalLeitorDocumentoOCR';
 import { registrarAtividade } from '../services/auditoriaService';
 import { 
-  HardHat, 
   UserCheck, 
   Building2, 
   Clock, 
@@ -38,11 +37,28 @@ import {
   Users,
   Timer,
   AlertCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Pencil,
+  HardHat
 } from 'lucide-react';
 
 export type PerfilAcesso = 'autorizado' | 'prestador_unidade' | 'prestador_condominio';
 export type TipoValidade = 'hoje' | 'amanha' | '3_dias' | '7_dias' | '30_dias' | 'personalizado' | 'permanente';
+
+export const OPCOES_PARENTESCO = [
+  'Mãe',
+  'Pai',
+  'Filho(a)',
+  'Irmão(ã)',
+  'Cônjuge / Namorado(a)',
+  'Avô(ó)',
+  'Neto(a)',
+  'Tio(a) / Primo(a)',
+  'Amigo(a)',
+  'Entregador Eventual',
+  'Diarista Frequente',
+  'Outro'
+];
 
 interface PrestadoresObrasProps {
   usuarioLogado?: any;
@@ -52,8 +68,8 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
   const idCondominio = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id;
   const operadorNome = usuarioLogado?.nome || usuarioLogado?.login || 'Operador da Portaria';
 
-  // Abas principais
-  const [abaAtiva, setAbaAtiva] = useState<'dentro' | 'cadastros' | 'historico' | 'sql'>('dentro');
+  // Abas principais (Removida aba SQL da tela conforme solicitação)
+  const [abaAtiva, setAbaAtiva] = useState<'dentro' | 'cadastros' | 'historico'>('dentro');
 
   // Dados
   const [cadastros, setCadastros] = useState<any[]>([]);
@@ -72,15 +88,17 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
   // Modais
   const [modalNovoCadastro, setModalNovoCadastro] = useState(false);
+  const [modalEditarCadastro, setModalEditarCadastro] = useState(false);
+  const [idEdicao, setIdEdicao] = useState<string | null>(null);
+
   const [modalEntrada, setModalEntrada] = useState(false);
   const [modalSaida, setModalSaida] = useState(false);
   const [modalProrrogar, setModalProrrogar] = useState(false);
   const [modalOcrAberto, setModalOcrAberto] = useState(false);
   const [modalVisualizarFoto, setModalVisualizarFoto] = useState<string | null>(null);
   const [itemSelecionado, setItemSelecionado] = useState<any | null>(null);
-  const [copiadoSql, setCopiadoSql] = useState(false);
 
-  // Formulário de Cadastro / Liberação
+  // Formulário de Cadastro / Liberação / Edição
   const [perfilAcesso, setPerfilAcesso] = useState<PerfilAcesso>('autorizado');
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [documento, setDocumento] = useState('');
@@ -91,9 +109,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
   const [placaVeiculo, setPlacaVeiculo] = useState('');
   const [unidade, setUnidade] = useState('');
   const [bloco, setBloco] = useState('');
-  const [moradorVinculadoId, setMoradorVinculadoId] = useState('');
-  const [moradorVinculadoNome, setMoradorVinculadoNome] = useState('');
-  const [moradorVinculadoTelefone, setMoradorVinculadoTelefone] = useState('');
   const [tipoServico, setTipoServico] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [fotoRosto, setFotoRosto] = useState('');
@@ -105,7 +120,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
   const [sugestoesReutilizacao, setSugestoesReutilizacao] = useState<any[]>([]);
 
   // Formulário de Entrada
-  const [tempoMaximoMinutos, setTempoMaximoMinutos] = useState<number>(240); // Padrão: 4 horas
+  const [tempoMaximoMinutos, setTempoMaximoMinutos] = useState<number>(240); // Padrão: 4 horas para prestadores
   const [tempoMaximoCustomizado, setTempoMaximoCustomizado] = useState<string>('');
   const [crachaEntrada, setCrachaEntrada] = useState('');
   const [placaEntrada, setPlacaEntrada] = useState('');
@@ -118,9 +133,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
   // Formulário de Prorrogação
   const [minutosProrrogacao, setMinutosProrrogacao] = useState(60);
-
-  // Web Audio para beeps quando há pessoas com permanência estourada
-  const ultimoBeepRef = useRef<number>(0);
 
   // Atualiza relógio do cronômetro a cada 1 segundo
   useEffect(() => {
@@ -155,7 +167,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
   const carregarTudo = async () => {
     setLoading(true);
     try {
-      // 1. Carrega todos os cadastros mestres de prestadores / autorizados
+      // 1. Carrega todos os cadastros mestres de autorizados / prestadores
       const { data: dadosCadastros, error: erroCad } = await supabase
         .from('prestadores')
         .select('*')
@@ -165,8 +177,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       if (erroCad) throw erroCad;
       setCadastros(dadosCadastros || []);
 
-      // 2. Tenta carregar acessos ativos (Dentro do Condomínio)
-      // Primeiro tenta da tabela específica prestadores_acessos, senão usa status de prestadores
+      // 2. Carrega acessos ativos (Dentro do Condomínio)
       let ativos: any[] = [];
       try {
         const { data: acessosDb, error: erroAcessos } = await supabase
@@ -179,7 +190,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         if (!erroAcessos && acessosDb && acessosDb.length > 0) {
           ativos = acessosDb;
         } else {
-          // Fallback para tabela prestadores com status_acesso = 'EM_ANDAMENTO' ou 'DENTRO'
+          // Fallback para prestadores com status 'DENTRO' ou 'EM_ANDAMENTO'
           ativos = (dadosCadastros || []).filter((p: any) => 
             p.status_acesso === 'EM_ANDAMENTO' || p.status_acesso === 'DENTRO'
           ).map((p: any) => ({
@@ -197,10 +208,8 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
             cracha: p.cracha_atribuido || p.cracha,
             placa_veiculo: p.placa_veiculo,
             data_hora_entrada: p.data_hora_entrada || p.created_at,
-            tempo_maximo_minutos: p.tempo_maximo_minutos || 240,
-            limite_permanencia_ate: p.limite_permanencia_ate || (
-              p.data_hora_entrada ? new Date(new Date(p.data_hora_entrada).getTime() + (p.tempo_maximo_minutos || 240) * 60000).toISOString() : null
-            ),
+            tempo_maximo_minutos: p.perfil_acesso === 'autorizado' ? null : (p.tempo_maximo_minutos || 240),
+            limite_permanencia_ate: p.perfil_acesso === 'autorizado' ? null : p.limite_permanencia_ate,
             operador_entrada_nome: p.operador_entrada_nome || 'Operador',
             status_acesso: 'DENTRO'
           }));
@@ -212,7 +221,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       }
       setAcessosAtivos(ativos);
 
-      // 3. Tenta carregar histórico recente de acessos concluídos
+      // 3. Carrega histórico de acessos concluídos
       try {
         const { data: histDb } = await supabase
           .from('prestadores_acessos')
@@ -230,36 +239,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       setLoading(false);
     }
   };
-
-  // Beep sonoro caso haja alguém com tempo estourado
-  useEffect(() => {
-    if (!alertaSonoroHabilitado || acessosAtivos.length === 0) return;
-
-    const temAlguemEstourado = acessosAtivos.some((item) => {
-      if (!item.limite_permanencia_ate) return false;
-      return tempoAtual > new Date(item.limite_permanencia_ate).getTime();
-    });
-
-    if (temAlguemEstourado && Date.now() - ultimoBeepRef.current > 30000) {
-      // Dispara sinal sonoro suave a cada 30 segundos
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(659, ctx.currentTime);
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.3);
-          ultimoBeepRef.current = Date.now();
-        }
-      } catch {}
-    }
-  }, [tempoAtual, acessosAtivos, alertaSonoroHabilitado]);
 
   // Autocomplete / Busca rápida de histórico para reutilização de cadastro
   useEffect(() => {
@@ -293,10 +272,88 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     if (item.bloco && item.bloco !== 'Área Comum') setBloco(item.bloco);
     setSugestoesReutilizacao([]);
     setTermoReutilizacao('');
-    setMensagem({ tipo: 'sucesso', texto: 'Dados do histórico recuperados com sucesso! Revise e confirme a liberação.' });
+    setMensagem({ tipo: 'sucesso', texto: 'Dados do histórico recuperados! Ajuste e confirme a liberação.' });
   };
 
-  // OCR de Documentos: preenche campos automaticamente
+  // Abertura do Modal de Edição de Cadastro
+  const abrirEdicaoCadastro = (item: any) => {
+    setIdEdicao(item.id);
+    setNomeCompleto(item.nome_profissional || item.nome_completo || '');
+    setDocumento(item.documento || '');
+    setTipoDocumento(item.tipo_documento || 'CPF');
+    setEmpresa(item.empresa || '');
+    setParentescoVinculo(item.parentesco_vinculo || '');
+    setTelefone(item.telefone || '');
+    setPlacaVeiculo(item.placa_veiculo || '');
+    setFotoRosto(item.foto_rosto || '');
+    setFotoDocumento(item.foto_documento || '');
+    setTipoServico(item.tipo_servico || '');
+    setObservacoes(item.observacoes || '');
+    setPerfilAcesso((item.perfil_acesso as PerfilAcesso) || 'autorizado');
+    setUnidade(item.unidade === 'Condomínio' ? '' : item.unidade || '');
+    setBloco(item.bloco === 'Área Comum' ? '' : item.bloco || '');
+    setTipoValidade((item.tipo_validade as TipoValidade) || 'hoje');
+    if (item.data_validade_inicio) setDataValidadeInicio(item.data_validade_inicio.slice(0, 10));
+    if (item.data_validade_fim) setDataValidadeFim(item.data_validade_fim.slice(0, 10));
+    setModalEditarCadastro(true);
+  };
+
+  // Salvar Edição
+  const salvarEdicaoCadastro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!idEdicao) return;
+    setLoading(true);
+
+    try {
+      const datasValidade = calcularDatasValidade(tipoValidade);
+      const payload: any = {
+        perfil_acesso: perfilAcesso,
+        nome_profissional: nomeCompleto.trim(),
+        documento: documento.trim(),
+        tipo_documento: tipoDocumento,
+        empresa: perfilAcesso === 'autorizado' ? (parentescoVinculo || 'Visitante/Família') : empresa.trim(),
+        parentesco_vinculo: parentescoVinculo.trim() || null,
+        telefone: telefone.trim() || null,
+        placa_veiculo: placaVeiculo.trim() || null,
+        foto_rosto: fotoRosto || null,
+        foto_documento: fotoDocumento || null,
+        tipo_servico: tipoServico.trim() || null,
+        atende_condominio: perfilAcesso === 'prestador_condominio',
+        unidade: perfilAcesso === 'prestador_condominio' ? 'Condomínio' : unidade.trim(),
+        bloco: perfilAcesso === 'prestador_condominio' ? 'Área Comum' : bloco.trim(),
+        observacoes: observacoes.trim(),
+        tipo_validade: tipoValidade,
+        data_validade_inicio: datasValidade.inicio,
+        data_validade_fim: datasValidade.fim
+      };
+
+      const { error } = await supabase
+        .from('prestadores')
+        .update(payload)
+        .eq('id', idEdicao);
+
+      if (error) throw error;
+
+      await registrarAtividade({
+        modulo: 'Prestadores',
+        acao: 'EDITAR',
+        descricao: `Atualizou dados cadastrais de ${nomeCompleto.trim()} (${perfilNome(perfilAcesso)}). Validade: ${tipoValidade}.`,
+        detalhes: { id: idEdicao, nome: nomeCompleto.trim(), perfil: perfilAcesso },
+        operador_nome: operadorNome,
+        condominio_id: idCondominio
+      });
+
+      setMensagem({ tipo: 'sucesso', texto: `Cadastro de ${nomeCompleto} atualizado com sucesso!` });
+      fecharModalCadastro();
+      await carregarTudo();
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao atualizar cadastro: ' + err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // OCR de Documentos
   const handleOcrConfirmado = (dados: {
     nomeCompleto: string;
     documento: string;
@@ -312,7 +369,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     if (dados.fotoRostoBase64) setFotoRosto(dados.fotoRostoBase64);
     if (dados.empresa && !empresa) setEmpresa(dados.empresa);
     setModalOcrAberto(false);
-    setMensagem({ tipo: 'sucesso', texto: 'Documento e foto do rosto extraídos com sucesso pelo OCR!' });
+    setMensagem({ tipo: 'sucesso', texto: 'Dados do documento e foto extraídos com sucesso via OCR!' });
   };
 
   // Upload manual de foto do rosto
@@ -327,7 +384,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     reader.readAsDataURL(file);
   };
 
-  // Helper: cálculo de datas de validade da liberação
+  // Helper de datas de validade da liberação
   const calcularDatasValidade = (tipo: TipoValidade): { inicio: string; fim: string | null } => {
     const agora = new Date();
     const hojeStr = agora.toISOString().slice(0, 10);
@@ -362,7 +419,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       return { inicio: hojeStr, fim: fim30.toISOString() };
     }
 
-    // personalizado
     return {
       inicio: dataValidadeInicio ? `${dataValidadeInicio}T00:00:00.000Z` : hojeStr,
       fim: dataValidadeFim ? `${dataValidadeFim}T23:59:59.999Z` : null
@@ -395,15 +451,17 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     };
   };
 
-  // Cálculo do cronômetro de permanência interna
+  // Cronômetro de permanência: Visitantes/Família NÃO têm limite de permanência!
   const checarPermanencia = (item: any) => {
-    if (!item.limite_permanencia_ate) {
+    const ehVisitante = item.perfil_acesso === 'autorizado';
+
+    if (ehVisitante || !item.limite_permanencia_ate) {
       return {
         status: 'normal',
         minutosRestantes: 999,
-        texto: 'Sem limite fixado',
-        corFundo: 'bg-slate-900 border-slate-700',
-        badge: 'bg-slate-800 text-slate-300',
+        texto: 'Permanência Livre (Família / Visitante)',
+        corFundo: 'bg-slate-900 border-slate-800',
+        badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
         estourado: false
       };
     }
@@ -451,7 +509,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     };
   };
 
-  // CADASTRO / LIBERAÇÃO (Pilar 1 e 2)
+  // Salvar Novo Cadastro
   const salvarCadastro = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensagem({ tipo: '', texto: '' });
@@ -504,44 +562,14 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         operador_entrada_nome: operadorNome
       };
 
-      const { data: inserido, error } = await supabase
-        .from('prestadores')
-        .insert([payload])
-        .select()
-        .single();
+      const { error } = await supabase.from('prestadores').insert([payload]);
+      if (error) throw error;
 
-      if (error) {
-        // Fallback gracioso caso alguma coluna nova ainda não esteja no banco
-        console.warn('Erro ao salvar com colunas estendidas, tentando salvar registro base:', error.message);
-        const payloadReduzido = {
-          condominio_id: idCondominio,
-          nome_profissional: nomeCompleto.trim(),
-          empresa: empresa.trim() || parentescoVinculo || 'Geral',
-          documento: documento.trim() || 'NÃO INFORMADO',
-          tipo_documento: tipoDocumento,
-          unidade: perfilAcesso === 'prestador_condominio' ? 'Condomínio' : unidade.trim(),
-          bloco: perfilAcesso === 'prestador_condominio' ? 'Área Comum' : bloco.trim(),
-          foto_rosto: fotoRosto || null,
-          status_acesso: 'AUTORIZADO'
-        };
-        const retry = await supabase.from('prestadores').insert([payloadReduzido]);
-        if (retry.error) throw retry.error;
-      }
-
-      // Registra no Histórico Absoluto
       await registrarAtividade({
         modulo: 'Prestadores',
         acao: 'CRIAR',
         descricao: `Cadastrou liberação para ${nomeCompleto.trim()} (${perfilNome(perfilAcesso)}) - Destino: ${payload.unidade} ${payload.bloco || ''}. Validade: ${tipoValidade}.`,
-        detalhes: {
-          nome: nomeCompleto.trim(),
-          perfil: perfilAcesso,
-          documento,
-          unidade: payload.unidade,
-          bloco: payload.bloco,
-          tipoValidade,
-          validadeFim: datasValidade.fim
-        },
+        detalhes: { nome: nomeCompleto.trim(), perfil: perfilAcesso, unidade: payload.unidade, tipoValidade },
         operador_nome: operadorNome,
         condominio_id: idCondominio
       });
@@ -558,6 +586,8 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
   const fecharModalCadastro = () => {
     setModalNovoCadastro(false);
+    setModalEditarCadastro(false);
+    setIdEdicao(null);
     setNomeCompleto('');
     setDocumento('');
     setTipoDocumento('CPF');
@@ -576,10 +606,10 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     setSugestoesReutilizacao([]);
   };
 
-  // REGISTRO DE ENTRADA (Pilar 3)
+  // Entrada
   const abrirModalEntradaPara = (pessoa: any) => {
     setItemSelecionado(pessoa);
-    setTempoMaximoMinutos(240); // 4 horas padrão
+    setTempoMaximoMinutos(240); // 4 horas para prestadores
     setTempoMaximoCustomizado('');
     setCrachaEntrada(pessoa.cracha_atribuido || '');
     setPlacaEntrada(pessoa.placa_veiculo || '');
@@ -594,15 +624,16 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
     const statusValidade = checarValidade(itemSelecionado);
     if (statusValidade.expirou && !alertaExpiracaoConfirmado) {
-      alert('Atenção: A liberação desta pessoa está expirada. Confirme com o morador ou marque a opção de renovação para prosseguir.');
+      alert('Atenção: A liberação desta pessoa está expirada. Confirme com o morador para prosseguir.');
       return;
     }
 
     setLoading(true);
     try {
-      const minutosEfetivos = tempoMaximoCustomizado ? parseInt(tempoMaximoCustomizado, 10) || 240 : tempoMaximoMinutos;
+      const ehVisitante = itemSelecionado.perfil_acesso === 'autorizado';
+      const minutosEfetivos = ehVisitante ? null : (tempoMaximoCustomizado ? parseInt(tempoMaximoCustomizado, 10) || 240 : tempoMaximoMinutos);
       const agora = new Date();
-      const limitePermanencia = new Date(agora.getTime() + minutosEfetivos * 60000).toISOString();
+      const limitePermanencia = (ehVisitante || !minutosEfetivos) ? null : new Date(agora.getTime() + minutosEfetivos * 60000).toISOString();
 
       // 1. Atualiza status no cadastro mestre
       await supabase
@@ -618,12 +649,12 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         })
         .eq('id', itemSelecionado.id);
 
-      // 2. Grava histórico na tabela prestadores_acessos se existir
+      // 2. Grava histórico na tabela prestadores_acessos
       try {
         await supabase.from('prestadores_acessos').insert([{
           condominio_id: idCondominio,
           prestador_id: itemSelecionado.id,
-          perfil_acesso: itemSelecionado.perfil_acesso || (itemSelecionado.atende_condominio ? 'prestador_condominio' : 'prestador_unidade'),
+          perfil_acesso: itemSelecionado.perfil_acesso || 'prestador_unidade',
           nome_completo: itemSelecionado.nome_profissional || itemSelecionado.nome_completo,
           documento: itemSelecionado.documento,
           empresa: itemSelecionado.empresa,
@@ -646,21 +677,19 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       await registrarAtividade({
         modulo: 'Prestadores',
         acao: 'ENTRADA',
-        descricao: `Registrou ENTRADA de ${itemSelecionado.nome_profissional || itemSelecionado.nome_completo} para ${itemSelecionado.unidade} ${itemSelecionado.bloco || ''}. Tempo max: ${Math.floor(minutosEfetivos / 60)}h. Crachá: ${crachaEntrada || 'N/A'}.`,
+        descricao: `Registrou ENTRADA de ${itemSelecionado.nome_profissional || itemSelecionado.nome_completo} para ${itemSelecionado.unidade} ${itemSelecionado.bloco || ''}. ${ehVisitante ? 'Permanência Livre' : `Tempo max: ${Math.floor((minutosEfetivos || 0) / 60)}h`}. Crachá: ${crachaEntrada || 'N/A'}.`,
         detalhes: {
           pessoaId: itemSelecionado.id,
           nome: itemSelecionado.nome_profissional || itemSelecionado.nome_completo,
           unidade: itemSelecionado.unidade,
-          bloco: itemSelecionado.bloco,
           cracha: crachaEntrada,
-          tempoMaximoMinutos: minutosEfetivos,
-          limitePermanencia
+          ehVisitante
         },
         operador_nome: operadorNome,
         condominio_id: idCondominio
       });
 
-      setMensagem({ tipo: 'sucesso', texto: `Entrada de ${itemSelecionado.nome_profissional || itemSelecionado.nome_completo} registrada com sucesso!` });
+      setMensagem({ tipo: 'sucesso', texto: `Entrada de ${itemSelecionado.nome_profissional || itemSelecionado.nome_completo} registrada!` });
       setModalEntrada(false);
       setAbaAtiva('dentro');
       await carregarTudo();
@@ -671,7 +700,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     }
   };
 
-  // REGISTRO DE SAÍDA (Pilar 3)
+  // Saída
   const abrirModalSaidaPara = (item: any) => {
     setItemSelecionado(item);
     setCrachaDevolvido(true);
@@ -687,7 +716,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       const agora = new Date().toISOString();
       const targetId = itemSelecionado.prestador_id || itemSelecionado.id;
 
-      // 1. Atualiza no cadastro mestre
       await supabase
         .from('prestadores')
         .update({
@@ -697,7 +725,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         })
         .eq('id', targetId);
 
-      // 2. Atualiza registro de acesso
       try {
         await supabase
           .from('prestadores_acessos')
@@ -711,7 +738,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
           .eq('prestador_id', targetId);
       } catch {}
 
-      // 3. Auditoria no Histórico Absoluto
       await registrarAtividade({
         modulo: 'Prestadores',
         acao: 'SAIDA',
@@ -719,8 +745,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         detalhes: {
           nome: itemSelecionado.nome_completo || itemSelecionado.nome_profissional,
           cracha: itemSelecionado.cracha || itemSelecionado.cracha_atribuido,
-          crachaDevolvido,
-          horaSaida: agora
+          crachaDevolvido
         },
         operador_nome: operadorNome,
         condominio_id: idCondominio
@@ -736,7 +761,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     }
   };
 
-  // PRORROGAR TEMPO DE PERMANÊNCIA (Pilar 3)
+  // Prorrogação
   const handleProrrogarTempo = async () => {
     if (!itemSelecionado) return;
     setLoading(true);
@@ -768,7 +793,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         condominio_id: idCondominio
       });
 
-      setMensagem({ tipo: 'sucesso', texto: `Tempo prorrogado em +${minutosProrrogacao} minutos com sucesso!` });
+      setMensagem({ tipo: 'sucesso', texto: `Tempo prorrogado em +${minutosProrrogacao} minutos!` });
       setModalProrrogar(false);
       await carregarTudo();
     } catch (err: any) {
@@ -778,20 +803,18 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     }
   };
 
-  // DISPARO DE NOTIFICAÇÃO VIA WHATSAPP (Pilar 4)
+  // WhatsApp
   const dispararWhatsAppEntrada = (item: any) => {
     const nome = item.nome_profissional || item.nome_completo;
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const perfil = item.perfil_acesso || (item.atende_condominio ? 'prestador_condominio' : 'prestador_unidade');
 
     if (perfil === 'prestador_condominio') {
-      // Notifica grupo de administração / síndico
       const telSindico = usuarioLogado?.condominio?.sindico_whatsapp?.replace(/\D/g, '') || '';
       const texto = `Aviso Portaria: O prestador *${nome}* da empresa *${item.empresa || 'Serviços'}* registrou *ENTRADA* para manutenção no condomínio às *${hora}*. Crachá: ${item.cracha || item.cracha_atribuido || 'N/A'}.`;
       const url = telSindico ? `https://wa.me/55${telSindico}?text=${encodeURIComponent(texto)}` : `https://wa.me/?text=${encodeURIComponent(texto)}`;
       window.open(url, '_blank');
     } else {
-      // Notifica o morador da unidade
       const moradorDestino = moradores.find((m: any) => 
         m.unidade?.toString().trim().toLowerCase() === item.unidade?.toString().trim().toLowerCase() &&
         (!item.bloco || m.bloco?.toString().trim().toLowerCase() === item.bloco?.toString().trim().toLowerCase())
@@ -825,13 +848,12 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     }
   };
 
-  // Helper visual para os 3 perfis
   const perfilNome = (p: string) => {
     switch (p) {
       case 'autorizado': return 'Visitante / Família';
       case 'prestador_unidade': return 'Prestador da Unidade';
       case 'prestador_condominio': return 'Prestador do Condomínio';
-      default: return 'Prestador / Visitante';
+      default: return 'Autorizado';
     }
   };
 
@@ -848,7 +870,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     }
   };
 
-  // Filtros aplicados sobre cadastros
   const cadastrosFiltrados = useMemo(() => {
     return cadastros.filter((c: any) => {
       const nome = (c.nome_profissional || c.nome_completo || '').toLowerCase();
@@ -860,9 +881,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       const bateBusca = !busca || nome.includes(buscaTermo) || doc.includes(buscaTermo) || emp.includes(buscaTermo) || uni.includes(buscaTermo);
       if (!bateBusca) return false;
 
-      if (filtroPerfil !== 'todos' && c.perfil_acesso !== filtroPerfil) {
-        return false;
-      }
+      if (filtroPerfil !== 'todos' && c.perfil_acesso !== filtroPerfil) return false;
 
       if (filtroValidade !== 'todos') {
         const infoVal = checarValidade(c);
@@ -875,71 +894,23 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     });
   }, [cadastros, busca, filtroPerfil, filtroValidade]);
 
-  // Contagem de pessoas com tempo estourado
   const totalEstourados = useMemo(() => {
     return acessosAtivos.filter(a => checarPermanencia(a).estourado).length;
   }, [acessosAtivos, tempoAtual]);
 
-  const copiarSqlSupabase = () => {
-    const sql = `-- Script de Atualização Prestadores & Acessos
-ALTER TABLE prestadores
-  ADD COLUMN IF NOT EXISTS perfil_acesso TEXT DEFAULT 'prestador_unidade',
-  ADD COLUMN IF NOT EXISTS parentesco_vinculo TEXT,
-  ADD COLUMN IF NOT EXISTS telefone TEXT,
-  ADD COLUMN IF NOT EXISTS placa_veiculo TEXT,
-  ADD COLUMN IF NOT EXISTS tipo_validade TEXT DEFAULT 'hoje',
-  ADD COLUMN IF NOT EXISTS data_validade_inicio TIMESTAMPTZ DEFAULT NOW(),
-  ADD COLUMN IF NOT EXISTS data_validade_fim TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS tempo_maximo_minutos INTEGER DEFAULT 240,
-  ADD COLUMN IF NOT EXISTS limite_permanencia_ate TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS operador_entrada_nome TEXT,
-  ADD COLUMN IF NOT EXISTS operador_saida_nome TEXT;
-
-CREATE TABLE IF NOT EXISTS prestadores_acessos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  prestador_id UUID REFERENCES prestadores(id) ON DELETE CASCADE,
-  perfil_acesso TEXT NOT NULL,
-  nome_completo TEXT NOT NULL,
-  documento TEXT,
-  empresa TEXT,
-  parentesco_vinculo TEXT,
-  unidade TEXT,
-  bloco TEXT,
-  foto_rosto TEXT,
-  cracha TEXT,
-  placa_veiculo TEXT,
-  data_hora_entrada TIMESTAMPTZ DEFAULT NOW(),
-  tempo_maximo_minutos INTEGER DEFAULT 240,
-  limite_permanencia_ate TIMESTAMPTZ,
-  data_hora_saida TIMESTAMPTZ,
-  status_acesso TEXT DEFAULT 'DENTRO',
-  operador_entrada_nome TEXT,
-  operador_saida_nome TEXT,
-  observacoes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-NOTIFY pgrst, 'reload schema';`;
-
-    navigator.clipboard.writeText(sql);
-    setCopiadoSql(true);
-    setTimeout(() => setCopiadoSql(false), 3000);
-  };
-
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
       
-      {/* CABEÇALHO PRINCIPAL DO MÓDULO */}
+      {/* CABEÇALHO DO MÓDULO */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 p-4 sm:p-5 rounded-3xl border border-slate-800 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-white">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/40 shrink-0 shadow-inner">
-            <HardHat className="w-7 h-7" />
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/40 shrink-0 shadow-inner">
+            <UserCheck className="w-7 h-7" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight">
-                Controle de Prestadores & Obras
+                Autorizados & Acessos
               </h2>
               {totalEstourados > 0 && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-600 text-white animate-pulse">
@@ -948,7 +919,7 @@ NOTIFY pgrst, 'reload schema';`;
               )}
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
-              Gestão dos 3 Perfis de Acesso, Prazos de Validade, Alertas de Permanência e WhatsApp automático.
+              Controle de Visitantes, Familiares, Prestadores de Unidade e Manutenção Predial.
             </p>
           </div>
         </div>
@@ -956,26 +927,12 @@ NOTIFY pgrst, 'reload schema';`;
         <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
           <button
             type="button"
-            onClick={() => setAlertaSonoroHabilitado(!alertaSonoroHabilitado)}
-            className={`p-2 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              alertaSonoroHabilitado 
-                ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700' 
-                : 'bg-red-950/80 text-red-300 border-red-500/40 hover:bg-red-900'
-            }`}
-            title={alertaSonoroHabilitado ? 'Alertas sonoros ativados (clique para mutar)' : 'Alertas sonoros silenciados (clique para reativar)'}
-          >
-            {alertaSonoroHabilitado ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-red-400" />}
-            <span className="hidden sm:inline">{alertaSonoroHabilitado ? 'Som Ativo' : 'Som Mutado'}</span>
-          </button>
-
-          <button
-            type="button"
             onClick={carregarTudo}
             disabled={loading}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
             title="Recarregar dados"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-purple-400' : ''}`} />
           </button>
 
           <button
@@ -1009,13 +966,13 @@ NOTIFY pgrst, 'reload schema';`;
         </div>
       )}
 
-      {/* NAVEGAÇÃO DE ABAS */}
+      {/* NAVEGAÇÃO DE ABAS (Removida aba SQL da tela conforme instrução) */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
         <button
           onClick={() => setAbaAtiva('dentro')}
           className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
             abaAtiva === 'dentro'
-              ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
               : 'bg-slate-850 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800'
           }`}
         >
@@ -1024,7 +981,7 @@ NOTIFY pgrst, 'reload schema';`;
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
             totalEstourados > 0 
               ? 'bg-red-600 text-white animate-pulse' 
-              : abaAtiva === 'dentro' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
+              : abaAtiva === 'dentro' ? 'bg-slate-950 text-purple-300' : 'bg-slate-800 text-slate-300'
           }`}>
             {acessosAtivos.length}
           </span>
@@ -1056,29 +1013,15 @@ NOTIFY pgrst, 'reload schema';`;
           <Clock className="w-4 h-4" />
           <span>Histórico de Entradas & Saídas</span>
         </button>
-
-        <button
-          onClick={() => setAbaAtiva('sql')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
-            abaAtiva === 'sql'
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-              : 'bg-slate-850 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800'
-          }`}
-        >
-          <Database className="w-4 h-4" />
-          <span>Script SQL Supabase</span>
-        </button>
       </div>
 
-      {/* ========================================================================= */}
-      {/* ABA 1: DENTRO DO CONDOMÍNIO (Pessoas Presentes e Cronômetro de Permanência) */}
-      {/* ========================================================================= */}
+      {/* ABA 1: DENTRO DO CONDOMÍNIO */}
       {abaAtiva === 'dentro' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-900 p-3 rounded-2xl border border-slate-800">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-              <span>Pessoas atualmente no condomínio: <strong className="text-white">{acessosAtivos.length}</strong></span>
+              <span>Presentes no condomínio agora: <strong className="text-white">{acessosAtivos.length}</strong></span>
             </div>
             {totalEstourados > 0 && (
               <span className="text-red-400 font-bold flex items-center gap-1">
@@ -1092,9 +1035,9 @@ NOTIFY pgrst, 'reload schema';`;
               <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-500 flex items-center justify-center mx-auto">
                 <UserCheck className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-300">Nenhum prestador ou visitante no momento</h3>
+              <h3 className="text-base font-bold text-slate-300">Nenhum visitante ou prestador dentro do condomínio</h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Quando alguém registrar entrada na portaria, o card com cronômetro regressivo de permanência aparecerá aqui em tempo real.
+                Quando alguém registrar entrada na portaria, o card com foto e tempo de permanência aparecerá aqui em tempo real.
               </p>
               <button
                 type="button"
@@ -1111,6 +1054,7 @@ NOTIFY pgrst, 'reload schema';`;
                 const infoPermanencia = checarPermanencia(item);
                 const perfil = item.perfil_acesso || (item.atende_condominio ? 'prestador_condominio' : 'prestador_unidade');
                 const horaEntradaFmt = item.data_hora_entrada ? new Date(item.data_hora_entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                const ehVisitante = perfil === 'autorizado';
 
                 return (
                   <div
@@ -1118,16 +1062,14 @@ NOTIFY pgrst, 'reload schema';`;
                     className={`rounded-3xl p-4 border transition duration-200 flex flex-col justify-between gap-3 text-white ${infoPermanencia.corFundo}`}
                   >
                     <div className="space-y-3">
-                      {/* Topo do Card */}
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-3">
-                          {/* Foto do Rosto */}
                           <div 
                             onClick={() => item.foto_rosto && setModalVisualizarFoto(item.foto_rosto)}
                             className="w-14 h-14 rounded-2xl bg-slate-800 border-2 border-slate-700 overflow-hidden shrink-0 cursor-pointer flex items-center justify-center text-slate-500 relative group"
                           >
                             {item.foto_rosto ? (
-                              <img src={item.foto_rosto} alt={item.nome_completo} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                              <img src={item.foto_rosto} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
                             ) : (
                               <UserCheck className="w-7 h-7" />
                             )}
@@ -1141,12 +1083,11 @@ NOTIFY pgrst, 'reload schema';`;
                               {item.nome_completo || item.nome_profissional}
                             </h4>
                             <p className="text-[11px] text-slate-300 truncate">
-                              {item.empresa || item.parentesco_vinculo || 'Autônomo'}
+                              {item.empresa || item.parentesco_vinculo || 'Visitante'}
                             </p>
                           </div>
                         </div>
 
-                        {/* Crachá */}
                         {item.cracha && (
                           <span className="px-2 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-mono font-black shrink-0">
                             Crachá {item.cracha}
@@ -1154,7 +1095,6 @@ NOTIFY pgrst, 'reload schema';`;
                         )}
                       </div>
 
-                      {/* Informações de Local e Entrada */}
                       <div className="bg-slate-950/60 p-2.5 rounded-2xl border border-slate-800/80 space-y-1 text-xs">
                         <div className="flex items-center justify-between text-slate-300">
                           <span className="text-slate-400">Destino:</span>
@@ -1176,7 +1116,7 @@ NOTIFY pgrst, 'reload schema';`;
                         )}
                       </div>
 
-                      {/* CRONÔMETRO REGRESSIVO DE PERMANÊNCIA (Pilar 3) */}
+                      {/* Cronômetro Regressivo (Apenas para prestadores; visitantes têm permanência livre) */}
                       <div className={`p-3 rounded-2xl border text-center space-y-1 ${
                         infoPermanencia.estourado 
                           ? 'bg-red-950/80 border-red-500 text-red-200' 
@@ -1185,19 +1125,17 @@ NOTIFY pgrst, 'reload schema';`;
                           : 'bg-slate-950 border-slate-800 text-slate-300'
                       }`}>
                         <div className="flex items-center justify-center gap-1.5 text-[11px] font-black uppercase">
-                          <Timer className={`w-3.5 h-3.5 ${infoPermanencia.estourado ? 'animate-bounce text-red-400' : 'text-amber-400'}`} />
-                          <span>{infoPermanencia.estourado ? 'Tempo Esgotado' : 'Permanência Interna'}</span>
+                          <Timer className={`w-3.5 h-3.5 ${infoPermanencia.estourado ? 'animate-bounce text-red-400' : 'text-purple-400'}`} />
+                          <span>{ehVisitante ? 'Status de Permanência' : (infoPermanencia.estourado ? 'Tempo Esgotado' : 'Permanência Interna')}</span>
                         </div>
-                        <div className="font-mono text-base font-black tracking-wider">
+                        <div className="font-mono text-sm sm:text-base font-black tracking-wider">
                           {infoPermanencia.texto}
                         </div>
                       </div>
                     </div>
 
-                    {/* Botões de Ação Rápida */}
                     <div className="pt-2 border-t border-slate-800 space-y-2">
                       <div className="grid grid-cols-2 gap-2">
-                        {/* Botão Registrar Saída */}
                         <button
                           type="button"
                           onClick={() => abrirModalSaidaPara(item)}
@@ -1207,31 +1145,31 @@ NOTIFY pgrst, 'reload schema';`;
                           <span>Dar Saída</span>
                         </button>
 
-                        {/* Botão Notificar WhatsApp */}
                         <button
                           type="button"
                           onClick={() => dispararWhatsAppEntrada(item)}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition shadow-md active:scale-95 cursor-pointer"
-                          title="Enviar aviso de entrada/presença via WhatsApp"
+                          title="Enviar aviso via WhatsApp"
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>WhatsApp</span>
                         </button>
                       </div>
 
-                      {/* Botão Prorrogar Tempo de Permanência */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setItemSelecionado(item);
-                          setMinutosProrrogacao(60);
-                          setModalProrrogar(true);
-                        }}
-                        className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1.5 px-3 rounded-xl text-[11px] flex items-center justify-center gap-1.5 transition border border-slate-700 cursor-pointer"
-                      >
-                        <Clock className="w-3 h-3 text-amber-400" />
-                        <span>Prorrogar Tempo (+1h / +2h)</span>
-                      </button>
+                      {!ehVisitante && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setItemSelecionado(item);
+                            setMinutosProrrogacao(60);
+                            setModalProrrogar(true);
+                          }}
+                          className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1.5 px-3 rounded-xl text-[11px] flex items-center justify-center gap-1.5 transition border border-slate-700 cursor-pointer"
+                        >
+                          <Clock className="w-3 h-3 text-amber-400" />
+                          <span>Prorrogar Tempo (+1h / +2h)</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -1241,18 +1179,14 @@ NOTIFY pgrst, 'reload schema';`;
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* ABA 2: LIBERAÇÕES & CADASTROS MESTRES (Cadastrados com Janela de Validade) */}
-      {/* ========================================================================= */}
+      {/* ABA 2: LIBERAÇÕES & CADASTROS */}
       {abaAtiva === 'cadastros' && (
         <div className="space-y-4">
-          {/* Barra de Filtros */}
           <div className="bg-slate-900 p-4 rounded-3xl border border-slate-800 space-y-3 shadow-xl">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Campo de Busca Livre */}
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
-                  Buscar Cadastrado
+                  Buscar Autorizado / Prestador
                 </label>
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -1261,12 +1195,11 @@ NOTIFY pgrst, 'reload schema';`;
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
                     placeholder="Nome, documento, apto, empresa..."
-                    className="w-full bg-slate-950 text-white text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 text-white text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                   />
                 </div>
               </div>
 
-              {/* Filtro por Perfil */}
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
                   Filtrar por Perfil
@@ -1274,7 +1207,7 @@ NOTIFY pgrst, 'reload schema';`;
                 <select
                   value={filtroPerfil}
                   onChange={(e) => setFiltroPerfil(e.target.value)}
-                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                 >
                   <option value="todos">Todos os Perfis (3 Categorias)</option>
                   <option value="autorizado">🟣 1. Autorizados (Visitantes / Família)</option>
@@ -1283,7 +1216,6 @@ NOTIFY pgrst, 'reload schema';`;
                 </select>
               </div>
 
-              {/* Filtro por Validade */}
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
                   Status da Validade
@@ -1291,7 +1223,7 @@ NOTIFY pgrst, 'reload schema';`;
                 <select
                   value={filtroValidade}
                   onChange={(e) => setFiltroValidade(e.target.value)}
-                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                 >
                   <option value="todos">Todas as Validades</option>
                   <option value="validos">🟢 Liberações Válidas</option>
@@ -1302,13 +1234,12 @@ NOTIFY pgrst, 'reload schema';`;
             </div>
           </div>
 
-          {/* Lista de Cadastros */}
           {cadastrosFiltrados.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center space-y-3">
               <Users className="w-12 h-12 text-slate-600 mx-auto" />
               <h3 className="text-base font-bold text-slate-300">Nenhum cadastro encontrado</h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Não há pessoas cadastradas para os filtros aplicados. Clique em "Nova Liberação / Cadastro" acima para adicionar.
+                Não há pessoas cadastradas para os filtros aplicados. Clique em "Nova Liberação / Cadastro" acima.
               </p>
             </div>
           ) : (
@@ -1326,13 +1257,12 @@ NOTIFY pgrst, 'reload schema';`;
                     }`}
                   >
                     <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
-                      {/* Foto */}
                       <div
                         onClick={() => item.foto_rosto && setModalVisualizarFoto(item.foto_rosto)}
                         className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 cursor-pointer"
                       >
                         {item.foto_rosto ? (
-                          <img src={item.foto_rosto} alt={item.nome_profissional} className="w-full h-full object-cover" />
+                          <img src={item.foto_rosto} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <UserCheck className="w-6 h-6" />
                         )}
@@ -1378,8 +1308,18 @@ NOTIFY pgrst, 'reload schema';`;
                       </div>
                     </div>
 
-                    {/* Ações */}
+                    {/* Ações: Entrada, Editar Cadastro, WhatsApp */}
                     <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                      {/* BOTÃO EDITAR CADASTRO */}
+                      <button
+                        type="button"
+                        onClick={() => abrirEdicaoCadastro(item)}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2 rounded-xl border border-slate-700 transition cursor-pointer"
+                        title="Editar cadastro / Renovar validade"
+                      >
+                        <Pencil className="w-4 h-4 text-purple-400" />
+                      </button>
+
                       {jaEstaDentro ? (
                         <button
                           type="button"
@@ -1407,7 +1347,6 @@ NOTIFY pgrst, 'reload schema';`;
                         </button>
                       )}
 
-                      {/* Notificar WhatsApp */}
                       <button
                         type="button"
                         onClick={() => dispararWhatsAppEntrada(item)}
@@ -1425,9 +1364,7 @@ NOTIFY pgrst, 'reload schema';`;
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* ABA 3: HISTÓRICO DE ACESSOS (Entradas e Saídas Concluídas) */}
-      {/* ========================================================================= */}
+      {/* ABA 3: HISTÓRICO DE ACESSOS */}
       {abaAtiva === 'historico' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-900 p-3 rounded-2xl border border-slate-800">
@@ -1477,98 +1414,22 @@ NOTIFY pgrst, 'reload schema';`;
       )}
 
       {/* ========================================================================= */}
-      {/* ABA 4: SCRIPT SQL PARA ATUALIZAR O SUPABASE */}
+      {/* MODAL: NOVO CADASTRO OU EDIÇÃO */}
       {/* ========================================================================= */}
-      {abaAtiva === 'sql' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h3 className="text-base font-black text-white uppercase flex items-center gap-2">
-                <Database className="w-5 h-5 text-indigo-400" />
-                Script SQL para Atualização do Supabase
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Execute o comando abaixo no <strong>SQL Editor</strong> do painel Supabase para criar as novas colunas de perfis, validades e auditoria de permanência.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={copiarSqlSupabase}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
-            >
-              {copiadoSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-              <span>{copiadoSql ? 'Copiado para Área de Transferência!' : 'Copiar Script SQL'}</span>
-            </button>
-          </div>
-
-          <pre className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-indigo-300 font-mono text-xs overflow-x-auto max-h-96 leading-relaxed select-all">
-{`-- INFPORT 1.0 - ATUALIZAÇÃO DO MÓDULO DE PRESTADORES, AUTORIZADOS & OBRAS
-BEGIN;
-
-ALTER TABLE prestadores
-  ADD COLUMN IF NOT EXISTS perfil_acesso TEXT DEFAULT 'prestador_unidade',
-  ADD COLUMN IF NOT EXISTS parentesco_vinculo TEXT,
-  ADD COLUMN IF NOT EXISTS telefone TEXT,
-  ADD COLUMN IF NOT EXISTS placa_veiculo TEXT,
-  ADD COLUMN IF NOT EXISTS tipo_validade TEXT DEFAULT 'hoje',
-  ADD COLUMN IF NOT EXISTS data_validade_inicio TIMESTAMPTZ DEFAULT NOW(),
-  ADD COLUMN IF NOT EXISTS data_validade_fim TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS tempo_maximo_minutos INTEGER DEFAULT 240,
-  ADD COLUMN IF NOT EXISTS limite_permanencia_ate TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS operador_entrada_nome TEXT,
-  ADD COLUMN IF NOT EXISTS operador_saida_nome TEXT;
-
-CREATE TABLE IF NOT EXISTS prestadores_acessos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  prestador_id UUID REFERENCES prestadores(id) ON DELETE CASCADE,
-  perfil_acesso TEXT NOT NULL,
-  nome_completo TEXT NOT NULL,
-  documento TEXT,
-  empresa TEXT,
-  parentesco_vinculo TEXT,
-  unidade TEXT,
-  bloco TEXT,
-  foto_rosto TEXT,
-  cracha TEXT,
-  placa_veiculo TEXT,
-  data_hora_entrada TIMESTAMPTZ DEFAULT NOW(),
-  tempo_maximo_minutos INTEGER DEFAULT 240,
-  limite_permanencia_ate TIMESTAMPTZ,
-  data_hora_saida TIMESTAMPTZ,
-  status_acesso TEXT DEFAULT 'DENTRO',
-  operador_entrada_nome TEXT,
-  operador_saida_nome TEXT,
-  observacoes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-NOTIFY pgrst, 'reload schema';
-
-COMMIT;`}
-          </pre>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 1: NOVO CADASTRO / LIBERAÇÃO (Pilar 1 e 2) */}
-      {/* ========================================================================= */}
-      {modalNovoCadastro && (
+      {(modalNovoCadastro || modalEditarCadastro) && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-5 sm:p-6 text-white space-y-5 shadow-2xl relative my-auto">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-                  <UserPlus className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                  {modalEditarCadastro ? <Pencil className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="font-black text-base sm:text-lg text-white uppercase">
-                    Nova Liberação de Acesso
+                    {modalEditarCadastro ? 'Editar Cadastro / Liberação' : 'Nova Liberação de Acesso'}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Cadastre a autorização para familiares, prestadores de apto ou condomínio
+                    {modalEditarCadastro ? 'Atualize dados, validade ou fotos da pessoa' : 'Cadastre a autorização para familiares, prestadores de apto ou condomínio'}
                   </p>
                 </div>
               </div>
@@ -1582,10 +1443,10 @@ COMMIT;`}
               </button>
             </div>
 
-            {/* SELEÇÃO DOS 3 PERFIS DE ACESSO (Pilar 1) */}
+            {/* SELEÇÃO DOS 3 PERFIS */}
             <div className="space-y-1.5">
               <label className="block text-xs font-black uppercase text-amber-400">
-                1. Selecione a Categoria de Acesso:
+                Categoria de Acesso:
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
@@ -1599,7 +1460,7 @@ COMMIT;`}
                 >
                   <strong className="block text-xs text-purple-300">1. Autorizados</strong>
                   <span className="text-[11px] block mt-0.5 text-slate-300">Visitantes / Família</span>
-                  <span className="text-[10px] block text-slate-400 mt-1">Mães, pais, amigos, entregadores</span>
+                  <span className="text-[10px] block text-slate-400 mt-1">Permanência livre</span>
                 </button>
 
                 <button
@@ -1613,7 +1474,7 @@ COMMIT;`}
                 >
                   <strong className="block text-xs text-blue-300">2. Prestador Unidade</strong>
                   <span className="text-[11px] block mt-0.5 text-slate-300">Obras e Reformas</span>
-                  <span className="text-[10px] block text-slate-400 mt-1">Eletricista, pintor, faxina</span>
+                  <span className="text-[10px] block text-slate-400 mt-1">Com tempo limite</span>
                 </button>
 
                 <button
@@ -1627,54 +1488,54 @@ COMMIT;`}
                 >
                   <strong className="block text-xs text-amber-300">3. Condomínio</strong>
                   <span className="text-[11px] block mt-0.5 text-slate-300">Manutenção Predial</span>
-                  <span className="text-[10px] block text-slate-400 mt-1">Elevador, portão, jardim</span>
+                  <span className="text-[10px] block text-slate-400 mt-1">Área comum</span>
                 </button>
               </div>
             </div>
 
-            {/* REUTILIZAÇÃO RÁPIDA DE CADASTRO (Pilar 5) */}
-            <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1.5 relative">
-              <label className="block text-[11px] font-black uppercase text-indigo-400 flex items-center gap-1.5">
-                <Search className="w-3.5 h-3.5" /> Reutilizar Cadastro Anterior (Busca Rápida por Nome ou CPF/RG)
-              </label>
-              <input
-                type="text"
-                value={termoReutilizacao}
-                onChange={(e) => setTermoReutilizacao(e.target.value)}
-                placeholder="Comece a digitar para puxar dados de quem já visitou antes..."
-                className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
-              />
-              {sugestoesReutilizacao.length > 0 && (
-                <div className="absolute top-full left-0 right-0 bg-slate-900 border border-slate-700 rounded-2xl mt-1 shadow-2xl z-30 overflow-hidden divide-y divide-slate-800">
-                  {sugestoesReutilizacao.map((sug) => (
-                    <div
-                      key={sug.id}
-                      onClick={() => selecionarParaReutilizar(sug)}
-                      className="p-2.5 hover:bg-indigo-950/60 cursor-pointer flex items-center justify-between text-xs transition"
-                    >
-                      <div className="flex items-center gap-2">
-                        {sug.foto_rosto ? (
-                          <img src={sug.foto_rosto} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
-                            <UserCheck className="w-4 h-4" />
+            {/* REUTILIZAÇÃO (Apenas em novo cadastro) */}
+            {!modalEditarCadastro && (
+              <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1.5 relative">
+                <label className="block text-[11px] font-black uppercase text-indigo-400 flex items-center gap-1.5">
+                  <Search className="w-3.5 h-3.5" /> Reutilizar Cadastro Anterior (Busca Rápida por Nome ou CPF/RG)
+                </label>
+                <input
+                  type="text"
+                  value={termoReutilizacao}
+                  onChange={(e) => setTermoReutilizacao(e.target.value)}
+                  placeholder="Comece a digitar para puxar dados de quem já visitou antes..."
+                  className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                />
+                {sugestoesReutilizacao.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 bg-slate-900 border border-slate-700 rounded-2xl mt-1 shadow-2xl z-30 overflow-hidden divide-y divide-slate-800">
+                    {sugestoesReutilizacao.map((sug) => (
+                      <div
+                        key={sug.id}
+                        onClick={() => selecionarParaReutilizar(sug)}
+                        className="p-2.5 hover:bg-indigo-950/60 cursor-pointer flex items-center justify-between text-xs transition"
+                      >
+                        <div className="flex items-center gap-2">
+                          {sug.foto_rosto ? (
+                            <img src={sug.foto_rosto} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
+                              <UserCheck className="w-4 h-4" />
+                            </div>
+                          )}
+                          <div>
+                            <strong className="block text-white">{sug.nome_profissional || sug.nome_completo}</strong>
+                            <span className="text-[10px] text-slate-400">Doc: {sug.documento || 'N/A'} • {sug.empresa || sug.unidade}</span>
                           </div>
-                        )}
-                        <div>
-                          <strong className="block text-white">{sug.nome_profissional || sug.nome_completo}</strong>
-                          <span className="text-[10px] text-slate-400">Doc: {sug.documento || 'N/A'} • {sug.empresa || sug.unidade}</span>
                         </div>
+                        <span className="text-[10px] font-bold text-indigo-400">Reutilizar Dados →</span>
                       </div>
-                      <span className="text-[10px] font-bold text-indigo-400">Reutilizar Dados →</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* FORMULÁRIO COMPLETO */}
-            <form onSubmit={salvarCadastro} className="space-y-4">
-              {/* Linha 1: Nome e OCR */}
+            <form onSubmit={modalEditarCadastro ? salvarEdicaoCadastro : salvarCadastro} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-black uppercase text-slate-300 mb-1">
@@ -1686,7 +1547,7 @@ COMMIT;`}
                     value={nomeCompleto}
                     onChange={(e) => setNomeCompleto(e.target.value)}
                     placeholder="Nome completo do visitante ou prestador"
-                    className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-bold"
+                    className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-bold"
                   />
                 </div>
 
@@ -1700,12 +1561,12 @@ COMMIT;`}
                     className="w-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-bold text-xs p-2.5 rounded-xl border border-indigo-500/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <Scan className="w-4 h-4 text-indigo-400" />
-                    <span>Ler Documento / CNH</span>
+                    <span>Ler Documento</span>
                   </button>
                 </div>
               </div>
 
-              {/* Linha 2: Documentos e Empresa / Parentesco */}
+              {/* Documento e Empresa / Parentesco com Opções Padronizadas */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {perfilAcesso !== 'autorizado' && (
                   <div>
@@ -1718,23 +1579,51 @@ COMMIT;`}
                       value={documento}
                       onChange={(e) => setDocumento(e.target.value)}
                       placeholder="Número do documento"
-                      className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-mono"
+                      className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-mono"
                     />
                   </div>
                 )}
 
                 {perfilAcesso === 'autorizado' ? (
-                  <div>
-                    <label className="block text-xs font-black uppercase text-slate-300 mb-1">
-                      Parentesco / Vínculo
+                  <div className="sm:col-span-2 space-y-2">
+                    <label className="block text-xs font-black uppercase text-purple-300 flex items-center justify-between">
+                      <span>Parentesco / Vínculo (Formato Lista) <span className="text-red-400">*</span></span>
+                      <span className="text-[10px] text-purple-400 font-normal">Selecione na lista</span>
                     </label>
-                    <input
-                      type="text"
-                      value={parentescoVinculo}
-                      onChange={(e) => setParentescoVinculo(e.target.value)}
-                      placeholder="Ex: Mãe, Irmão, Amigo, Namorada"
-                      className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
-                    />
+                    <select
+                      value={OPCOES_PARENTESCO.includes(parentescoVinculo) ? parentescoVinculo : (parentescoVinculo ? 'Outro' : '')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val !== 'Outro') {
+                          setParentescoVinculo(val);
+                        } else {
+                          setParentescoVinculo('Outro');
+                        }
+                      }}
+                      className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-semibold cursor-pointer"
+                    >
+                      <option value="">-- Selecione o Parentesco / Vínculo na Lista --</option>
+                      {OPCOES_PARENTESCO.map((opc) => (
+                        <option key={opc} value={opc}>
+                          📋 {opc}
+                        </option>
+                      ))}
+                    </select>
+
+                    {(!OPCOES_PARENTESCO.includes(parentescoVinculo) || parentescoVinculo === 'Outro') && (
+                      <div className="pt-1">
+                        <label className="block text-[10px] font-bold text-purple-300 uppercase mb-1">
+                          Especifique o Parentesco / Vínculo Personalizado:
+                        </label>
+                        <input
+                          type="text"
+                          value={parentescoVinculo === 'Outro' ? '' : parentescoVinculo}
+                          onChange={(e) => setParentescoVinculo(e.target.value)}
+                          placeholder="Digite aqui o parentesco ou vínculo..."
+                          className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-purple-500/70 focus:outline-none focus:border-purple-400"
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div>
@@ -1747,7 +1636,7 @@ COMMIT;`}
                       value={empresa}
                       onChange={(e) => setEmpresa(e.target.value)}
                       placeholder="Ex: Pintor Autônomo, Elevadores Atlas"
-                      className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                     />
                   </div>
                 )}
@@ -1761,7 +1650,7 @@ COMMIT;`}
                     value={telefone}
                     onChange={(e) => setTelefone(e.target.value)}
                     placeholder="(11) 98888-7777"
-                    className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                   />
                 </div>
 
@@ -1774,12 +1663,12 @@ COMMIT;`}
                     value={placaVeiculo}
                     onChange={(e) => setPlacaVeiculo(e.target.value)}
                     placeholder="ABC-1234"
-                    className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-mono uppercase"
+                    className="w-full bg-slate-950 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-mono uppercase"
                   />
                 </div>
               </div>
 
-              {/* Linha 3: Destino (Unidade / Bloco) */}
+              {/* Destino */}
               {perfilAcesso !== 'prestador_condominio' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
                   <div>
@@ -1792,7 +1681,7 @@ COMMIT;`}
                       value={unidade}
                       onChange={(e) => setUnidade(e.target.value)}
                       placeholder="Ex: 102"
-                      className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-bold"
+                      className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-bold"
                     />
                   </div>
 
@@ -1805,13 +1694,13 @@ COMMIT;`}
                       value={bloco}
                       onChange={(e) => setBloco(e.target.value)}
                       placeholder="Ex: Bloco A"
-                      className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                     />
                   </div>
                 </div>
               )}
 
-              {/* FOTO DO ROSTO (Obrigatória em todos os 3 perfis) */}
+              {/* Foto do Rosto */}
               <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
                 <label className="block text-xs font-black uppercase text-emerald-400 flex items-center justify-between">
                   <span>Foto do Rosto (Obrigatória para Segurança)</span>
@@ -1839,17 +1728,14 @@ COMMIT;`}
                         className="hidden"
                       />
                     </label>
-                    <p className="text-[10px] text-slate-400">
-                      Use a webcam da portaria, tire com o celular ou faça upload de imagem nítida do rosto.
-                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* PRAZO DE VALIDADE DA LIBERAÇÃO (Pilar 2) */}
+              {/* Validade */}
               <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2.5">
                 <label className="block text-xs font-black uppercase text-amber-400">
-                  2. Prazo de Validade da Liberação (Janela de Acesso):
+                  Prazo de Validade da Liberação:
                 </label>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1858,7 +1744,7 @@ COMMIT;`}
                     onClick={() => setTipoValidade('hoje')}
                     className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
                       tipoValidade === 'hoje'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-black'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
@@ -1870,7 +1756,7 @@ COMMIT;`}
                     onClick={() => setTipoValidade('amanha')}
                     className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
                       tipoValidade === 'amanha'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-black'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
@@ -1882,11 +1768,11 @@ COMMIT;`}
                     onClick={() => setTipoValidade('7_dias')}
                     className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
                       tipoValidade === '7_dias'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-black'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
-                    1 Semana (7d)
+                    1 Semana
                   </button>
 
                   <button
@@ -1894,7 +1780,7 @@ COMMIT;`}
                     onClick={() => setTipoValidade('permanente')}
                     className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
                       tipoValidade === 'permanente'
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
@@ -1910,7 +1796,7 @@ COMMIT;`}
                       tipoValidade === 'personalizado' ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-900 text-slate-400 border-slate-800'
                     }`}
                   >
-                    Data Personalizada...
+                    Personalizado...
                   </button>
 
                   {tipoValidade === 'personalizado' && (
@@ -1933,7 +1819,7 @@ COMMIT;`}
                 </div>
               </div>
 
-              {/* Botões do Rodapé */}
+              {/* Botões */}
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -1948,7 +1834,7 @@ COMMIT;`}
                   disabled={loading}
                   className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs uppercase transition shadow-lg active:scale-95 cursor-pointer disabled:bg-slate-800 disabled:text-slate-500"
                 >
-                  {loading ? 'Salvando...' : 'Salvar Liberação'}
+                  {loading ? 'Salvando...' : (modalEditarCadastro ? 'Salvar Alterações' : 'Salvar Liberação')}
                 </button>
               </div>
             </form>
@@ -1957,7 +1843,7 @@ COMMIT;`}
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: REGISTRO DE ENTRADA & TEMPO MÁXIMO DE PERMANÊNCIA (Pilar 3) */}
+      {/* MODAL: REGISTRO DE ENTRADA (Visitantes NÃO têm tempo limite) */}
       {/* ========================================================================= */}
       {modalEntrada && itemSelecionado && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
@@ -1972,7 +1858,7 @@ COMMIT;`}
                     Registrar Entrada no Condomínio
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Defina o tempo máximo de permanência e crachá
+                    {itemSelecionado.perfil_acesso === 'autorizado' ? 'Visitante / Família: Permanência livre' : 'Prestador: Defina tempo máximo de permanência e crachá'}
                   </p>
                 </div>
               </div>
@@ -1986,7 +1872,7 @@ COMMIT;`}
               </button>
             </div>
 
-            {/* Resumo da Pessoa */}
+            {/* Resumo */}
             <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 border border-slate-700">
                 {itemSelecionado.foto_rosto ? (
@@ -2005,7 +1891,7 @@ COMMIT;`}
               </div>
             </div>
 
-            {/* AVISO DE EXPIRAÇÃO (Pilar 2) */}
+            {/* AVISO DE EXPIRAÇÃO */}
             {(() => {
               const infoVal = checarValidade(itemSelecionado);
               if (infoVal.expirou) {
@@ -2035,79 +1921,80 @@ COMMIT;`}
               return null;
             })()}
 
-            {/* DEFINIÇÃO DO TEMPO MÁXIMO DE PERMANÊNCIA (Pilar 3) */}
             <form onSubmit={confirmarEntrada} className="space-y-4">
-              <div className="space-y-2">
-                <label className="block text-xs font-black uppercase text-amber-400 flex items-center justify-between">
-                  <span>Tempo Máximo de Permanência Interna:</span>
-                  <span className="text-slate-400 font-normal">
-                    {tempoMaximoCustomizado ? `${tempoMaximoCustomizado} min` : `${Math.floor(tempoMaximoMinutos / 60)}h`}
+              {/* REGRA: VISITANTES E FAMILIARES NÃO TÊM TEMPO MÁXIMO DE PERMANÊNCIA! */}
+              {itemSelecionado.perfil_acesso === 'autorizado' ? (
+                <div className="bg-purple-950/40 border border-purple-500/40 p-3.5 rounded-2xl text-xs space-y-1">
+                  <span className="font-black text-purple-300 block flex items-center gap-1.5 uppercase text-[11px]">
+                    <CheckCircle2 className="w-4 h-4 text-purple-400" /> Permanência Livre (Visitante / Família)
                   </span>
-                </label>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setTempoMaximoMinutos(60); setTempoMaximoCustomizado(''); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
-                      tempoMaximoMinutos === 60 && !tempoMaximoCustomizado
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    1 Hora
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setTempoMaximoMinutos(120); setTempoMaximoCustomizado(''); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
-                      tempoMaximoMinutos === 120 && !tempoMaximoCustomizado
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    2 Horas
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setTempoMaximoMinutos(240); setTempoMaximoCustomizado(''); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
-                      tempoMaximoMinutos === 240 && !tempoMaximoCustomizado
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    4 Horas (Meio Turno)
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setTempoMaximoMinutos(480); setTempoMaximoCustomizado(''); }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
-                      tempoMaximoMinutos === 480 && !tempoMaximoCustomizado
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    8 Horas (Comercial)
-                  </button>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    Familiares e visitantes não possuem tempo limite fixado e não geram alarmes de permanência estourada.
+                  </p>
                 </div>
+              ) : (
+                /* TEMPO MÁXIMO APENAS PARA PRESTADORES */
+                <div className="space-y-2">
+                  <label className="block text-xs font-black uppercase text-amber-400 flex items-center justify-between">
+                    <span>Tempo Máximo de Permanência do Prestador:</span>
+                    <span className="text-slate-400 font-normal">
+                      {tempoMaximoCustomizado ? `${tempoMaximoCustomizado} min` : `${Math.floor(tempoMaximoMinutos / 60)}h`}
+                    </span>
+                  </label>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[11px] text-slate-400">Ou digite tempo em minutos:</span>
-                  <input
-                    type="number"
-                    value={tempoMaximoCustomizado}
-                    onChange={(e) => setTempoMaximoCustomizado(e.target.value)}
-                    placeholder="Ex: 90"
-                    className="w-24 bg-slate-950 text-white text-xs p-1.5 rounded-lg border border-slate-700"
-                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setTempoMaximoMinutos(60); setTempoMaximoCustomizado(''); }}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
+                        tempoMaximoMinutos === 60 && !tempoMaximoCustomizado
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      1 Hora
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setTempoMaximoMinutos(120); setTempoMaximoCustomizado(''); }}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
+                        tempoMaximoMinutos === 120 && !tempoMaximoCustomizado
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      2 Horas
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setTempoMaximoMinutos(240); setTempoMaximoCustomizado(''); }}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
+                        tempoMaximoMinutos === 240 && !tempoMaximoCustomizado
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      4 Horas
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setTempoMaximoMinutos(480); setTempoMaximoCustomizado(''); }}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
+                        tempoMaximoMinutos === 480 && !tempoMaximoCustomizado
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      8 Horas (Obra)
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* CONTROLE DE CRACHÁ & VEÍCULO (Pilar 5) */}
+              {/* Crachá e Placa */}
               <div className="grid grid-cols-2 gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
                 <div>
                   <label className="block text-[11px] font-black uppercase text-slate-300 mb-1 flex items-center gap-1">
@@ -2136,7 +2023,7 @@ COMMIT;`}
                 </div>
               </div>
 
-              {/* Botões de Ação */}
+              {/* Ações */}
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
@@ -2170,9 +2057,7 @@ COMMIT;`}
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL 3: REGISTRO DE SAÍDA E DEVOLUÇÃO DE CRACHÁ */}
-      {/* ========================================================================= */}
+      {/* MODAL: SAÍDA E DEVOLUÇÃO DE CRACHÁ */}
       {modalSaida && itemSelecionado && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 text-white space-y-4 shadow-2xl relative my-auto">
@@ -2200,7 +2085,6 @@ COMMIT;`}
               )}
             </div>
 
-            {/* Confirmação de Crachá Devolvido */}
             {itemSelecionado.cracha && (
               <label className="flex items-center gap-2.5 bg-slate-950 p-3 rounded-xl border border-slate-800 cursor-pointer">
                 <input
@@ -2215,7 +2099,6 @@ COMMIT;`}
               </label>
             )}
 
-            {/* Ações */}
             <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
@@ -2223,7 +2106,7 @@ COMMIT;`}
                 className="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-bold text-xs px-3 py-2.5 rounded-xl border border-emerald-500/40 flex items-center gap-1.5 transition cursor-pointer"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>Notificar Saída (WhatsApp)</span>
+                <span>WhatsApp Saída</span>
               </button>
 
               <button
@@ -2239,15 +2122,13 @@ COMMIT;`}
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL 4: PRORROGAR TEMPO DE PERMANÊNCIA */}
-      {/* ========================================================================= */}
+      {/* MODAL: PRORROGAR TEMPO */}
       {modalProrrogar && itemSelecionado && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 text-white space-y-4 shadow-2xl relative my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-black text-sm uppercase text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-400" /> Prorrogar Tempo
+                <Clock className="w-4 h-4 text-amber-400" /> Prorrogar Tempo de Prestador
               </h3>
               <button onClick={() => setModalProrrogar(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -2262,7 +2143,7 @@ COMMIT;`}
               <button
                 type="button"
                 onClick={() => setMinutosProrrogacao(30)}
-                className={`p-2.5 rounded-xl border text-xs font-bold transition ${
+                className={`p-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
                   minutosProrrogacao === 30 ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-950 text-slate-300 border-slate-800'
                 }`}
               >
@@ -2272,7 +2153,7 @@ COMMIT;`}
               <button
                 type="button"
                 onClick={() => setMinutosProrrogacao(60)}
-                className={`p-2.5 rounded-xl border text-xs font-bold transition ${
+                className={`p-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
                   minutosProrrogacao === 60 ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-950 text-slate-300 border-slate-800'
                 }`}
               >
@@ -2282,7 +2163,7 @@ COMMIT;`}
               <button
                 type="button"
                 onClick={() => setMinutosProrrogacao(120)}
-                className={`p-2.5 rounded-xl border text-xs font-bold transition ${
+                className={`p-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
                   minutosProrrogacao === 120 ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-950 text-slate-300 border-slate-800'
                 }`}
               >

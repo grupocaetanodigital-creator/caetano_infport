@@ -24,7 +24,17 @@ import {
   Edit3,
   Layers,
   ClipboardCheck,
-  Check
+  Check,
+  FileText,
+  ShieldCheck,
+  Share2,
+  Copy,
+  Printer,
+  Calendar,
+  Filter,
+  Download,
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 
 interface EncomendasProps {
@@ -33,7 +43,7 @@ interface EncomendasProps {
 
 export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const idCondominioAtivo = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id || '';
-  const [etapa, setEtapa] = useState<'1' | '2' | '3'>('1');
+  const [etapa, setEtapa] = useState<'1' | '2' | '3' | '4'>('1');
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
@@ -42,6 +52,15 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [lotesPendentes, setLotesPendentes] = useState<any[]>([]);
   const [moradores, setMoradores] = useState<any[]>([]);
   const [todosItensRetidos, setTodosItensRetidos] = useState<any[]>([]);
+
+  // Estados do Módulo Dossiê Auditável de Encomendas
+  const [itensDossie, setItensDossie] = useState<any[]>([]);
+  const [loadingDossie, setLoadingDossie] = useState(false);
+  const [buscaDossie, setBuscaDossie] = useState('');
+  const [filtroStatusDossie, setFiltroStatusDossie] = useState<'todos' | 'entregue' | 'retido'>('todos');
+  const [filtroPeriodoDossie, setFiltroPeriodoDossie] = useState<'hoje' | '7dias' | '30dias' | 'todos'>('todos');
+  const [itemModalDossie, setItemModalDossie] = useState<any | null>(null);
+  const [copiadoDossie, setCopiadoDossie] = useState(false);
 
   const [statsDia, setStatsDia] = useState<{
     lotesHoje: number;
@@ -241,6 +260,75 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setLoading(false);
     }
   };
+
+  const carregarDossie = async () => {
+    setLoadingDossie(true);
+    const idCondo = usuarioLogado?.condominio_id;
+    try {
+      // 1. Tenta carregar os itens de encomendas com moradores
+      let query = supabase
+        .from('encomendas_itens')
+        .select('*, moradores(nome, telefone, bloco, unidade)')
+        .order('created_at', { ascending: false })
+        .limit(300);
+
+      if (idCondo) {
+        query = query.eq('condominio_id', idCondo);
+      }
+
+      let { data: itens, error } = await query;
+
+      // Fallback seguro se o join com moradores falhar por qualquer motivo
+      if (error || !itens) {
+        console.warn('Fallback simples para encomendas_itens no dossiê:', error?.message);
+        let fallbackQuery = supabase
+          .from('encomendas_itens')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (idCondo) fallbackQuery = fallbackQuery.eq('condominio_id', idCondo);
+        const fbRes = await fallbackQuery;
+        itens = fbRes.data || [];
+      }
+
+      if (itens && itens.length > 0) {
+        // Enriquecer itens com dados de Lote RE e entregadores de forma segura
+        const loteIds = Array.from(new Set(itens.map((it: any) => it.lote_re_id).filter(Boolean)));
+        if (loteIds.length > 0) {
+          try {
+            const { data: lotes } = await supabase
+              .from('lotes_re')
+              .select('id, codigo_re, created_at, entregador_id')
+              .in('id', loteIds);
+
+            if (lotes && lotes.length > 0) {
+              const mapaLotes = new Map(lotes.map((l: any) => [l.id, l]));
+              itens = itens.map((it: any) => ({
+                ...it,
+                lotes_re: it.lote_re_id ? mapaLotes.get(it.lote_re_id) : null
+              }));
+            }
+          } catch (errLote) {
+            console.warn('Aviso ao consultar lotes_re:', errLote);
+          }
+        }
+        setItensDossie(itens);
+      } else {
+        setItensDossie([]);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar dossiê:', e);
+      setItensDossie([]);
+    } finally {
+      setLoadingDossie(false);
+    }
+  };
+
+  useEffect(() => {
+    if (etapa === '4') {
+      carregarDossie();
+    }
+  }, [etapa]);
 
   const tocarAlertaSonoro = () => {
     try {
@@ -1139,8 +1227,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         </div>
       </div>
 
-      {/* Navegação Sequencial de 3 Etapas (Compacta) */}
-      <div className="grid grid-cols-3 bg-white rounded-xl shadow-2xs border border-slate-200 overflow-hidden">
+      {/* Navegação Sequencial de 4 Etapas & Dossiê */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 bg-white rounded-xl shadow-2xs border border-slate-200 overflow-hidden">
         <button
           onClick={() => setEtapa('1')}
           className={`p-2 sm:p-2.5 text-center border-b-2 transition cursor-pointer ${etapa === '1' ? 'border-slate-900 bg-slate-100 font-black' : 'border-transparent hover:bg-slate-50'}`}
@@ -1163,6 +1251,18 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         >
           <span className="text-[10px] font-bold uppercase text-slate-400 block">3ª Etapa</span>
           <strong className="text-xs sm:text-sm text-slate-900 flex items-center justify-center gap-1"><UserCheck className="w-3.5 h-3.5 text-slate-700" /> Saída / Baixa</strong>
+        </button>
+
+        <button
+          onClick={() => { setEtapa('4'); carregarDossie(); }}
+          className={`p-2 sm:p-2.5 text-center border-b-2 transition cursor-pointer ${etapa === '4' ? 'border-purple-600 bg-purple-50/70 font-black text-purple-950' : 'border-transparent hover:bg-slate-50'}`}
+        >
+          <span className="text-[10px] font-bold uppercase text-purple-600 block flex items-center justify-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-purple-600" /> Auditoria & Provas
+          </span>
+          <strong className="text-xs sm:text-sm text-purple-950 flex items-center justify-center gap-1">
+            <FileText className="w-3.5 h-3.5 text-purple-700" /> Dossiê Completo
+          </strong>
         </button>
       </div>
 
@@ -2209,6 +2309,510 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 <CheckCircle2 className="w-4 h-4" />
                 {loading ? 'Salvando...' : 'Confirmar Novo Local'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4ª ETAPA — DOSSIÊ AUDITÁVEL DE ENCOMENDAS (HISTÓRICO COM FOTOS DE RECEBIMENTO E ENTREGA) */}
+      {etapa === '4' && (
+        <div className="space-y-4">
+          {/* Banner do Dossiê */}
+          <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 p-4 sm:p-5 rounded-2xl text-white border-2 border-purple-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider bg-purple-500/30 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-400/40 inline-flex items-center gap-1 mb-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" /> Auditoria Irrefutável de Encomendas
+              </span>
+              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                Dossiê Completo de Recebimento & Entrega com Fotos
+              </h3>
+              <p className="text-xs text-purple-200/80">
+                Histórico arquivado com foto da etiqueta de entrada e foto do morador/retirante na saída para resolver reclamações de extravio.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={carregarDossie}
+                disabled={loadingDossie}
+                className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingDossie ? 'animate-spin' : ''}`} />
+                Atualizar Dossiê
+              </button>
+            </div>
+          </div>
+
+          {/* Filtros e Busca Rápida */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+              <input
+                type="text"
+                value={buscaDossie}
+                onChange={(e) => setBuscaDossie(e.target.value)}
+                placeholder="Buscar por unidade, bloco, nome do morador, código de barras/rastreio ou quem retirou..."
+                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 flex items-center gap-1">
+                  <Filter className="w-3 h-3" /> Status:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusDossie('todos')}
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    filtroStatusDossie === 'todos' ? 'bg-purple-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Todos ({itensDossie.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusDossie('entregue')}
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    filtroStatusDossie === 'entregue' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  🟢 Entregues ({itensDossie.filter(i => i.status === 'entregue').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusDossie('retido')}
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    filtroStatusDossie === 'retido' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  🟡 Retidos ({itensDossie.filter(i => i.status !== 'entregue').length})
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> Período:
+                </span>
+                {(['todos', 'hoje', '7dias', '30dias'] as const).map((per) => (
+                  <button
+                    key={per}
+                    type="button"
+                    onClick={() => setFiltroPeriodoDossie(per)}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer ${
+                      filtroPeriodoDossie === per ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {per === 'todos' ? 'Todos' : per === 'hoje' ? 'Hoje' : per === '7dias' ? '7 dias' : '30 dias'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Listagem em Cards de Dossiê */}
+          {loadingDossie ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 text-xs flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-purple-600" /> Carregando arquivo de dossiês e fotos...
+            </div>
+          ) : (
+            (() => {
+              const agoraTs = Date.now();
+              const umDiaMs = 24 * 60 * 60 * 1000;
+              const itensFiltrados = itensDossie.filter((item) => {
+                // Filtro status
+                if (filtroStatusDossie === 'entregue' && item.status !== 'entregue') return false;
+                if (filtroStatusDossie === 'retido' && item.status === 'entregue') return false;
+
+                // Filtro período
+                const itemDataTs = new Date(item.data_retirada || item.created_at).getTime();
+                if (filtroPeriodoDossie === 'hoje') {
+                  const hojeStr = new Date().toISOString().slice(0, 10);
+                  const dtStr = (item.data_retirada || item.created_at || '').slice(0, 10);
+                  if (dtStr !== hojeStr) return false;
+                } else if (filtroPeriodoDossie === '7dias') {
+                  if (agoraTs - itemDataTs > 7 * umDiaMs) return false;
+                } else if (filtroPeriodoDossie === '30dias') {
+                  if (agoraTs - itemDataTs > 30 * umDiaMs) return false;
+                }
+
+                // Filtro texto
+                if (buscaDossie.trim()) {
+                  const termo = buscaDossie.toLowerCase();
+                  const und = (item.unidade || '').toString().toLowerCase();
+                  const blc = (item.bloco || '').toString().toLowerCase();
+                  const cod = (item.codigo_barras || item.codigo_rastreio || item.rastreio || '').toLowerCase();
+                  const reCod = (item.lotes_re?.codigo_re || '').toLowerCase();
+                  const mor = (item.moradores?.nome || '').toLowerCase();
+                  const ret = (item.retirado_por || '').toLowerCase();
+                  const op = (item.operador_baixa_id || '').toLowerCase();
+                  const loc = (item.local_armazenamento || '').toLowerCase();
+                  return und.includes(termo) || blc.includes(termo) || cod.includes(termo) || reCod.includes(termo) || mor.includes(termo) || ret.includes(termo) || op.includes(termo) || loc.includes(termo);
+                }
+
+                return true;
+              });
+
+              if (itensFiltrados.length === 0) {
+                return (
+                  <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-slate-500 text-xs">
+                    Nenhum pacote encontrado com os filtros selecionados.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {itensFiltrados.map((item) => {
+                    const estaEntregue = item.status === 'entregue';
+                    const rastreioExibicao = item.codigo_barras || item.codigo_rastreio || item.rastreio || (item.lotes_re?.codigo_re ? `Lote ${item.lotes_re.codigo_re}` : null);
+
+                    return (
+                      <div 
+                        key={item.id} 
+                        className={`bg-white rounded-2xl border p-4 shadow-sm space-y-3 transition hover:shadow-md ${
+                          estaEntregue ? 'border-emerald-200' : 'border-amber-200'
+                        }`}
+                      >
+                        {/* Cabeçalho do Card */}
+                        <div className="flex items-start justify-between gap-2 border-b pb-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-slate-900 text-sm">
+                                Apt {item.unidade} {item.bloco ? `• Bloco ${item.bloco}` : ''}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                ({item.moradores?.nome || 'Morador'})
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[10px] font-bold uppercase text-slate-500 flex items-center gap-1">
+                                <QrCode className="w-3.5 h-3.5 text-purple-600" /> Rastreio:
+                              </span>
+                              {rastreioExibicao ? (
+                                <span className="bg-purple-100 text-purple-950 font-mono font-black text-[11px] px-2 py-0.5 rounded border border-purple-200 tracking-wider">
+                                  {rastreioExibicao}
+                                </span>
+                              ) : (
+                                <span className="italic text-slate-400 text-[11px]">Sem rastreio digitado</span>
+                              )}
+
+                              {item.lotes_re?.codigo_re && (
+                                <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-slate-200">
+                                  RE: {item.lotes_re.codigo_re}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 ${
+                            estaEntregue ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                          }`}>
+                            {estaEntregue ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Clock className="w-3 h-3 text-amber-600" />}
+                            {estaEntregue ? 'Entregue' : 'Retido no Posto'}
+                          </span>
+                        </div>
+
+                        {/* Comparativo Lado a Lado: Foto 1 Recebimento vs Foto 2 Entrega */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {/* FOTO 1: RECEBIMENTO */}
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5 flex flex-col justify-between">
+                            <span className="text-[10px] font-black uppercase text-purple-800 block flex items-center gap-1">
+                              <Camera className="w-3 h-3 text-purple-600" /> 1. Recebimento (RE)
+                            </span>
+
+                            <div 
+                              onClick={() => item.foto_etiqueta_url && setModalFotoAmpliada(item.foto_etiqueta_url)}
+                              className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
+                            >
+                              {item.foto_etiqueta_url ? (
+                                <>
+                                  <img src={item.foto_etiqueta_url} alt="Etiqueta" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                  <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
+                                    <Eye className="w-2.5 h-2.5" /> Ver Foto
+                                  </span>
+                                </>
+                              ) : (
+                                <div className="text-center text-slate-400 text-[10px]">
+                                  <Package className="w-6 h-6 mx-auto mb-0.5 opacity-40" />
+                                  Sem foto etiqueta
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] text-slate-500 leading-tight">
+                              <div>Entrada: <strong>{new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                              <div className="truncate">Local: <strong className="text-slate-800">{item.local_armazenamento || 'Escaninho'}</strong></div>
+                            </div>
+                          </div>
+
+                          {/* FOTO 2: ENTREGA AO MORADOR */}
+                          <div className={`p-2.5 rounded-xl border space-y-1.5 flex flex-col justify-between ${
+                            estaEntregue ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-dashed border-slate-300'
+                          }`}>
+                            <span className="text-[10px] font-black uppercase text-emerald-800 block flex items-center gap-1">
+                              <UserCheck className="w-3 h-3 text-emerald-600" /> 2. Entrega (Saída)
+                            </span>
+
+                            <div 
+                              onClick={() => item.foto_retirada_url && setModalFotoAmpliada(item.foto_retirada_url)}
+                              className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
+                            >
+                              {item.foto_retirada_url ? (
+                                <>
+                                  <img src={item.foto_retirada_url} alt="Comprovante Retirada" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                  <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
+                                    <Eye className="w-2.5 h-2.5" /> Ver Foto
+                                  </span>
+                                </>
+                              ) : (
+                                <div className="text-center text-slate-400 text-[10px] p-2">
+                                  <Clock className="w-6 h-6 mx-auto mb-0.5 text-amber-500/70" />
+                                  Aguardando retirada pelo morador
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] text-slate-600 leading-tight">
+                              {estaEntregue ? (
+                                <>
+                                  <div className="truncate">Retirante: <strong className="text-emerald-950">{item.retirado_por}</strong></div>
+                                  <div>Data: <strong>{new Date(item.data_retirada).toLocaleDateString('pt-BR')} às {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                                  <div className="text-[9px] text-slate-400">Op: {item.operador_baixa_id || 'Portaria'}</div>
+                                </>
+                              ) : (
+                                <div className="text-amber-800 font-medium italic">
+                                  Pacote retido na portaria.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação do Dossiê */}
+                        <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => setItemModalDossie(item)}
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> Ver Dossiê Completo
+                          </button>
+
+                          {estaEntregue && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const tel = item.moradores?.telefone?.replace(/\D/g, '') || '';
+                                const dataStr = new Date(item.data_retirada).toLocaleString('pt-BR');
+                                const msg = `📦 *COMPROVANTE DE ENTREGA DE ENCOMENDA - INFPORT*\n` +
+                                  `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                  `🏢 *Unidade:* Apt ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}\n` +
+                                  `👤 *Destinatário Cadastrado:* ${item.moradores?.nome || 'Morador'}\n` +
+                                  `🏷️ *Código de Rastreio:* ${item.codigo_barras || 'S/ Código'}\n` +
+                                  `✅ *Status:* ENTREGUE COM SUCESSO\n` +
+                                  `👤 *Retirado Por:* ${item.retirado_por}\n` +
+                                  `📅 *Data e Hora da Baixa:* ${dataStr}\n` +
+                                  `🛡️ *Operador Responsável:* ${item.operador_baixa_id || 'Portaria'}\n` +
+                                  `📸 *Fotos Arquivadas:* Foto da etiqueta no recebimento e foto do retirante arquivadas no sistema da portaria.\n` +
+                                  `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                  `_Dossiê arquivado para sua total segurança._`;
+                                const link = `https://wa.me/${tel ? (tel.startsWith('55') ? tel : '55' + tel) : ''}?text=${encodeURIComponent(msg)}`;
+                                window.open(link, '_blank');
+                              }}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                              title="Enviar comprovação via WhatsApp para o morador"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp Morador
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          )}
+        </div>
+      )}
+
+      {/* MODAL DE DOSSIÊ COMPLETO DE AUDITORIA DE ENCOMENDA */}
+      {itemModalDossie && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-2xl relative max-h-[92vh] flex flex-col">
+            <button
+              type="button"
+              onClick={() => setItemModalDossie(null)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Cabeçalho do Dossiê */}
+            <div className="border-b pb-3 pr-8 space-y-1">
+              <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-600" /> Dossiê Oficial de Auditoria & Custódia
+              </span>
+              <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                Encomenda Apt {itemModalDossie.unidade} {itemModalDossie.bloco ? `• Bloco ${itemModalDossie.bloco}` : ''}
+              </h3>
+              <p className="text-xs text-slate-500">
+                Morador: <strong>{itemModalDossie.moradores?.nome || 'Não cadastrado'}</strong> • Telefone: {itemModalDossie.moradores?.telefone || 'S/ Tel'} • Código: <strong>{itemModalDossie.codigo_barras || 'S/ Rastreio'}</strong>
+              </p>
+            </div>
+
+            {/* Conteúdo do Dossiê */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+              {/* Linha do Tempo de Custódia */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                <span className="text-[11px] font-black uppercase text-slate-700 block">
+                  Linha do Tempo da Custódia:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold text-purple-700 uppercase block">1. Entrada no Posto</span>
+                    <strong className="text-slate-900 text-xs block">{new Date(itemModalDossie.created_at).toLocaleString('pt-BR')}</strong>
+                    <span className="text-[10px] text-slate-500">Lote: {itemModalDossie.lotes_re?.codigo || 'RE Portaria'}</span>
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold text-blue-700 uppercase block">2. Triagem Física</span>
+                    <strong className="text-slate-900 text-xs block">{itemModalDossie.local_armazenamento || 'Escaninho Padrão'}</strong>
+                    <span className="text-[10px] text-slate-500">Local de Guarda</span>
+                  </div>
+
+                  <div className={`p-2.5 rounded-xl border ${
+                    itemModalDossie.status === 'entregue' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+                  }`}>
+                    <span className="text-[10px] font-bold uppercase block text-emerald-800">
+                      3. Saída / Entrega
+                    </span>
+                    {itemModalDossie.status === 'entregue' ? (
+                      <>
+                        <strong className="text-emerald-950 text-xs block">{new Date(itemModalDossie.data_retirada).toLocaleString('pt-BR')}</strong>
+                        <span className="text-[10px] text-emerald-700">Para: <strong>{itemModalDossie.retirado_por}</strong></span>
+                      </>
+                    ) : (
+                      <span className="text-amber-800 font-bold">Aguardando Retirada</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Comparativo de Fotos em Alta Resolução */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Foto 1 */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                  <strong className="text-xs font-black text-purple-950 uppercase flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-purple-600" /> Foto 1: Recebimento na Portaria (Etiqueta)
+                  </strong>
+
+                  <div className="bg-slate-900 rounded-xl overflow-hidden h-56 flex items-center justify-center border border-slate-300">
+                    {itemModalDossie.foto_etiqueta_url ? (
+                      <img src={itemModalDossie.foto_etiqueta_url} alt="Etiqueta no Recebimento" className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="text-slate-500 text-center text-xs">
+                        <Package className="w-8 h-8 mx-auto mb-1 opacity-40" />
+                        Sem foto de etiqueta arquivada
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-600">
+                    Foto tirada no momento da entrada da carga pelo operador para conferência da integridade da embalagem.
+                  </p>
+                </div>
+
+                {/* Foto 2 */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                  <strong className="text-xs font-black text-emerald-950 uppercase flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-emerald-600" /> Foto 2: Comprovante de Entrega ao Morador
+                  </strong>
+
+                  <div className="bg-slate-900 rounded-xl overflow-hidden h-56 flex items-center justify-center border border-slate-300">
+                    {itemModalDossie.foto_retirada_url ? (
+                      <img src={itemModalDossie.foto_retirada_url} alt="Comprovante de Saída" className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="text-slate-500 text-center text-xs p-4">
+                        <Clock className="w-8 h-8 mx-auto mb-1 text-amber-500 opacity-60" />
+                        Ainda não entregue. A foto do comprovante será registrada quando o morador retirar.
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-600">
+                    {itemModalDossie.status === 'entregue' ? (
+                      <>Comprovante registrado pelo operador <strong>{itemModalDossie.operador_baixa_id || 'Portaria'}</strong> no ato da entrega a <strong>{itemModalDossie.retirado_por}</strong>.</>
+                    ) : (
+                      'Pacote em custódia na portaria aguardando retirada pelo morador.'
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Relatório Texto Formatado */}
+              <div className="bg-slate-950 p-3.5 rounded-2xl text-slate-200 font-mono text-[11px] space-y-1 border border-slate-800">
+                <div className="text-emerald-400 font-bold">DOSSIÊ INFPORT — REGISTRO DE AUDITORIA DE ENCOMENDA</div>
+                <div>ID: {itemModalDossie.id}</div>
+                <div>DESTINO: Apt {itemModalDossie.unidade} {itemModalDossie.bloco ? 'Bloco ' + itemModalDossie.bloco : ''}</div>
+                <div>MORADOR TITULAR: {itemModalDossie.moradores?.nome || 'Não informado'} ({itemModalDossie.moradores?.telefone || 'S/ Tel'})</div>
+                <div>CÓDIGO DE RASTREIO: {itemModalDossie.codigo_barras || itemModalDossie.codigo_rastreio || itemModalDossie.rastreio || (itemModalDossie.lotes_re?.codigo_re ? `Lote RE ${itemModalDossie.lotes_re.codigo_re}` : 'Sem código')}</div>
+                <div>LOCAL DE GUARDA: {itemModalDossie.local_armazenamento || 'Escaninho'}</div>
+                <div>ENTRADA NA PORTARIA: {new Date(itemModalDossie.created_at).toLocaleString('pt-BR')}</div>
+                <div>STATUS: {itemModalDossie.status?.toUpperCase()}</div>
+                {itemModalDossie.status === 'entregue' && (
+                  <>
+                    <div className="text-emerald-300">ENTREGUE PARA: {itemModalDossie.retirado_por}</div>
+                    <div className="text-emerald-300">DATA DA ENTREGA: {new Date(itemModalDossie.data_retirada).toLocaleString('pt-BR')}</div>
+                    <div className="text-emerald-300">OPERADOR RESPONSÁVEL: {itemModalDossie.operador_baixa_id || 'Portaria'}</div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Ações do Modal */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  const codDossie = itemModalDossie.codigo_barras || itemModalDossie.codigo_rastreio || itemModalDossie.rastreio || (itemModalDossie.lotes_re?.codigo_re ? `RE ${itemModalDossie.lotes_re.codigo_re}` : 'S/ Código');
+                  const texto = `DOSSIÊ DE ENCOMENDA - INFPORT\n` +
+                    `Apt ${itemModalDossie.unidade} ${itemModalDossie.bloco ? 'Bloco ' + itemModalDossie.bloco : ''} - Morador: ${itemModalDossie.moradores?.nome || 'N/A'}\n` +
+                    `Código de Rastreio: ${codDossie}\n` +
+                    `Status: ${itemModalDossie.status === 'entregue' ? 'ENTREGUE' : 'RETIDO'}\n` +
+                    `Entrada: ${new Date(itemModalDossie.created_at).toLocaleString('pt-BR')}\n` +
+                    (itemModalDossie.status === 'entregue' ? `Entregue em: ${new Date(itemModalDossie.data_retirada).toLocaleString('pt-BR')} para ${itemModalDossie.retirado_por} por ${itemModalDossie.operador_baixa_id}\n` : '') +
+                    `Fotos arquivadas no sistema da portaria.`;
+                  navigator.clipboard.writeText(texto);
+                  setCopiadoDossie(true);
+                  setTimeout(() => setCopiadoDossie(false), 2000);
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                {copiadoDossie ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-600" />}
+                {copiadoDossie ? 'Copiado!' : 'Copiar Texto do Dossiê'}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setItemModalDossie(null)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         </div>

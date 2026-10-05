@@ -14,19 +14,29 @@ import {
   Volume2,
   Clock,
   ShieldCheck,
-  Check
+  Check,
+  HardHat,
+  Key,
+  UserCheck
 } from 'lucide-react';
 
 interface AlertaRondaGlobalProps {
   onNavegarRondas?: () => void;
+  onNavegarModulo?: (modulo: string) => void;
   usuarioLogado?: any;
   condominioId?: string;
   condominioAtivo?: any;
 }
 
-const CHAVE_MUTE_ADM = 'infport_mute_alerta_ronda_adm_v1';
+const CHAVE_MUTE_ADM = 'infport_mute_alerta_global_adm_v1';
 
-export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, condominioId, condominioAtivo }: AlertaRondaGlobalProps) {
+export default function AlertaRondaGlobal({ 
+  onNavegarRondas, 
+  onNavegarModulo,
+  usuarioLogado, 
+  condominioId, 
+  condominioAtivo 
+}: AlertaRondaGlobalProps) {
   const idCondominioAtivo = condominioId || condominioAtivo?.id || usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id;
   const eAdmin = usuarioLogado?.perfil === 'admin' || usuarioLogado?.nivel_acesso === 0 || usuarioLogado?.perfil === 'master' || usuarioLogado?.nivel_acesso === 1;
 
@@ -36,6 +46,10 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
   const [statusRonda, setStatusRonda] = useState<'aguardando' | 'atrasada' | 'em_andamento'>('aguardando');
   const [alertaDisparado, setAlertaDisparado] = useState(false);
   const [silenciadoAte, setSilenciadoAte] = useState<number | null>(null);
+
+  // Monitoramento Global de Prestadores Estourados e Chaves Atrasadas
+  const [prestadoresEstourados, setPrestadoresEstourados] = useState<any[]>([]);
+  const [chavesAtrasadas, setChavesAtrasadas] = useState<any[]>([]);
 
   // Controle de Mute exclusivo para Administrador
   const [muteAdmTimestamp, setMuteAdmTimestamp] = useState<number | null>(() => {
@@ -52,6 +66,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
 
   const proximaRondaTimestampRef = useRef<number | null>(null);
   const rondaEmAndamentoRef = useRef(false);
+  const ultimoBeepGlobalRef = useRef<number>(0);
 
   // Calcula se o mute de administrador está ativo agora
   const muteAdmAtivo = muteAdmTimestamp !== null && muteAdmTimestamp > Date.now();
@@ -92,7 +107,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
           return;
         }
       } catch (err) {
-        console.error('Erro ao checar status do Módulo 07 no Supabase:', err);
+        console.error('Erro ao checar status no Supabase:', err);
       }
     };
 
@@ -105,81 +120,104 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
     };
   }, [idCondominioAtivo]);
 
-  // Monitoramento contínuo das rondas
+  // Monitoramento contínuo: Rondas + Permanência de Prestadores + Chaves Atrasadas
   useEffect(() => {
-    if (!moduloRondaAtivo || !idCondominioAtivo) return;
+    if (!idCondominioAtivo) return;
 
     let isMounted = true;
 
-    const checarStatusBanco = async () => {
+    const checarStatusGlobal = async () => {
       try {
-        // Checa se há ronda em andamento
-        const { data: emAndamento } = await supabase
-          .from('rondas_execucao')
-          .select('id, hora_inicio')
-          .eq('condominio_id', idCondominioAtivo)
-          .is('hora_fim', null)
-          .order('hora_inicio', { ascending: false })
-          .limit(1);
+        const agora = Date.now();
 
-        if (!isMounted) return;
+        // 1. Checa Rondas
+        if (moduloRondaAtivo) {
+          const { data: emAndamento } = await supabase
+            .from('rondas_execucao')
+            .select('id, hora_inicio')
+            .eq('condominio_id', idCondominioAtivo)
+            .is('hora_fim', null)
+            .order('hora_inicio', { ascending: false })
+            .limit(1);
 
-        if (emAndamento && emAndamento.length > 0) {
-          rondaEmAndamentoRef.current = true;
-          setStatusRonda('em_andamento');
-          setAlertaDisparado(false);
-          return;
+          if (!isMounted) return;
+
+          if (emAndamento && emAndamento.length > 0) {
+            rondaEmAndamentoRef.current = true;
+            setStatusRonda('em_andamento');
+            setAlertaDisparado(false);
+          } else {
+            rondaEmAndamentoRef.current = false;
+            const { data: ultimaRonda } = await supabase
+              .from('rondas_execucao')
+              .select('id, hora_fim')
+              .eq('condominio_id', idCondominioAtivo)
+              .not('hora_fim', 'is', null)
+              .order('hora_fim', { ascending: false })
+              .limit(1);
+
+            let baseTimestamp = agora;
+            if (ultimaRonda && ultimaRonda.length > 0 && ultimaRonda[0].hora_fim) {
+              baseTimestamp = new Date(ultimaRonda[0].hora_fim).getTime();
+            }
+            proximaRondaTimestampRef.current = baseTimestamp + 15 * 60 * 1000;
+          }
         }
 
-        rondaEmAndamentoRef.current = false;
+        // 2. Checa Prestadores com permanência interna estourada
+        // Apenas prestadores (não autorizados/família) que estão DENTRO e o limite passou
+        try {
+          const { data: prestadoresData } = await supabase
+            .from('prestadores')
+            .select('id, nome_profissional, unidade, bloco, limite_permanencia_ate, perfil_acesso, cracha_atribuido')
+            .eq('condominio_id', idCondominioAtivo)
+            .eq('status_acesso', 'DENTRO');
 
-        // Busca última ronda finalizada
-        const { data: ultimaRonda } = await supabase
-          .from('rondas_execucao')
-          .select('id, hora_fim')
-          .eq('condominio_id', idCondominioAtivo)
-          .not('hora_fim', 'is', null)
-          .order('hora_fim', { ascending: false })
-          .limit(1);
+          if (isMounted && prestadoresData) {
+            const estourados = prestadoresData.filter((p: any) => {
+              if (p.perfil_acesso === 'autorizado') return false; // Visitantes/Família não têm limite
+              if (!p.limite_permanencia_ate) return false;
+              return new Date(p.limite_permanencia_ate).getTime() < agora;
+            });
+            setPrestadoresEstourados(estourados);
+          }
+        } catch {}
 
-        if (!isMounted) return;
+        // 3. Checa Chaves com devolução atrasada
+        try {
+          const { data: chavesData } = await supabase
+            .from('movimentacao_chaves')
+            .select('id, previsao_devolucao, chaves(codigo_chave, nome_chave)')
+            .eq('condominio_id', idCondominioAtivo)
+            .eq('status', 'Em Andamento');
 
-        let baseTimestamp = Date.now();
-        if (ultimaRonda && ultimaRonda.length > 0 && ultimaRonda[0].hora_fim) {
-          baseTimestamp = new Date(ultimaRonda[0].hora_fim).getTime();
-        }
+          if (isMounted && chavesData) {
+            const atrasadas = chavesData.filter((c: any) => {
+              if (!c.previsao_devolucao) return false;
+              return new Date(c.previsao_devolucao).getTime() < agora;
+            });
+            setChavesAtrasadas(atrasadas);
+          }
+        } catch {}
 
-        // Intervalo de 15 minutos entre rondas
-        const proxima = baseTimestamp + 15 * 60 * 1000;
-        proximaRondaTimestampRef.current = proxima;
       } catch (e) {
-        console.error('Erro ao checar rondas:', e);
+        console.error('Erro ao checar status global:', e);
       }
     };
 
-    checarStatusBanco();
-    const intervalBanco = setInterval(checarStatusBanco, 15000);
+    checarStatusGlobal();
+    const intervalGlobal = setInterval(checarStatusGlobal, 15000);
 
     return () => {
       isMounted = false;
-      clearInterval(intervalBanco);
+      clearInterval(intervalGlobal);
     };
   }, [moduloRondaAtivo, idCondominioAtivo]);
 
-  // Timer do relógio
+  // Timer do relógio da ronda e beeps de alerta global
   useEffect(() => {
-    if (!moduloRondaAtivo) return;
-
     const timerInterval = setInterval(() => {
-      if (rondaEmAndamentoRef.current) {
-        setStatusRonda('em_andamento');
-        setAlertaDisparado(false);
-        return;
-      }
-
       const agora = Date.now();
-      const proxima = proximaRondaTimestampRef.current || (agora + 15 * 60 * 1000);
-      const diffSegundos = Math.floor((proxima - agora) / 1000);
 
       // Checa se o mute do ADM expirou
       if (muteAdmTimestamp && agora >= muteAdmTimestamp) {
@@ -187,36 +225,55 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
         localStorage.removeItem(CHAVE_MUTE_ADM);
       }
 
-      if (diffSegundos > 0) {
-        setStatusRonda('aguardando');
-        setTempoRestante(diffSegundos);
-        setTempoAtrasado(0);
-        setAlertaDisparado(false);
-      } else {
-        setStatusRonda('atrasada');
-        setTempoRestante(0);
-        setTempoAtrasado(Math.abs(diffSegundos));
-
-        // Se o ADM estiver com mute ativo ou se estiver adiado temporariamente
-        const estaSilenciado = (silenciadoAte && agora < silenciadoAte) || (muteAdmTimestamp && agora < muteAdmTimestamp);
-
-        if (!estaSilenciado) {
-          setAlertaDisparado(true);
-          dispararBeepSonoro();
-        } else {
+      // 1. Rondas
+      if (moduloRondaAtivo) {
+        if (rondaEmAndamentoRef.current) {
+          setStatusRonda('em_andamento');
           setAlertaDisparado(false);
+        } else {
+          const proxima = proximaRondaTimestampRef.current || (agora + 15 * 60 * 1000);
+          const diffSegundos = Math.floor((proxima - agora) / 1000);
+
+          if (diffSegundos > 0) {
+            setStatusRonda('aguardando');
+            setTempoRestante(diffSegundos);
+            setTempoAtrasado(0);
+            setAlertaDisparado(false);
+          } else {
+            setStatusRonda('atrasada');
+            setTempoRestante(0);
+            setTempoAtrasado(Math.abs(diffSegundos));
+
+            const estaSilenciado = (silenciadoAte && agora < silenciadoAte) || (muteAdmTimestamp && agora < muteAdmTimestamp);
+            if (!estaSilenciado) {
+              setAlertaDisparado(true);
+            } else {
+              setAlertaDisparado(false);
+            }
+          }
         }
       }
+
+      // 2. Beep sonoro global: dispara se ronda estiver atrasada OU se houver prestador/chave atrasados
+      const temAlertaCritico = 
+        (statusRonda === 'atrasada' && !silenciadoAte) || 
+        prestadoresEstourados.length > 0 || 
+        chavesAtrasadas.length > 0;
+
+      if (temAlertaCritico && !muteAdmAtivo) {
+        if (agora - ultimoBeepGlobalRef.current > 20000) {
+          dispararBeepSonoro();
+          ultimoBeepGlobalRef.current = agora;
+        }
+      }
+
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [moduloRondaAtivo, silenciadoAte, muteAdmTimestamp]);
+  }, [moduloRondaAtivo, silenciadoAte, muteAdmTimestamp, statusRonda, prestadoresEstourados.length, chavesAtrasadas.length]);
 
   const dispararBeepSonoro = () => {
-    // Se o Administrador silenciou o alerta, não emite nenhum som
-    if (muteAdmTimestamp && Date.now() < muteAdmTimestamp) {
-      return;
-    }
+    if (muteAdmTimestamp && Date.now() < muteAdmTimestamp) return;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -228,19 +285,17 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
         const gain = audioCtx.createGain();
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
         osc.stop(audioCtx.currentTime + duracao);
       };
 
-      emitirBeep(880, 0.2);
-      setTimeout(() => emitirBeep(880, 0.2), 300);
-      setTimeout(() => emitirBeep(1100, 0.4), 600);
-    } catch (e) {
-      console.log('Erro ao emitir sinal sonoro:', e);
-    }
+      emitirBeep(880, 0.15);
+      setTimeout(() => emitirBeep(880, 0.15), 250);
+      setTimeout(() => emitirBeep(1100, 0.3), 500);
+    } catch {}
   };
 
   const formatarTempo = (segundos: number) => {
@@ -251,18 +306,25 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
 
   const handleIrParaRondas = () => {
     setAlertaDisparado(false);
-    setSilenciadoAte(new Date().getTime() + 10 * 60 * 1000);
-    if (onNavegarRondas) {
-      onNavegarRondas();
-    }
+    setSilenciadoAte(Date.now() + 10 * 60 * 1000);
+    if (onNavegarModulo) onNavegarModulo('rondas');
+    else if (onNavegarRondas) onNavegarRondas();
+  };
+
+  const handleIrParaPrestadores = () => {
+    if (onNavegarModulo) onNavegarModulo('prestadores');
+  };
+
+  const handleIrParaChaves = () => {
+    if (onNavegarModulo) onNavegarModulo('chaves');
   };
 
   const handleAdiar15Min = () => {
     setAlertaDisparado(false);
-    setSilenciadoAte(new Date().getTime() + 15 * 60 * 1000);
+    setSilenciadoAte(Date.now() + 15 * 60 * 1000);
   };
 
-  // Funções de Mute do Administrador
+  // Funções de Mute ADM
   const aplicarMuteAdm = async (minutos: number) => {
     const ate = Date.now() + minutos * 60 * 1000;
     setMuteAdmTimestamp(ate);
@@ -270,20 +332,13 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
     setAlertaDisparado(false);
     setModalMuteAberto(false);
 
-    // Registra na auditoria do Histórico Absoluto
     const opNome = usuarioLogado?.nome || usuarioLogado?.login || 'Administrador';
     await registrarAtividade({
-      modulo: 'Rondas',
+      modulo: 'Sistema',
       acao: 'MUTE_ALERTA',
-      descricao: `Administrador ${opNome} silenciou o alerta sonoro de ronda por ${minutos} minutos.`,
-      detalhes: {
-        duracaoMinutos: minutos,
-        silenciadoAte: new Date(ate).toISOString(),
-        operador: opNome
-      },
+      descricao: `Administrador ${opNome} silenciou os alertas sonoros do sistema por ${minutos} minutos.`,
+      detalhes: { duracaoMinutos: minutos, silenciadoAte: new Date(ate).toISOString() },
       operador_nome: opNome,
-      operador_id: usuarioLogado?.id,
-      operador_login: usuarioLogado?.login,
       condominio_id: idCondominioAtivo
     });
   };
@@ -295,54 +350,75 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
 
     const opNome = usuarioLogado?.nome || usuarioLogado?.login || 'Administrador';
     await registrarAtividade({
-      modulo: 'Rondas',
+      modulo: 'Sistema',
       acao: 'MUTE_ALERTA',
-      descricao: `Administrador ${opNome} reativou os alertas sonoros de ronda.`,
-      detalhes: { status: 'reativado', operador: opNome },
+      descricao: `Administrador ${opNome} reativou os alertas sonoros.`,
+      detalhes: { status: 'reativado' },
       operador_nome: opNome,
-      operador_id: usuarioLogado?.id,
-      operador_login: usuarioLogado?.login,
       condominio_id: idCondominioAtivo
     });
   };
 
-  if (!moduloRondaAtivo) {
-    return null;
-  }
-
   return (
     <>
-      <div className={`w-full px-3 py-1 flex items-center justify-between text-[11px] font-bold shadow-xs sticky top-0 z-40 transition-colors ${
-        statusRonda === 'em_andamento'
-          ? 'bg-emerald-600 text-white'
-          : statusRonda === 'atrasada'
+      {/* BARRA SUPERIOR DE ALERTAS GLOBAIS (Ronda, Prestadores, Chaves e Mute) */}
+      <div className={`w-full px-3 py-1 flex items-center justify-between text-[11px] font-bold shadow-xs sticky top-0 z-40 transition-colors flex-wrap gap-2 ${
+        prestadoresEstourados.length > 0 || chavesAtrasadas.length > 0 || statusRonda === 'atrasada'
           ? 'bg-red-600 text-white'
+          : statusRonda === 'em_andamento'
+          ? 'bg-emerald-600 text-white'
           : 'bg-amber-500 text-slate-950'
       }`}>
-        <div className="flex items-center gap-2 truncate">
+        <div className="flex items-center gap-2 truncate flex-wrap">
+          {/* Status da Ronda */}
           {statusRonda === 'em_andamento' ? (
-            <>
+            <div className="flex items-center gap-1.5 truncate">
               <PlayCircle className="w-3.5 h-3.5 animate-spin text-emerald-200 shrink-0" />
               <span className="truncate">Ronda em Andamento</span>
-            </>
+            </div>
           ) : statusRonda === 'atrasada' ? (
-            <>
-              <ShieldAlert className="w-3.5 h-3.5 text-white shrink-0" />
-              <span className="truncate">Ronda Atrasada / Pendente</span>
-            </>
+            <div className="flex items-center gap-1.5 truncate">
+              <ShieldAlert className="w-3.5 h-3.5 text-white shrink-0 animate-bounce" />
+              <span className="truncate font-black">Ronda Atrasada / Pendente</span>
+            </div>
           ) : (
-            <>
+            <div className="flex items-center gap-1.5 truncate">
               <Timer className="w-3.5 h-3.5 text-slate-900 shrink-0" />
               <span className="truncate">Próxima Ronda</span>
-            </>
+            </div>
+          )}
+
+          {/* Badge: Prestador Estourado */}
+          {prestadoresEstourados.length > 0 && (
+            <button
+              type="button"
+              onClick={handleIrParaPrestadores}
+              className="bg-slate-950 text-amber-300 border border-amber-400/50 px-2 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 animate-pulse hover:bg-slate-900 cursor-pointer"
+              title="Clique para ir ao módulo de Autorizados/Prestadores"
+            >
+              <HardHat className="w-3 h-3 text-amber-400" />
+              <span>{prestadoresEstourados.length} Prestador(es) Estourado(s)!</span>
+            </button>
+          )}
+
+          {/* Badge: Chave Atrasada */}
+          {chavesAtrasadas.length > 0 && (
+            <button
+              type="button"
+              onClick={handleIrParaChaves}
+              className="bg-slate-950 text-indigo-300 border border-indigo-400/50 px-2 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 animate-pulse hover:bg-slate-900 cursor-pointer"
+              title="Clique para ir ao Quadro de Chaves"
+            >
+              <Key className="w-3 h-3 text-indigo-400" />
+              <span>{chavesAtrasadas.length} Chave(s) Atrasada(s)!</span>
+            </button>
           )}
 
           {/* Indicador de Mute ADM Ativo */}
           {muteAdmAtivo && (
             <span 
               onClick={() => eAdmin && setModalMuteAberto(true)}
-              className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-950/80 text-amber-300 border border-amber-400/40 cursor-pointer shadow-xs"
-              title="Clique para gerenciar o silenciamento de alerta"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-950/80 text-amber-300 border border-amber-400/40 cursor-pointer shadow-xs"
             >
               <VolumeX className="w-3 h-3 text-amber-400" />
               <span>Mudo ADM ({minutosRestantesMute}m)</span>
@@ -369,7 +445,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
                   ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 border border-amber-500'
                   : 'bg-slate-900/90 text-slate-200 hover:bg-slate-950 border border-slate-700'
               }`}
-              title="Silenciar / Mutar alertas de ronda (Acesso exclusivo para Administrador)"
+              title="Silenciar / Mutar alertas (Acesso exclusivo para Administrador)"
             >
               {muteAdmAtivo ? <VolumeX className="w-3 h-3 text-slate-950" /> : <Volume2 className="w-3 h-3" />}
               <span className="hidden md:inline">Mute ADM</span>
@@ -418,11 +494,6 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
               </p>
             </div>
 
-            <div className="bg-red-50 border border-red-200 p-3 rounded-2xl flex items-center justify-center gap-2 text-red-700 text-xs font-bold text-left">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-red-600" />
-              <span>Ação obrigatória do vigia / portaria no plantão!</span>
-            </div>
-
             <div className="space-y-2 pt-1">
               <button
                 onClick={handleIrParaRondas}
@@ -439,7 +510,6 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
                 Lembrar mais tarde (Adiar 15 min)
               </button>
 
-              {/* Botão de Mute Direto para ADM no Modal de Alerta */}
               {eAdmin && (
                 <button
                   type="button"
@@ -447,7 +517,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
                   className="w-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-black py-2.5 rounded-2xl text-xs uppercase flex items-center justify-center gap-1.5 transition border border-amber-300 cursor-pointer"
                 >
                   <VolumeX className="w-4 h-4 text-amber-700" />
-                  Silenciar Alerta de Ronda (Exclusivo ADM)
+                  Silenciar Todos os Alertas (Exclusivo ADM)
                 </button>
               )}
             </div>
@@ -455,7 +525,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
         </div>
       )}
 
-      {/* MODAL EXCLUSIVO DE GERENCIAMENTO DE MUTE PARA O ADMINISTRADOR */}
+      {/* MODAL DE GERENCIAMENTO DE MUTE PARA O ADMINISTRADOR */}
       {modalMuteAberto && eAdmin && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[10000] flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-slate-900 border-2 border-amber-500/50 rounded-3xl max-w-sm w-full p-6 text-white space-y-4 shadow-2xl relative my-auto">
@@ -466,10 +536,10 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
                 </div>
                 <div>
                   <h4 className="font-black text-sm text-white uppercase tracking-tight">
-                    Mute de Ronda (ADM)
+                    Mute de Alertas (ADM)
                   </h4>
                   <p className="text-[10px] text-slate-400">
-                    Controle exclusivo de administrador
+                    Silencia avisos de Rondas, Prestadores e Chaves
                   </p>
                 </div>
               </div>
@@ -483,7 +553,7 @@ export default function AlertaRondaGlobal({ onNavegarRondas, usuarioLogado, cond
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Silencie os avisos sonoros e popups de ronda atrasada durante reuniões, manutenções ou períodos autorizados pelo síndico.
+              Silencie os avisos sonoros e popups temporariamente durante manutenções autorizadas, reuniões ou troca de turno.
             </p>
 
             {muteAdmAtivo ? (

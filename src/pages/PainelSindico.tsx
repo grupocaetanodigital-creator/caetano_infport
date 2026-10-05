@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabase';
+import { registrarAtividade } from '../services/auditoriaService';
 import { 
   ShieldCheck, 
   Package, 
@@ -28,7 +29,12 @@ import {
   Camera,
   MapPin,
   Wrench,
-  ClipboardList
+  ClipboardList,
+  Plus,
+  FileText,
+  Check,
+  MessageSquare,
+  X
 } from 'lucide-react';
 
 interface PainelSindicoProps {
@@ -68,6 +74,30 @@ export default function PainelSindico({
 
   // Modal de Detalhes / Foto em Alta Resolução
   const [itemVisualizando, setItemVisualizando] = useState<{ titulo: string; dados: any; tipo: string } | null>(null);
+
+  // Modal e Formulário de Nova Ocorrência (Direto pelo Síndico)
+  const [modalNovaOcorrencia, setModalNovaOcorrencia] = useState(false);
+  const [formOcorrencia, setFormOcorrencia] = useState({
+    titulo: '',
+    descricao: '',
+    tipo: 'Interna',
+    prioridade: 'Média',
+    unidade_bloco: '',
+    foto_url: ''
+  });
+
+  // Modal e Formulário de Nova Manutenção (Direto pelo Síndico)
+  const [modalNovaManutencao, setModalNovaManutencao] = useState(false);
+  const [formManutencao, setFormManutencao] = useState({
+    titulo: '',
+    localizacao: '',
+    categoria: 'Geral',
+    prioridade: 'Média',
+    descricao: '',
+    foto_antes_url: ''
+  });
+
+  const [feedbackMensagem, setFeedbackMensagem] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
 
   // Sincroniza condomínio se mudar na prop
   useEffect(() => {
@@ -187,6 +217,8 @@ export default function PainelSindico({
 
     const materiaisAvaria = materiais.filter(m => m.estado !== 'Perfeito').length;
 
+    const manutencoesAbertas = manutencoes.filter(m => m.status === 'Aberto' || m.status === 'Em Andamento').length;
+
     return {
       retidas,
       entreguesHoje,
@@ -198,9 +230,108 @@ export default function PainelSindico({
       ocorrenciasHoje,
       ocorrenciasUrgentes,
       custodiaAtiva,
-      materiaisAvaria
+      materiaisAvaria,
+      manutencoesAbertas
     };
-  }, [encomendas, chaves, prestadores, rondas, ocorrencias, custodia, materiais]);
+  }, [encomendas, chaves, prestadores, rondas, ocorrencias, custodia, materiais, manutencoes]);
+
+  // Registro de nova ocorrência direta pelo Síndico
+  const salvarNovaOcorrencia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formOcorrencia.titulo.trim() || !formOcorrencia.descricao.trim()) {
+      setFeedbackMensagem({ tipo: 'erro', texto: 'Preencha o título e a descrição da ocorrência.' });
+      return;
+    }
+    const idCondo = usuarioLogado?.condominio_id || condominioAtivo?.id || condominioFiltro;
+    if (!idCondo) {
+      setFeedbackMensagem({ tipo: 'erro', texto: 'Nenhum condomínio ativo selecionado.' });
+      return;
+    }
+
+    try {
+      const payload = {
+        condominio_id: idCondo,
+        titulo: formOcorrencia.titulo.trim(),
+        descricao: formOcorrencia.descricao.trim(),
+        tipo: formOcorrencia.tipo,
+        prioridade: formOcorrencia.prioridade,
+        status: 'Pendente',
+        foto_url: formOcorrencia.foto_url.trim() || null,
+        operador_nome: `Síndico: ${usuarioLogado?.nome || usuarioLogado?.login || 'Administração'}`,
+        unidade_bloco: formOcorrencia.unidade_bloco.trim() || null,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase.from('ocorrencias').insert([payload]).select().single();
+      if (error) throw error;
+
+      await registrarAtividade({
+        condominio_id: idCondo,
+        modulo: 'Ocorrências',
+        acao: 'NOVA_OCORRENCIA_SINDICO',
+        descricao: `Síndico registrou ocorrência: "${payload.titulo}"`,
+        operador_id: usuarioLogado?.id || 'sindico',
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Síndico'
+      });
+
+      setOcorrencias(prev => [data || payload, ...prev]);
+      setModalNovaOcorrencia(false);
+      setFormOcorrencia({ titulo: '', descricao: '', tipo: 'Interna', prioridade: 'Média', unidade_bloco: '', foto_url: '' });
+      setFeedbackMensagem({ tipo: 'sucesso', texto: 'Ocorrência registrada com sucesso no livro oficial!' });
+      setTimeout(() => setFeedbackMensagem(null), 4000);
+    } catch (err: any) {
+      setFeedbackMensagem({ tipo: 'erro', texto: 'Erro ao registrar ocorrência: ' + err.message });
+    }
+  };
+
+  // Abertura de chamado de manutenção direto pelo Síndico
+  const salvarNovaManutencao = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formManutencao.titulo.trim() || !formManutencao.localizacao.trim()) {
+      setFeedbackMensagem({ tipo: 'erro', texto: 'Preencha o título e a localização da manutenção.' });
+      return;
+    }
+    const idCondo = usuarioLogado?.condominio_id || condominioAtivo?.id || condominioFiltro;
+    if (!idCondo) {
+      setFeedbackMensagem({ tipo: 'erro', texto: 'Nenhum condomínio ativo selecionado.' });
+      return;
+    }
+
+    try {
+      const payload = {
+        condominio_id: idCondo,
+        titulo: formManutencao.titulo.trim(),
+        localizacao: formManutencao.localizacao.trim(),
+        categoria: formManutencao.categoria,
+        prioridade: formManutencao.prioridade,
+        descricao: formManutencao.descricao.trim(),
+        foto_antes_url: formManutencao.foto_antes_url.trim() || null,
+        status: 'Aberto',
+        operador_abertura: `Síndico: ${usuarioLogado?.nome || usuarioLogado?.login || 'Administração'}`,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase.from('chamados_manutencao').insert([payload]).select().single();
+      if (error) throw error;
+
+      await registrarAtividade({
+        condominio_id: idCondo,
+        modulo: 'Manutenção',
+        acao: 'NOVA_OS_SINDICO',
+        descricao: `Síndico abriu OS: "${payload.titulo}" (${payload.localizacao})`,
+        operador_id: usuarioLogado?.id || 'sindico',
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Síndico'
+      });
+
+      setManutencoes(prev => [data || payload, ...prev]);
+      setModalNovaManutencao(false);
+      setFormManutencao({ titulo: '', localizacao: '', categoria: 'Geral', prioridade: 'Média', descricao: '', foto_antes_url: '' });
+      setFeedbackMensagem({ tipo: 'sucesso', texto: 'Chamado de manutenção OS aberto com sucesso!' });
+      setTimeout(() => setFeedbackMensagem(null), 4000);
+    } catch (err: any) {
+      setFeedbackMensagem({ tipo: 'erro', texto: 'Erro ao abrir chamado: ' + err.message });
+    }
+  };
 
   // Exportar dados da aba atual para CSV
   const exportarRelatorioCsv = (nomeArquivo: string, dados: any[]) => {
@@ -403,7 +534,41 @@ export default function PainelSindico({
             Itens guardados na guarita
           </div>
         </div>
+
+        {/* Manutenções OS */}
+        <div 
+          onClick={() => setAbaAtiva('manutencao')}
+          className={`p-3.5 rounded-2xl border transition cursor-pointer ${
+            abaAtiva === 'manutencao' 
+              ? 'bg-orange-600 text-white border-orange-500 shadow-lg shadow-orange-600/30' 
+              : 'bg-white text-slate-800 border-slate-200 hover:border-orange-400'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider opacity-80">Manutenções</span>
+            <Wrench className="w-4 h-4 text-orange-500" />
+          </div>
+          <div className="text-2xl font-black">{metricas.manutencoesAbertas}</div>
+          <div className="text-[10px] opacity-75 mt-0.5">
+            Chamados OS em aberto ({manutencoes.length} total)
+          </div>
+        </div>
       </div>
+
+      {/* FEEDBACK DE AÇÃO DO SÍNDICO */}
+      {feedbackMensagem && (
+        <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs font-bold transition ${
+          feedbackMensagem.tipo === 'sucesso' 
+            ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
+            : 'bg-rose-50 text-rose-900 border-rose-300'
+        }`}>
+          <div className="flex items-center gap-2">
+            {feedbackMensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+            <span>{feedbackMensagem.texto}</span>
+          </div>
+          <button onClick={() => setFeedbackMensagem(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+        </div>
+      )}
 
       {/* BARRA DE NAVEGAÇÃO DE ABAS DE CONSULTA */}
       <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2 overflow-x-auto">
@@ -441,6 +606,18 @@ export default function PainelSindico({
         >
           <BookOpen className="w-3.5 h-3.5" />
           <span>Ocorrências ({ocorrencias.length})</span>
+        </button>
+
+        <button
+          onClick={() => setAbaAtiva('manutencao')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            abaAtiva === 'manutencao' 
+              ? 'bg-orange-600 text-white shadow-sm' 
+              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+          }`}
+        >
+          <Wrench className="w-3.5 h-3.5" />
+          <span>Manutenções OS ({manutencoes.length})</span>
         </button>
 
         <button
@@ -741,51 +918,189 @@ export default function PainelSindico({
                 Livro Digital de Ocorrências
               </h3>
               <p className="text-xs text-slate-500">
-                Auditoria de todas as ocorrências e incidentes registrados pelos operadores da portaria.
+                Auditoria de todas as ocorrências e incidentes registrados. O Síndico também pode registrar diretamente.
               </p>
             </div>
 
-            <button
-              onClick={() => exportarRelatorioCsv('ocorrencias_sindico', ocorrencias)}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-            >
-              <Download className="w-3.5 h-3.5" /> Exportar Planilha
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setModalNovaOcorrencia(true)}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" /> + Nova Ocorrência
+              </button>
+
+              <button
+                onClick={() => exportarRelatorioCsv('ocorrencias_sindico', ocorrencias)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar Planilha
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {ocorrencias.map((oc) => (
-              <div key={oc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 text-sm">{oc.titulo}</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    oc.prioridade === 'Urgente' || oc.prioridade === 'Alta' 
-                      ? 'bg-rose-100 text-rose-700 border border-rose-200' 
-                      : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {oc.prioridade || 'Normal'}
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                  {oc.descricao}
-                </p>
-
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span>🕒 {new Date(oc.created_at).toLocaleString('pt-BR')}</span>
-                    {oc.registrado_por && <span>• Registrado por: <strong>{oc.registrado_por}</strong></span>}
+          {ocorrencias.length === 0 ? (
+            <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl space-y-2">
+              <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="text-xs text-slate-500">Nenhuma ocorrência registrada para este condomínio.</p>
+              <button
+                onClick={() => setModalNovaOcorrencia(true)}
+                className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-500 cursor-pointer"
+              >
+                + Registrar Primeira Ocorrência
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {ocorrencias.map((oc) => (
+                <div key={oc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-sm">{oc.titulo}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      oc.prioridade === 'Urgente' || oc.prioridade === 'Alta' 
+                        ? 'bg-rose-100 text-rose-700 border border-rose-200' 
+                        : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {oc.prioridade || 'Normal'}
+                    </span>
                   </div>
 
-                  {oc.unidade && (
-                    <span className="font-bold text-slate-700">
-                      Unidade: {oc.bloco ? `${oc.bloco} - ` : ''}{oc.unidade}
-                    </span>
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {oc.descricao}
+                  </p>
+
+                  {oc.foto_url && (
+                    <button
+                      onClick={() => setItemVisualizando({ titulo: oc.titulo, dados: oc, tipo: 'foto' })}
+                      className="text-[11px] text-rose-700 hover:text-rose-800 font-bold flex items-center gap-1 underline cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" /> Ver Foto Anexada
+                    </button>
                   )}
+
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span>🕒 {new Date(oc.created_at).toLocaleString('pt-BR')}</span>
+                      {(oc.operador_nome || oc.registrado_por) && (
+                        <span>• Por: <strong>{oc.operador_nome || oc.registrado_por}</strong></span>
+                      )}
+                    </div>
+
+                    {(oc.unidade || oc.unidade_bloco) && (
+                      <span className="font-bold text-slate-700">
+                        Unidade: {oc.unidade_bloco || `${oc.bloco ? `${oc.bloco} - ` : ''}${oc.unidade}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ABA: MANUTENÇÃO & ORDENS DE SERVIÇO (SÍNDICO) */}
+      {abaAtiva === 'manutencao' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-orange-600" />
+                Gestão de Manutenção & Ordens de Serviço (OS)
+              </h3>
+              <p className="text-xs text-slate-500">
+                Acompanhe chamados abertos e adicione novas demandas preventivas ou corretivas.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setModalNovaManutencao(true)}
+                className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" /> + Novo Chamado OS
+              </button>
+
+              <button
+                onClick={() => exportarRelatorioCsv('manutencoes_sindico', manutencoes)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar Planilha
+              </button>
+            </div>
           </div>
+
+          {manutencoes.length === 0 ? (
+            <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl space-y-2">
+              <Wrench className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="text-xs text-slate-500">Nenhum chamado de manutenção registrado.</p>
+              <button
+                onClick={() => setModalNovaManutencao(true)}
+                className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-bold hover:bg-orange-500 cursor-pointer"
+              >
+                + Abrir Primeira Ordem de Serviço
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {manutencoes.map((m) => {
+                const concluido = m.status === 'Concluído';
+                return (
+                  <div key={m.id} className={`p-4 rounded-xl border space-y-2 transition ${
+                    concluido ? 'bg-emerald-50/40 border-emerald-200' : 'bg-white border-slate-200 shadow-2xs'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold text-orange-600 uppercase bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                          {m.categoria || 'Geral'}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-sm mt-1">{m.titulo}</h4>
+                        <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 text-slate-400" /> {m.localizacao}
+                        </span>
+                      </div>
+
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
+                        concluido 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                      }`}>
+                        {m.status || 'Aberto'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
+                      {m.descricao}
+                    </p>
+
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      {m.foto_antes_url && (
+                        <button
+                          onClick={() => setItemVisualizando({ titulo: `Antes: ${m.titulo}`, dados: { foto_url: m.foto_antes_url }, tipo: 'foto' })}
+                          className="text-[10px] text-blue-700 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 cursor-pointer"
+                        >
+                          <Camera className="w-3 h-3" /> Foto Antes
+                        </button>
+                      )}
+                      {m.foto_depois_url && (
+                        <button
+                          onClick={() => setItemVisualizando({ titulo: `Depois: ${m.titulo}`, dados: { foto_url: m.foto_depois_url }, tipo: 'foto' })}
+                          className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3 h-3" /> Foto Depois
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                      <span>Criado: {new Date(m.created_at).toLocaleDateString('pt-BR')}</span>
+                      <span>Por: <strong>{m.operador_abertura || 'Portaria'}</strong></span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1068,7 +1383,7 @@ export default function PainelSindico({
               <h3 className="font-bold text-white text-sm">{itemVisualizando.titulo}</h3>
               <button 
                 onClick={() => setItemVisualizando(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -1084,10 +1399,287 @@ export default function PainelSindico({
 
             <button
               onClick={() => setItemVisualizando(null)}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-xl text-xs transition"
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
             >
               Fechar Visualização
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: NOVA OCORRÊNCIA (DIRETO PELO SÍNDICO) */}
+      {modalNovaOcorrencia && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-rose-200">
+            <div className="flex items-center justify-between border-b pb-3 border-rose-100">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                  <BookOpen className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Registrar Nova Ocorrência</h3>
+                  <p className="text-[11px] text-slate-500">Lançamento direto pelo Síndico no livro oficial</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setModalNovaOcorrencia(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={salvarNovaOcorrencia} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Título da Ocorrência *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formOcorrencia.titulo}
+                  onChange={(e) => setFormOcorrencia({ ...formOcorrencia, titulo: e.target.value })}
+                  placeholder="Ex: Barulho excessivo após às 22h"
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white focus:border-rose-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Tipo
+                  </label>
+                  <select
+                    value={formOcorrencia.tipo}
+                    onChange={(e) => setFormOcorrencia({ ...formOcorrencia, tipo: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Interna">Interna Posto</option>
+                    <option value="Morador">Morador</option>
+                    <option value="Segurança">Segurança</option>
+                    <option value="Prestador">Prestador</option>
+                    <option value="Barulho">Barulho</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Prioridade
+                  </label>
+                  <select
+                    value={formOcorrencia.prioridade}
+                    onChange={(e) => setFormOcorrencia({ ...formOcorrencia, prioridade: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Baixa">Baixa</option>
+                    <option value="Média">Média</option>
+                    <option value="Alta">Alta</option>
+                    <option value="Urgente">Urgente</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Unidade / Bloco (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formOcorrencia.unidade_bloco}
+                  onChange={(e) => setFormOcorrencia({ ...formOcorrencia, unidade_bloco: e.target.value })}
+                  placeholder="Ex: Apto 102 - Bloco A"
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Descrição dos Fatos *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={formOcorrencia.descricao}
+                  onChange={(e) => setFormOcorrencia({ ...formOcorrencia, descricao: e.target.value })}
+                  placeholder="Descreva detalhadamente o ocorrido..."
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900 focus:bg-white focus:border-rose-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Link da Foto / Evidência (Opcional)
+                </label>
+                <input
+                  type="url"
+                  value={formOcorrencia.foto_url}
+                  onChange={(e) => setFormOcorrencia({ ...formOcorrencia, foto_url: e.target.value })}
+                  placeholder="https://exemplo.com/foto.jpg"
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalNovaOcorrencia(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black transition shadow-md shadow-rose-600/30 cursor-pointer"
+                >
+                  Salvar Ocorrência
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: NOVO CHAMADO DE MANUTENÇÃO (DIRETO PELO SÍNDICO) */}
+      {modalNovaManutencao && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-orange-200">
+            <div className="flex items-center justify-between border-b pb-3 border-orange-100">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-orange-100 text-orange-700 rounded-xl">
+                  <Wrench className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Abrir Chamado OS de Manutenção</h3>
+                  <p className="text-[11px] text-slate-500">Ordem de Serviço predial pelo Síndico</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setModalNovaManutencao(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={salvarNovaManutencao} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Título da Demanda *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formManutencao.titulo}
+                  onChange={(e) => setFormManutencao({ ...formManutencao, titulo: e.target.value })}
+                  placeholder="Ex: Troca de disjuntor na bomba de recalque"
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Localização *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formManutencao.localizacao}
+                    onChange={(e) => setFormManutencao({ ...formManutencao, localizacao: e.target.value })}
+                    placeholder="Ex: Subsolo 2 / Casa de Máquinas"
+                    className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Categoria
+                  </label>
+                  <select
+                    value={formManutencao.categoria}
+                    onChange={(e) => setFormManutencao({ ...formManutencao, categoria: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Elétrica">Elétrica</option>
+                    <option value="Hidráulica">Hidráulica</option>
+                    <option value="Portões & Acesso">Portões & Acesso</option>
+                    <option value="Pintura">Pintura</option>
+                    <option value="Elevadores">Elevadores</option>
+                    <option value="CFTV & Alarmes">CFTV & Alarmes</option>
+                    <option value="Geral">Geral</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Prioridade
+                </label>
+                <div className="grid grid-cols-4 gap-1.5 text-xs">
+                  {['Baixa', 'Média', 'Alta', 'Emergencial'].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setFormManutencao({ ...formManutencao, prioridade: p })}
+                      className={`p-2 rounded-lg font-bold text-center border transition cursor-pointer ${
+                        formManutencao.prioridade === p
+                          ? 'bg-orange-600 text-white border-orange-500 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Descrição do Serviço Necessário
+                </label>
+                <textarea
+                  rows={3}
+                  value={formManutencao.descricao}
+                  onChange={(e) => setFormManutencao({ ...formManutencao, descricao: e.target.value })}
+                  placeholder="Detalhes técnicos, peças necessárias ou prestador responsável..."
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Foto Antes / Avaria (URL Opcional)
+                </label>
+                <input
+                  type="url"
+                  value={formManutencao.foto_antes_url}
+                  onChange={(e) => setFormManutencao({ ...formManutencao, foto_antes_url: e.target.value })}
+                  placeholder="https://exemplo.com/foto_antes.jpg"
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalNovaManutencao(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-black transition shadow-md shadow-orange-600/30 cursor-pointer"
+                >
+                  Abrir Chamado OS
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -33,12 +33,21 @@ import {
   ToggleLeft,
   ToggleRight,
   X,
-  ListChecks
+  ListChecks,
+  Share2,
+  ExternalLink
 } from 'lucide-react';
-import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
+import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
 import { generateMigrationSql } from '../services/databaseDoctor';
 import { SetorRonda, carregarSetoresRonda } from '../services/setoresRonda';
+import { 
+  carregarConfigWhatsApp, 
+  salvarConfigWhatsApp, 
+  ConfigNotificacoesWhatsApp, 
+  CONFIG_WHATSAPP_PADRAO, 
+  formatarLinkWhatsApp 
+} from '../services/configWhatsappService';
 
 export interface LocalArmazenamento {
   id: string;
@@ -65,12 +74,15 @@ interface ConfiguracoesProps {
 }
 
 export default function Configuracoes({ usuarioLogado, onConfigSalva }: ConfiguracoesProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'supabase' | 'locais_triagem' | 'setores_ronda'>('flags');
+  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'whats_modulos' | 'locais_triagem' | 'setores_ronda'>('flags');
   const [loading, setLoading] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
-  const [modalDoctorAberto, setModalDoctorAberto] = useState(false);
   const [copiadoSql, setCopiadoSql] = useState(false);
+
+  // Estado para Central de WhatsApp por Módulo
+  const [whatsModulos, setWhatsModulos] = useState<ConfigNotificacoesWhatsApp>(CONFIG_WHATSAPP_PADRAO);
+  const [salvandoWhats, setSalvandoWhats] = useState(false);
 
   const [listaCondominios, setListaCondominios] = useState<any[]>([]);
   const [condominioBackupId, setCondominioBackupId] = useState(usuarioLogado?.condominio_id || '');
@@ -112,6 +124,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   // Estado para Locais de Triagem & Armazenamento (Tabela)
   const [locaisArmazenamento, setLocaisArmazenamento] = useState<LocalArmazenamento[]>([]);
   const [modalLocalAberto, setModalLocalAberto] = useState(false);
+  const [localParaExcluir, setLocalParaExcluir] = useState<LocalArmazenamento | null>(null);
+  const [modalDoctorAberto, setModalDoctorAberto] = useState(false);
   const [editandoLocalId, setEditandoLocalId] = useState<string | null>(null);
   const [filtroLocais, setFiltroLocais] = useState('');
   const [formLocal, setFormLocal] = useState({
@@ -197,6 +211,9 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       carregarContatosEmergencia();
       carregarLocaisArmazenamento();
       carregarSetoresRondaConfig();
+      carregarConfigWhatsApp(usuarioLogado.condominio_id).then(cfg => {
+        setWhatsModulos(cfg);
+      });
     }
 
     const handleSetoresAtualizados = (e: any) => {
@@ -379,11 +396,11 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   };
 
   const persistirLocais = async (novosLocais: LocalArmazenamento[]) => {
-    const targetCondoId = usuarioLogado?.condominio_id;
-    if (!targetCondoId) return;
+    const targetCondoId = usuarioLogado?.condominio_id || condominioBackupId || 'condominio_ativo';
 
     setLocaisArmazenamento(novosLocais);
     localStorage.setItem(`infport_locais_${targetCondoId}`, JSON.stringify(novosLocais));
+    localStorage.setItem('infport_locais_global', JSON.stringify(novosLocais));
 
     // Notifica outros módulos (como Encomendas) em tempo real
     window.dispatchEvent(new CustomEvent('locais_armazenamento_atualizados', {
@@ -392,28 +409,15 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
 
     // Tenta salvar no Supabase
     try {
-      // Salva na tabela configuracoes (JSONB)
-      await supabase
-        .from('configuracoes')
-        .upsert([
-          { condominio_id: targetCondoId, locais_armazenamento: novosLocais }
-        ], { onConflict: 'condominio_id' });
-
-      // Salva na tabela dedicada se existir
-      await supabase
-        .from('locais_armazenamento')
-        .upsert(
-          novosLocais.map(l => ({
-            id: l.id && l.id.length > 10 ? l.id : undefined,
-            condominio_id: targetCondoId,
-            codigo: l.codigo,
-            nome: l.nome,
-            categoria: l.categoria,
-            capacidade: l.capacidade || '',
-            observacao: l.observacao || '',
-            ativo: l.ativo
-          }))
-        );
+      const idSalvar = usuarioLogado?.condominio_id || condominioBackupId;
+      if (idSalvar) {
+        // Salva na tabela configuracoes (JSONB)
+        await supabase
+          .from('configuracoes')
+          .upsert([
+            { condominio_id: idSalvar, locais_armazenamento: novosLocais }
+          ], { onConflict: 'condominio_id' });
+      }
     } catch (e) {
       console.warn('Aviso de persistência de locais:', e);
     }
@@ -487,6 +491,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
 
     await persistirLocais(atualizados);
     setModalLocalAberto(false);
+    setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
   };
 
   const toggleStatusLocal = async (id: string) => {
@@ -499,13 +504,26 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     await persistirLocais(atualizados);
   };
 
-  const excluirLocalArmazenamento = async (id: string) => {
-    const local = locaisArmazenamento.find(l => l.id === id);
-    if (!window.confirm(`Tem certeza que deseja remover o local "${local?.nome || id}" da tabela?`)) return;
+  const excluirLocalArmazenamento = (local: LocalArmazenamento) => {
+    setLocalParaExcluir(local);
+  };
 
+  const confirmarExclusaoLocal = async () => {
+    if (!localParaExcluir) return;
+    const id = localParaExcluir.id;
+    const nome = localParaExcluir.nome;
     const atualizados = locaisArmazenamento.filter(l => l.id !== id);
+    setLocalParaExcluir(null);
     await persistirLocais(atualizados);
-    setMensagem({ tipo: 'sucesso', texto: 'Local de armazenamento removido da tabela com sucesso!' });
+
+    try {
+      await supabase.from('locais_armazenamento').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Aviso ao deletar de locais_armazenamento:', e);
+    }
+
+    setMensagem({ tipo: 'sucesso', texto: `Local de armazenamento "${nome}" removido com sucesso!` });
+    setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
   };
 
   const salvarParametrizacao = async (e: React.FormEvent) => {
@@ -645,6 +663,34 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     } finally {
       setLoading(false);
     }
+  };
+
+  const salvarConfigWhatsModulos = async () => {
+    setSalvandoWhats(true);
+    setMensagem({ tipo: '', texto: '' });
+    try {
+      await salvarConfigWhatsApp(usuarioLogado?.condominio_id, whatsModulos);
+      setMensagem({ tipo: 'sucesso', texto: 'Configurações de WhatsApp de todos os módulos salvas com sucesso!' });
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao salvar configurações de WhatsApp: ' + err.message });
+    } finally {
+      setSalvandoWhats(false);
+    }
+  };
+
+  const testarWhatsModulo = (chave: keyof ConfigNotificacoesWhatsApp, tituloModulo: string) => {
+    const dest = whatsModulos[chave];
+    if (!dest?.telefone_ou_grupo) {
+      alert(`Por favor, preencha o número de WhatsApp ou link de grupo para ${tituloModulo} antes de testar.`);
+      return;
+    }
+    const texto = `🔔 *TESTE DE NOTIFICAÇÃO INFPORT — ${tituloModulo.toUpperCase()}*\n` +
+      `🏢 Condomínio: ${usuarioLogado?.condominio_nome || 'INFPORT'}\n` +
+      `🎯 Canal: ${dest.nome_destinatario || tituloModulo}\n` +
+      `✅ Status da Conexão: OPERACIONAL (Verificado com sucesso!)\n` +
+      `⏰ Data/Hora: ${new Date().toLocaleString('pt-BR')}`;
+    const link = formatarLinkWhatsApp(dest.telefone_ou_grupo, texto);
+    window.open(link, '_blank');
   };
 
   const testarTemplate = () => {
@@ -862,15 +908,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
             <Settings className="w-3 h-3" /> Módulo 11 — Configurações & Regras
           </span>
           <h3 className="font-bold text-sm sm:text-base mt-0.5">Painel Master & Parametrização</h3>
-          <p className="text-[11px] text-slate-300">Feature Flags, Motor de Templates WhatsApp, Agenda, Backup e Limpeza do Supabase.</p>
+          <p className="text-[11px] text-slate-300">Feature Flags, Motor de Templates WhatsApp, Agenda, Backup e Central de WhatsApp por Módulo.</p>
         </div>
-
-        <button
-          onClick={() => setModalDoctorAberto(true)}
-          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition shadow-2xs whitespace-nowrap"
-        >
-          <Database className="w-3.5 h-3.5" /> Diagnóstico Supabase
-        </button>
       </div>
 
       {mensagem.texto && (
@@ -921,12 +960,12 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         </button>
 
         <button
-          onClick={() => setAbaAtiva('supabase')}
+          onClick={() => setAbaAtiva('whats_modulos')}
           className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition ${
-            abaAtiva === 'supabase' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+            abaAtiva === 'whats_modulos' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
           }`}
         >
-          <Database className="w-3.5 h-3.5" /> 11.5 Arrumar Supabase
+          <Share2 className="w-3.5 h-3.5" /> 11.5 Grupos WhatsApp (Módulos)
         </button>
 
         <button
@@ -1279,61 +1318,721 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         </div>
       )}
 
-      {/* ABA 11.5: ARRUMAR SUPABASE */}
-      {abaAtiva === 'supabase' && (
+      {/* ABA 11.5: CENTRAL DE NOTIFICAÇÕES WHATSAPP POR MÓDULO */}
+      {abaAtiva === 'whats_modulos' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-emerald-200 shadow-sm space-y-5">
+          <div className="bg-white p-6 rounded-2xl border border-emerald-200 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
               <div>
                 <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <Database className="w-5 h-5 text-emerald-600" /> Assistente de Limpeza & Organização do Supabase
+                  <Share2 className="w-5 h-5 text-emerald-600" /> Central de Notificações WhatsApp & Grupos por Módulo
                 </h4>
                 <p className="text-xs text-slate-600 mt-1">
-                  Resolva a zona de tabelas duplicadas que foi criada durante os testes.
+                  Configure o número ou link de grupo do WhatsApp para receber automaticamente os relatórios, alertas e ocorrências de cada setor do condomínio.
                 </p>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={copiarSqlDireto}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition"
-                >
-                  {copiadoSql ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                  {copiadoSql ? 'Copiado!' : 'Copiar Script SQL'}
-                </button>
+              <button
+                type="button"
+                onClick={salvarConfigWhatsModulos}
+                disabled={salvandoWhats}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 transition shadow-md cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                {salvandoWhats ? 'Salvando...' : 'Salvar Todos os Canais'}
+              </button>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={() => setModalDoctorAberto(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition shadow-sm"
-                >
-                  <Sparkles className="w-4 h-4" /> Abrir Painel Completo
-                </button>
+            {/* Grid dos Módulos */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 1. Passagem de Posto */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                      <ArrowRightLeft className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Passagem de Posto (Troca de Turno)
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Relatório consolidado de troca de plantão</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.passagem_posto.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        passagem_posto: { ...prev.passagem_posto, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp (com DDD) ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.passagem_posto.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        passagem_posto: { ...prev.passagem_posto, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.passagem_posto.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        passagem_posto: { ...prev.passagem_posto, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Grupo Passagem de Posto / Diretoria"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.passagem_posto.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          passagem_posto: { ...prev.passagem_posto, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Abrir automaticamente ao concluir</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('passagem_posto', 'Passagem de Posto')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Rondas Preventivas */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-blue-100 text-blue-800 rounded-xl">
+                      <ShieldCheck className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Rondas Preventivas & Atrasos
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Alertas de ronda atrasada e relatórios</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.rondas.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        rondas: { ...prev.rondas, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp (com DDD) ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.rondas.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        rondas: { ...prev.rondas, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.rondas.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        rondas: { ...prev.rondas, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Grupo Operacional de Rondas"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.rondas.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          rondas: { ...prev.rondas, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Notificar alertas críticos</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('rondas', 'Rondas Preventivas')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Manutenções & Ordens de Serviço */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                      <Wrench className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Manutenções Prediais & OS
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Abertura de chamados e fotos de reparo</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.manutencoes.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        manutencoes: { ...prev.manutencoes, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.manutencoes.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        manutencoes: { ...prev.manutencoes, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.manutencoes.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        manutencoes: { ...prev.manutencoes, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Grupo Manutenção Predial / Zeladoria"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.manutencoes.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          manutencoes: { ...prev.manutencoes, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Notificar abertura de OS</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('manutencoes', 'Manutenções')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Lotes de RE & Encomendas */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-blue-100 text-blue-800 rounded-xl">
+                      <Package className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Lotes de RE & Encomendas
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Notificação de lotes de entregadores e triagem</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.lotes_re.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        lotes_re: { ...prev.lotes_re, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.lotes_re.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        lotes_re: { ...prev.lotes_re, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.lotes_re.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        lotes_re: { ...prev.lotes_re, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Grupo Encomendas / Logística"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.lotes_re.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          lotes_re: { ...prev.lotes_re, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Notificar lotes recebidos</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('lotes_re', 'Lotes de RE')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Quadro de Chaves Extraviadas & Atrasadas */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-indigo-100 text-indigo-800 rounded-xl">
+                      <Key className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Chaves Extraviadas & Limite Excedido
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Alertas de chaves fora do prazo de devolução</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.chaves_extraviadas.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        chaves_extraviadas: { ...prev.chaves_extraviadas, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.chaves_extraviadas.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        chaves_extraviadas: { ...prev.chaves_extraviadas, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.chaves_extraviadas.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        chaves_extraviadas: { ...prev.chaves_extraviadas, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Grupo Segurança Patrimonial / Chaves"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.chaves_extraviadas.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          chaves_extraviadas: { ...prev.chaves_extraviadas, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Notificar atraso automaticamente</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('chaves_extraviadas', 'Chaves Extraviadas')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. Livro de Ocorrências */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-rose-100 text-rose-800 rounded-xl">
+                      <BookOpen className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Livro de Ocorrências
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Notificações de ocorrências abertas na guarita</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.ocorrencias.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        ocorrencias: { ...prev.ocorrencias, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.ocorrencias.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        ocorrencias: { ...prev.ocorrencias, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.ocorrencias.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        ocorrencias: { ...prev.ocorrencias, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Grupo Síndico & Conselho"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.ocorrencias.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          ocorrencias: { ...prev.ocorrencias, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Notificar novas ocorrências</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('ocorrencias', 'Ocorrências')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 7. Prestadores & Obras (Permanência Estourada) */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                      <HardHat className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Autorizados & Prestadores (Tempo Excedido)
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Alertas de prestadores com limite de horas estourado</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.prestadores_obras.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        prestadores_obras: { ...prev.prestadores_obras, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp ou Link do Grupo:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.prestadores_obras.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        prestadores_obras: { ...prev.prestadores_obras, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11988887777 ou https://chat.whatsapp.com/..."
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Identificação do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.prestadores_obras.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        prestadores_obras: { ...prev.prestadores_obras, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Fiscalização de Obras / Administração"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={whatsModulos.prestadores_obras.notificar_automatico}
+                        onChange={(e) => setWhatsModulos(prev => ({
+                          ...prev,
+                          prestadores_obras: { ...prev.prestadores_obras, notificar_automatico: e.target.checked }
+                        }))}
+                        className="rounded text-emerald-600"
+                      />
+                      <span>Notificar permanência estourada</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('prestadores_obras', 'Prestadores & Obras')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 8. WhatsApp Geral do Síndico / Gestão */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-purple-100 text-purple-800 rounded-xl">
+                      <ShieldAlert className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <strong className="text-xs text-slate-900 block font-black uppercase">
+                        Síndico Geral / Gestão Condominial
+                      </strong>
+                      <span className="text-[10px] text-slate-500">Contato direto do síndico para notificações especiais</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={whatsModulos.geral_sindico.ativo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        geral_sindico: { ...prev.geral_sindico, ativo: e.target.checked }
+                      }))}
+                      className="rounded text-emerald-600"
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Número WhatsApp Direto do Síndico:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.geral_sindico.telefone_ou_grupo}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        geral_sindico: { ...prev.geral_sindico, telefone_ou_grupo: e.target.value }
+                      }))}
+                      placeholder="Ex: 11999998888"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Nome / Descrição:
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsModulos.geral_sindico.nome_destinatario}
+                      onChange={(e) => setWhatsModulos(prev => ({
+                        ...prev,
+                        geral_sindico: { ...prev.geral_sindico, nome_destinatario: e.target.value }
+                      }))}
+                      placeholder="Ex: Dr. Carlos (Síndico Morador)"
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-300 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] text-slate-400">Canal direto com a administração</span>
+
+                    <button
+                      type="button"
+                      onClick={() => testarWhatsModulo('geral_sindico', 'Síndico Geral')}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> Testar
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="p-3.5 bg-slate-50 border rounded-xl space-y-1">
-                <span className="font-bold text-slate-900 block">1. O que foi corrigido no código?</span>
-                <p className="text-slate-600 leading-relaxed">
-                  Todas as páginas agora usam nomes canônicos padronizados: <code>materiais_posto</code>, <code>passagens_posto</code>, <code>custodia</code>, <code>rondas_pontos</code> e <code>rondas_execucao</code>.
-                </p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border rounded-xl space-y-1">
-                <span className="font-bold text-slate-900 block">2. E as tabelas antigas com dados?</span>
-                <p className="text-slate-600 leading-relaxed">
-                  O script SQL copia primeiro os registros de <code>materiais</code>, <code>rondas_passagem_posto</code>, <code>pontos_ronda</code> para as tabelas certas antes de dar DROP.
-                </p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border rounded-xl space-y-1">
-                <span className="font-bold text-slate-900 block">3. O Storage precisa de mudança?</span>
-                <p className="text-slate-600 leading-relaxed">
-                  Não! Todas as fotos continuam salvas no bucket público <code>encomendas</code> sem interrupção nem perda de imagens.
-                </p>
-              </div>
+            <div className="flex justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={salvarConfigWhatsModulos}
+                disabled={salvandoWhats}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-8 py-3.5 rounded-xl text-xs uppercase flex items-center gap-2 transition shadow-md cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                {salvandoWhats ? 'Salvando Configurações...' : 'Salvar Todos os Canais WhatsApp'}
+              </button>
             </div>
           </div>
         </div>
@@ -1491,8 +2190,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
                             </button>
                             <button
                               type="button"
-                              onClick={() => excluirLocalArmazenamento(local.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                              onClick={() => excluirLocalArmazenamento(local)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
                               title="Excluir Local"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1630,6 +2329,46 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
                     </div>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE LOCAL */}
+          {localParaExcluir && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 border border-red-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Excluir Local de Guarda?</h3>
+                    <p className="text-xs text-slate-500">Esta ação não pode ser desfeita.</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <p><strong>Nome:</strong> {localParaExcluir.nome}</p>
+                  <p><strong>Código / Tag:</strong> <span className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-slate-300">{localParaExcluir.codigo}</span></p>
+                  <p><strong>Categoria:</strong> {localParaExcluir.categoria}</p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setLocalParaExcluir(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmarExclusaoLocal}
+                    className="px-4 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition cursor-pointer"
+                  >
+                    Sim, Excluir Local
+                  </button>
+                </div>
               </div>
             </div>
           )}

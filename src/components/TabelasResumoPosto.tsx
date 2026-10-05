@@ -341,23 +341,27 @@ export default function TabelasResumoPosto({
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-blue-950 flex items-center gap-2">
                     <HardHat className="w-4 h-4 text-blue-600" />
-                    Prestadores no Cond.
+                    Autorizados & Prestadores
                   </td>
                   <td className="p-3">
-                    <strong>{pre.totalPresentes}</strong> prestador(es) ou autorizados
+                    <strong>{pre.totalPresentes}</strong> dentro do condomínio • <strong>{pre.totalLiberados ?? 0}</strong> liberados ativos
                   </td>
                   <td className="p-3">
                     {pre.totalPresentes > 0 ? (
-                      <span className="text-blue-900 font-medium">Trabalhando em unidades ou áreas comuns com crachá</span>
+                      <span className="text-blue-900 font-medium">
+                        {pre.listaPresentes?.filter(p => p.estourado).length > 0 ? (
+                          <strong className="text-red-700">🚨 {pre.listaPresentes?.filter(p => p.estourado).length} com tempo estourado!</strong>
+                        ) : 'Pessoas dentro com crachá e destino regular'}
+                      </span>
                     ) : (
-                      <span className="text-slate-500 italic">Nenhum prestador ativo neste momento</span>
+                      <span className="text-slate-500 italic">Nenhum prestador ou visitante no condomínio</span>
                     )}
                   </td>
                   <td className="p-3 text-center">
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                       pre.totalPresentes > 0 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
                     }`}>
-                      {pre.totalPresentes > 0 ? 'Ativos' : 'Nenhum'}
+                      {pre.totalPresentes > 0 ? `${pre.totalPresentes} No Posto` : 'Nenhum'}
                     </span>
                   </td>
                   <td className="p-3 text-right">
@@ -707,51 +711,118 @@ export default function TabelasResumoPosto({
         </div>
       )}
 
-      {/* 7. TABELA ESPECÍFICA: PRESTADORES */}
+      {/* 7. TABELA ESPECÍFICA: PRESTADORES & AUTORIZADOS */}
       {tabelaAtiva === 'prestadores' && (
-        <div className="bg-white rounded-xl border border-blue-200 overflow-hidden shadow-sm space-y-4 p-4">
-          <div className="flex justify-between items-center border-b pb-2">
-            <h4 className="font-bold text-blue-950 text-sm flex items-center gap-2">
-              <HardHat className="w-4 h-4 text-blue-600" />
-              Tabela de Prestadores e Autorizados Presentes
-            </h4>
-            <span className="text-xs bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full font-bold">
-              {pre.totalPresentes} presente(s)
-            </span>
+        <div className="bg-white rounded-xl border border-blue-200 overflow-hidden shadow-sm space-y-6 p-4">
+          {/* A) DENTRO DO CONDOMÍNIO */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h4 className="font-bold text-blue-950 text-sm flex items-center gap-2">
+                <HardHat className="w-4 h-4 text-blue-600" />
+                Pessoas DENTRO do Condomínio Agora (Entrada Registrada)
+              </h4>
+              <span className="text-xs bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full font-bold">
+                {pre.totalPresentes} presente(s)
+              </span>
+            </div>
+
+            {pre.listaPresentes && pre.listaPresentes.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-blue-50 text-blue-950 font-bold text-[11px] uppercase border-b border-blue-100">
+                    <tr>
+                      <th className="p-2.5">Nome</th>
+                      <th className="p-2.5">Empresa / Vínculo</th>
+                      <th className="p-2.5">Destino</th>
+                      <th className="p-2.5 text-center">Crachá</th>
+                      <th className="p-2.5">Horário Entrada</th>
+                      <th className="p-2.5">Documento</th>
+                      <th className="p-2.5 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {pre.listaPresentes.map((p) => (
+                      <tr key={p.id} className="hover:bg-blue-50/40">
+                        <td className="p-2.5 font-bold text-slate-900">{p.nome}</td>
+                        <td className="p-2.5">{p.empresa}</td>
+                        <td className="p-2.5 font-bold text-blue-950">{p.destino}</td>
+                        <td className="p-2.5 text-center font-mono font-bold">{p.cracha}</td>
+                        <td className="p-2.5 font-mono text-[11px]">{new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td className="p-2.5 text-slate-600">{p.documento}</td>
+                        <td className="p-2.5 text-center">
+                          {p.estourado ? (
+                            <span className="bg-red-600 text-white font-bold px-2 py-0.5 rounded text-[10px] uppercase animate-pulse">
+                              Tempo Estourado
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[10px] uppercase">
+                              No Condomínio
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center p-4 bg-slate-50 rounded-xl text-slate-500 text-xs">
+                Nenhum prestador ou visitante dentro do condomínio no momento.
+              </div>
+            )}
           </div>
 
-          {pre.listaPresentes.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-blue-50 text-blue-950 font-bold text-[11px] uppercase border-b border-blue-100">
-                  <tr>
-                    <th className="p-2.5">Nome do Prestador</th>
-                    <th className="p-2.5">Empresa</th>
-                    <th className="p-2.5">Destino</th>
-                    <th className="p-2.5 text-center">Crachá</th>
-                    <th className="p-2.5">Horário Entrada</th>
-                    <th className="p-2.5">Documento</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {pre.listaPresentes.map((p) => (
-                    <tr key={p.id} className="hover:bg-blue-50/40">
-                      <td className="p-2.5 font-bold text-slate-900">{p.nome}</td>
-                      <td className="p-2.5">{p.empresa}</td>
-                      <td className="p-2.5 font-bold text-blue-950">{p.destino}</td>
-                      <td className="p-2.5 text-center font-mono font-bold">{p.cracha}</td>
-                      <td className="p-2.5 font-mono text-[11px]">{new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="p-2.5 text-slate-600">{p.documento}</td>
+          {/* B) AUTORIZADOS LIBERADOS NO CONDOMÍNIO (AGUARDANDO ENTRADA) */}
+          <div className="space-y-3 pt-2 border-t border-slate-200">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h4 className="font-bold text-purple-950 text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                Cadastros LIBERADOS no Condomínio (Aguardando Entrada)
+              </h4>
+              <span className="text-xs bg-purple-100 text-purple-800 px-2.5 py-1 rounded-full font-bold">
+                {pre.totalLiberados ?? (pre.listaLiberados?.length || 0)} liberado(s)
+              </span>
+            </div>
+
+            {pre.listaLiberados && pre.listaLiberados.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-purple-50 text-purple-950 font-bold text-[11px] uppercase border-b border-purple-100">
+                    <tr>
+                      <th className="p-2.5">Nome</th>
+                      <th className="p-2.5">Perfil</th>
+                      <th className="p-2.5">Empresa / Vínculo</th>
+                      <th className="p-2.5">Destino</th>
+                      <th className="p-2.5">Validade</th>
+                      <th className="p-2.5">Documento</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center p-6 bg-slate-50 rounded-xl text-slate-500 text-xs">
-              Nenhum prestador ativo dentro do condomínio no momento.
-            </div>
-          )}
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {pre.listaLiberados.map((p) => (
+                      <tr key={p.id} className="hover:bg-purple-50/40">
+                        <td className="p-2.5 font-bold text-slate-900">{p.nome}</td>
+                        <td className="p-2.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            p.perfil === 'autorizado' ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {p.perfil === 'autorizado' ? 'Visitante/Família' : 'Prestador'}
+                          </span>
+                        </td>
+                        <td className="p-2.5">{p.empresa}</td>
+                        <td className="p-2.5 font-bold text-purple-950">{p.destino}</td>
+                        <td className="p-2.5 font-bold text-emerald-700">{p.validade}</td>
+                        <td className="p-2.5 text-slate-600">{p.documento}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center p-4 bg-slate-50 rounded-xl text-slate-500 text-xs">
+                Nenhum outro cadastro liberado cadastrado.
+              </div>
+            )}
+          </div>
         </div>
       )}
 

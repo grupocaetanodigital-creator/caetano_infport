@@ -36,7 +36,10 @@ import {
   Copy,
   Check,
   Share2,
-  Table
+  Table,
+  CheckCircle,
+  XCircle,
+  FileText
 } from 'lucide-react';
 import { 
   carregarCondominioConfig, 
@@ -44,6 +47,8 @@ import {
   CondominioConfig 
 } from '../services/condominioService';
 import TabelasResumoPosto from '../components/TabelasResumoPosto';
+import { dispararNotificacaoModuloWhatsApp, carregarConfigWhatsApp, formatarLinkWhatsApp } from '../services/configWhatsappService';
+import { registrarAtividade } from '../services/auditoriaService';
 
 interface PassagemPostoProps {
   usuarioLogado?: any;
@@ -112,7 +117,7 @@ export interface ConsolidacaoPosto {
     }>;
   };
 
-  // 4. Prestadores e Autorizados no condomínio
+  // 4. Prestadores e Autorizados no condomínio (Presentes e Liberados)
   prestadores: {
     totalPresentes: number;
     listaPresentes: Array<{
@@ -124,6 +129,19 @@ export interface ConsolidacaoPosto {
       cracha: string;
       entradaEm: string;
       tipoServico?: string;
+      telefone?: string;
+      perfil?: string;
+      estourado?: boolean;
+    }>;
+    totalLiberados: number;
+    listaLiberados: Array<{
+      id: string;
+      nome: string;
+      empresa: string;
+      documento: string;
+      destino: string;
+      perfil: string;
+      validade: string;
       telefone?: string;
     }>;
   };
@@ -211,7 +229,9 @@ const estadoInicialConsolidacao: ConsolidacaoPosto = {
   },
   prestadores: {
     totalPresentes: 0,
-    listaPresentes: []
+    listaPresentes: [],
+    totalLiberados: 0,
+    listaLiberados: []
   },
   custodia: {
     totalAguardando: 0,
@@ -257,6 +277,29 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   // Modal para ver relatório histórico completo
   const [modalHistoricoDetalhes, setModalHistoricoDetalhes] = useState<any | null>(null);
 
+  // 1. Auditoria Obrigatória dos 7 Módulos do Sistema
+  const [auditModulos, setAuditModulos] = useState<Record<string, { status: 'ok' | 'divergente' | null; obs: string }>>({
+    encomendas: { status: null, obs: '' },
+    rondas: { status: null, obs: '' },
+    chaves: { status: null, obs: '' },
+    prestadores: { status: null, obs: '' },
+    custodia: { status: null, obs: '' },
+    materiais: { status: null, obs: '' },
+    ocorrencias: { status: null, obs: '' }
+  });
+
+  // 2. Checklist Físico Obrigatório da Guarita (8 itens com C ou NC sem pré-marcação)
+  const [auditFisico, setAuditFisico] = useState<Record<string, { status: 'C' | 'NC' | null; obs: string }>>({
+    encomendasOk: { status: null, obs: '' },
+    custodiaOk: { status: null, obs: '' },
+    chavesOk: { status: null, obs: '' },
+    materiaisOk: { status: null, obs: '' },
+    rondasOk: { status: null, obs: '' },
+    prestadoresOk: { status: null, obs: '' },
+    ocorrenciasCientes: { status: null, obs: '' },
+    limpezaOk: { status: null, obs: '' }
+  });
+
   const [checklist, setChecklist] = useState<Record<string, boolean>>({
     encomendasOk: true,
     custodiaOk: true,
@@ -267,6 +310,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     ocorrenciasCientes: true,
     limpezaOk: true
   });
+
+  // Totalizadores de auditoria obrigatória
+  const totalModulosAvaliados = Object.values(auditModulos).filter(m => m.status !== null).length;
+  const totalFisicosAvaliados = Object.values(auditFisico).filter(f => f.status !== null).length;
+  const totalGeralAuditado = totalModulosAvaliados + totalFisicosAvaliados;
+  const checklistCompletoValido = totalModulosAvaliados === 7 && totalFisicosAvaliados === 8;
 
   useEffect(() => {
     if (usuarioLogado?.condominio_id) {
@@ -306,6 +355,29 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     setEtapa(1);
     setMensagem({ tipo: '', texto: '' });
     setModuloAtivo('todos');
+    // Reinicia checklist sem itens pré-marcados para forçar checagem 100% confiável
+    setAuditModulos({
+      encomendas: { status: null, obs: '' },
+      rondas: { status: null, obs: '' },
+      chaves: { status: null, obs: '' },
+      prestadores: { status: null, obs: '' },
+      custodia: { status: null, obs: '' },
+      materiais: { status: null, obs: '' },
+      ocorrencias: { status: null, obs: '' }
+    });
+    setAuditFisico({
+      encomendasOk: { status: null, obs: '' },
+      custodiaOk: { status: null, obs: '' },
+      chavesOk: { status: null, obs: '' },
+      materiaisOk: { status: null, obs: '' },
+      rondasOk: { status: null, obs: '' },
+      prestadoresOk: { status: null, obs: '' },
+      ocorrenciasCientes: { status: null, obs: '' },
+      limpezaOk: { status: null, obs: '' }
+    });
+    setTemDivergencia(false);
+    setDivergencia('');
+    setObservacoes('');
     await consolidarModulosPosto();
   };
 
@@ -465,25 +537,58 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         };
       });
 
-      // 4. MÓDULO 06 - PRESTADORES E AUTORIZADOS PRESENTES NO CONDOMÍNIO
+      // 4. MÓDULO 10 - AUTORIZADOS E PRESTADORES (PRESENTES E LIBERADOS NO CONDOMÍNIO)
       const { data: prestadoresData } = await supabase
         .from('prestadores')
         .select('*')
         .eq('condominio_id', condId)
         .order('data_hora_entrada', { ascending: false });
 
+      const agoraTs = Date.now();
+      const hojeStr = new Date().toISOString().slice(0, 10);
+
+      // A) Pessoas que estão DENTRO do condomínio agora
       const prestadoresPresentes = (prestadoresData || []).filter((p: any) => {
         const st = (p.status_acesso || '').trim().toUpperCase();
-        return st === 'EM_ANDAMENTO' || st === 'PRESENTE' || st === 'EM ANDAMENTO';
+        return st === 'DENTRO' || st === 'EM_ANDAMENTO' || st === 'PRESENTE' || st === 'EM ANDAMENTO';
+      }).map((p: any) => {
+        const estourado = Boolean(
+          p.perfil_acesso !== 'autorizado' && 
+          p.limite_permanencia_ate && 
+          new Date(p.limite_permanencia_ate).getTime() < agoraTs
+        );
+        return {
+          id: p.id,
+          nome: p.nome_profissional || p.nome_completo || p.nome || 'Pessoa Autorizada',
+          empresa: p.empresa || (p.perfil_acesso === 'autorizado' ? (p.parentesco_vinculo || 'Visitante/Família') : 'Autônomo'),
+          documento: p.documento || 'Não informado',
+          destino: `${p.unidade ? 'Apt ' + p.unidade : (p.unidade_destino ? 'Apt ' + p.unidade_destino : '')} ${p.bloco ? 'Bloco ' + p.bloco : (p.bloco_destino ? 'Bloco ' + p.bloco_destino : '')}`.trim() || 'Área Comum',
+          cracha: p.cracha || p.cracha_atribuido || 'Portaria',
+          entradaEm: p.data_hora_entrada || p.created_at,
+          tipoServico: p.tipo_servico || p.tipo || (p.perfil_acesso === 'autorizado' ? 'Visita Familiar' : 'Prestação de Serviço'),
+          telefone: p.telefone || 'Não informado',
+          perfil: p.perfil_acesso || 'autorizado',
+          estourado
+        };
+      });
+
+      // B) Pessoas com autorizações ativas cadastradas (aguardando entrada)
+      const autorizadosLiberados = (prestadoresData || []).filter((p: any) => {
+        const st = (p.status_acesso || '').trim().toUpperCase();
+        if (st === 'DENTRO' || st === 'EM_ANDAMENTO' || st === 'PRESENTE') return false;
+        if (p.status === 'BLOQUEADO' || p.status_acesso === 'BLOQUEADO') return false;
+        if (p.tipo_validade === 'permanente') return true;
+        if (p.data_validade_fim && p.data_validade_fim >= hojeStr) return true;
+        if (!p.data_validade_fim) return true;
+        return false;
       }).map((p: any) => ({
         id: p.id,
-        nome: p.nome,
-        empresa: p.empresa || 'Autônomo',
+        nome: p.nome_profissional || p.nome_completo || p.nome || 'Autorizado',
+        empresa: p.empresa || (p.perfil_acesso === 'autorizado' ? (p.parentesco_vinculo || 'Familiar') : 'Serviço'),
         documento: p.documento || 'Não informado',
-        destino: `${p.unidade_destino ? 'Apt ' + p.unidade_destino : ''} ${p.bloco_destino ? 'Bloco ' + p.bloco_destino : ''}`.trim() || 'Área Comum',
-        cracha: p.cracha_atribuido || 'Portaria',
-        entradaEm: p.data_hora_entrada || p.created_at,
-        tipoServico: p.tipo_servico || p.tipo,
+        destino: `${p.unidade ? 'Apt ' + p.unidade : ''} ${p.bloco ? 'Bloco ' + p.bloco : ''}`.trim() || 'Área Comum',
+        perfil: p.perfil_acesso || 'autorizado',
+        validade: p.tipo_validade === 'permanente' ? 'Permanente' : `Até ${p.data_validade_fim ? new Date(p.data_validade_fim + 'T12:00:00').toLocaleDateString('pt-BR') : 'Hoje'}`,
         telefone: p.telefone || 'Não informado'
       }));
 
@@ -614,7 +719,9 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         },
         prestadores: {
           totalPresentes: prestadoresPresentes.length,
-          listaPresentes: prestadoresPresentes
+          listaPresentes: prestadoresPresentes,
+          totalLiberados: autorizadosLiberados.length,
+          listaLiberados: autorizadosLiberados
         },
         custodia: {
           totalAguardando: itensCustodiaAguardando.length,
@@ -640,6 +747,99 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     } finally {
       setLoadingAuditoria(false);
     }
+  };
+
+  const marcarModuloAudit = (modKey: string, status: 'ok' | 'divergente') => {
+    setAuditModulos(prev => ({
+      ...prev,
+      [modKey]: {
+        ...prev[modKey],
+        status: prev[modKey]?.status === status ? null : status
+      }
+    }));
+  };
+
+  const setObsModuloAudit = (modKey: string, obs: string) => {
+    setAuditModulos(prev => ({
+      ...prev,
+      [modKey]: {
+        ...prev[modKey],
+        obs
+      }
+    }));
+  };
+
+  const marcarFisicoAudit = (itemKey: string, status: 'C' | 'NC') => {
+    setAuditFisico(prev => ({
+      ...prev,
+      [itemKey]: {
+        ...prev[itemKey],
+        status: prev[itemKey]?.status === status ? null : status
+      }
+    }));
+  };
+
+  const setObsFisicoAudit = (itemKey: string, obs: string) => {
+    setAuditFisico(prev => ({
+      ...prev,
+      [itemKey]: {
+        ...prev[itemKey],
+        obs
+      }
+    }));
+  };
+
+  const avancarParaEtapa2 = () => {
+    if (!checklistCompletoValido) {
+      setMensagem({
+        tipo: 'erro',
+        texto: `Atenção: É obrigatório clicar e auditar todos os 7 módulos do sistema e os 8 itens físicos da guarita antes de avançar! Faltam ${15 - totalGeralAuditado} itens.`
+      });
+      return;
+    }
+
+    // Coleta todas as divergências apontadas nos módulos e itens físicos com NC
+    const divergenciasColetadas: string[] = [];
+
+    const nomesModulos: Record<string, string> = {
+      encomendas: 'Módulo 01: Encomendas & RE',
+      rondas: 'Módulo 02: Rondas Patrimoniais',
+      chaves: 'Módulo 05: Quadro de Chaves',
+      prestadores: 'Módulo 06: Autorizados & Prestadores',
+      custodia: 'Módulo 03: Custódia na Portaria',
+      materiais: 'Módulo 04: Equipamentos & Materiais',
+      ocorrencias: 'Módulo 08: Livro de Ocorrências'
+    };
+
+    const nomesFisicos: Record<string, string> = {
+      encomendasOk: 'Volumes físicos de encomendas conferidos com saldo retido',
+      custodiaOk: 'Itens de custódia na portaria conferidos',
+      chavesOk: 'Quadro de chaves confere com devoluções e retiradas ativas',
+      materiaisOk: 'HTs, celulares e lanternas testados e carregando',
+      rondasOk: 'Relatório de rondas e divergências GPS/NFC verificado',
+      prestadoresOk: 'Prestadores e crachás ativos no condomínio conferidos',
+      ocorrenciasCientes: 'Ciente de todas as ocorrências pendentes',
+      limpezaOk: 'Guarita e bancadas limpas e organizadas'
+    };
+
+    Object.entries(auditModulos).forEach(([key, val]) => {
+      if (val.status === 'divergente') {
+        divergenciasColetadas.push(`• [${nomesModulos[key] || key}] ${val.obs.trim() || 'Divergência apontada no módulo.'}`);
+      }
+    });
+
+    Object.entries(auditFisico).forEach(([key, val]) => {
+      if (val.status === 'NC') {
+        divergenciasColetadas.push(`• [Não Conforme: ${nomesFisicos[key] || key}] ${val.obs.trim() || 'Item não conforme constatado na vistoria.'}`);
+      }
+    });
+
+    if (divergenciasColetadas.length > 0) {
+      setTemDivergencia(true);
+      setDivergencia(prev => prev ? prev + '\n' + divergenciasColetadas.join('\n') : divergenciasColetadas.join('\n'));
+    }
+
+    setEtapa(2);
   };
 
   const toggleChecklist = (item: string) => {
@@ -684,6 +884,8 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       // Montamos o snapshot completo garantindo compatibilidade com versões antigas e a nova auditoria
       const snapshotConsolidado = {
         ...consolidacao,
+        auditModulos,
+        auditFisico,
         // campos legado para visualizadores antigos
         chavesFora: consolidacao.chaves.totalFora,
         listaChaves: consolidacao.chaves.listaChavesFora,
@@ -716,7 +918,32 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
       if (error) throw error;
 
+      // Dispara envio automático para WhatsApp do Posto / Grupo Configurado
+      const passagemCompletaParaRelatorio = {
+        ...novaPassagem,
+        created_at: new Date().toISOString()
+      };
+      const textoRelatorio = gerarTextoRelatorio(passagemCompletaParaRelatorio);
+
+      try {
+        const cfgWhats = await carregarConfigWhatsApp(usuarioLogado.condominio_id);
+        const cfgModulo = cfgWhats.passagem_posto;
+        if (cfgModulo?.ativo && cfgModulo.telefone_ou_grupo) {
+          const link = formatarLinkWhatsApp(cfgModulo.telefone_ou_grupo, textoRelatorio);
+          const a = document.createElement('a');
+          a.href = link;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+      } catch (errW) {
+        console.warn('Erro ao disparar WhatsApp automático:', errW);
+      }
+
       setModalNova(false);
+      setModalCompartilharWhatsApp(passagemCompletaParaRelatorio);
       setLoginEntrante('');
       setSenhaEntrante('');
       setObservacoes('');
@@ -802,18 +1029,25 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     }
     texto += `\n`;
 
-    // 4. Prestadores presentes
+    // 4. Prestadores e Autorizados (Presentes e Liberados)
     const totalPrestadores = pre.totalPresentes ?? 0;
-    texto += `👷 *MÓDULO 06 - PRESTADORES E AUTORIZADOS NO CONDOMÍNIO*\n` +
-      `• Prestadores presentes no momento: *${totalPrestadores}*\n`;
+    const totalLiberados = pre.totalLiberados ?? (pre.listaLiberados?.length || 0);
+    texto += `👷 *MÓDULO 06 - AUTORIZADOS E PRESTADORES NO CONDOMÍNIO*\n` +
+      `• Pessoas DENTRO no momento: *${totalPrestadores}*\n`;
     if (totalPrestadores > 0 && pre.listaPresentes && pre.listaPresentes.length > 0) {
       texto += pre.listaPresentes.map((p: any) => 
-        `  • *${p.nome}* (${p.empresa || 'Autônomo'})\n` +
-        `    ↳ Destino: ${p.destino || 'Área Comum'} | Crachá: ${p.cracha || 'N/A'}\n` +
+        `  • *${p.nome}* (${p.empresa || 'Visitante/Serviço'})\n` +
+        `    ↳ Destino: ${p.destino || 'Área Comum'} | Crachá: ${p.cracha || 'N/A'}${p.estourado ? ' 🚨 *TEMPO ESTOURADO!*' : ''}\n` +
         `    ↳ Entrada: ${new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
       ).join('\n') + `\n`;
     } else {
-      texto += `• Situação: *Nenhum prestador ativo no momento*\n`;
+      texto += `• Situação dentro: *Nenhuma pessoa presente no momento*\n`;
+    }
+    texto += `• Cadastros LIBERADOS ativos: *${totalLiberados}*\n`;
+    if (totalLiberados > 0 && pre.listaLiberados && pre.listaLiberados.length > 0) {
+      texto += pre.listaLiberados.slice(0, 10).map((p: any) => 
+        `  ↳ *${p.nome}* (${p.empresa || 'Familiar/Serviço'}) ➔ ${p.destino || 'Geral'} [${p.validade || 'Ativo'}]`
+      ).join('\n') + (totalLiberados > 10 ? `\n  ↳ _...e mais ${totalLiberados - 10} liberados_` : '') + `\n`;
     }
     texto += `\n`;
 
@@ -1581,42 +1815,82 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
                     {/* SEÇÃO 4: PRESTADORES E AUTORIZADOS */}
                     {(moduloAtivo === 'todos' || moduloAtivo === 'prestadores') && (
-                      <div className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-sm space-y-2">
+                      <div className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-sm space-y-4">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-blue-950 flex items-center gap-1.5 font-bold uppercase">
-                            <HardHat className="w-4 h-4 text-blue-600" /> Módulo 06 - Prestadores & Autorizados no Condomínio
+                            <HardHat className="w-4 h-4 text-blue-600" /> Módulo 06 - Autorizados & Prestadores
                           </strong>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                            consolidacao.prestadores.totalPresentes > 0 ? 'bg-blue-100 text-blue-900' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {consolidacao.prestadores.totalPresentes} presente(s)
-                          </span>
+                          <div className="flex gap-1.5">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-900">
+                              {consolidacao.prestadores.totalPresentes} presente(s)
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-900">
+                              {consolidacao.prestadores.totalLiberados ?? (consolidacao.prestadores.listaLiberados?.length || 0)} liberado(s)
+                            </span>
+                          </div>
                         </div>
 
-                        {consolidacao.prestadores.totalPresentes > 0 ? (
-                          <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                            {consolidacao.prestadores.listaPresentes.map((p) => (
-                              <div key={p.id} className="p-2.5 rounded-lg border bg-blue-50/60 border-blue-200 text-xs flex justify-between items-start">
-                                <div>
-                                  <strong className="text-blue-950">{p.nome}</strong> ({p.empresa})
-                                  <p className="text-[11px] text-slate-600">
-                                    🏢 Destino: <strong>{p.destino}</strong> | Crachá: <strong>{p.cracha}</strong>
-                                  </p>
-                                  <span className="text-[10px] text-slate-500">
-                                    Entrada: {new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Doc: {p.documento}
+                        {/* A) DENTRO DO CONDOMÍNIO */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase text-blue-800 flex items-center gap-1">
+                            <UserCheck className="w-3 h-3 text-blue-600" /> Pessoas DENTRO do Condomínio Agora:
+                          </span>
+                          {consolidacao.prestadores.totalPresentes > 0 ? (
+                            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                              {consolidacao.prestadores.listaPresentes.map((p) => (
+                                <div key={p.id} className="p-2.5 rounded-lg border bg-blue-50/60 border-blue-200 text-xs flex justify-between items-start">
+                                  <div>
+                                    <strong className="text-blue-950">{p.nome}</strong> ({p.empresa})
+                                    <p className="text-[11px] text-slate-600">
+                                      🏢 Destino: <strong>{p.destino}</strong> | Crachá: <strong>{p.cracha}</strong>
+                                    </p>
+                                    <span className="text-[10px] text-slate-500">
+                                      Entrada: {new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Doc: {p.documento}
+                                    </span>
+                                  </div>
+                                  <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
+                                    p.estourado ? 'bg-red-600 animate-pulse' : 'bg-blue-600'
+                                  }`}>
+                                    {p.estourado ? 'Tempo Estourado' : 'No Condomínio'}
                                   </span>
                                 </div>
-                                <span className="bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
-                                  No Condomínio
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-600 italic">
-                            Nenhum prestador ou terceiro com crachá ativo dentro do condomínio no momento.
-                          </p>
-                        )}
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500 italic p-1.5 bg-slate-50 rounded">
+                              Nenhuma pessoa com crachá ativo dentro do condomínio no momento.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* B) CADASTRADOS E LIBERADOS (AGUARDANDO ENTRADA) */}
+                        <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                          <span className="text-[10px] font-bold uppercase text-purple-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-purple-600" /> Cadastros LIBERADOS Ativos (Aguardando Entrada):
+                          </span>
+                          {consolidacao.prestadores.listaLiberados && consolidacao.prestadores.listaLiberados.length > 0 ? (
+                            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                              {consolidacao.prestadores.listaLiberados.map((p) => (
+                                <div key={p.id} className="p-2 rounded-lg border bg-purple-50/50 border-purple-200 text-xs flex justify-between items-start">
+                                  <div>
+                                    <strong className="text-purple-950">{p.nome}</strong>
+                                    <span className="text-slate-600 text-[11px]"> ({p.empresa})</span>
+                                    <p className="text-[11px] text-slate-600">
+                                      🏢 Destino: <strong>{p.destino}</strong> • Perfil: <strong>{p.perfil === 'autorizado' ? 'Visitante/Família' : 'Prestador'}</strong>
+                                    </p>
+                                  </div>
+                                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+                                    {p.validade}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500 italic p-1.5 bg-slate-50 rounded">
+                              Nenhum outro cadastro liberado ativo.
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -1784,62 +2058,562 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                 </>
               )}
 
-                  {/* CHECKLIST FÍSICO DA GUARITA */}
-                  <div className="space-y-2 border-t pt-3 bg-white p-4 rounded-xl border">
-                    <label className="block text-xs font-bold text-slate-800 uppercase">
-                      Checklist Físico Obrigatório da Guarita
-                    </label>
+                  {/* CHECKLIST COMPLETO OBRIGATÓRIO DE AUDITORIA DO POSTO */}
+                  <div className="space-y-4 border-t pt-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-black text-slate-900 uppercase flex items-center gap-2">
+                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                          Checklist Obrigatório de Passagem de Posto
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          É obrigatório avaliar todos os 7 módulos do sistema e os 8 itens físicos da guarita antes de prosseguir
+                        </p>
+                      </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <button type="button" onClick={() => toggleChecklist('encomendasOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.encomendasOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Volumes físicos de encomendas conferidos com saldo retido.</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
+                          checklistCompletoValido 
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                            : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        }`}>
+                          {totalGeralAuditado} de 15 conferidos {checklistCompletoValido ? '✓ 100%' : `(faltam ${15 - totalGeralAuditado})`}
+                        </span>
+                      </div>
+                    </div>
 
-                      <button type="button" onClick={() => toggleChecklist('custodiaOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.custodiaOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Itens de custódia na portaria conferidos.</span>
-                      </button>
+                    {/* PARTE 1: AUDITORIA DOS 7 MÓDULOS INTERNOS */}
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-black text-slate-700 uppercase">
+                        1. Conferência dos 7 Módulos Internos do Posto (Clique em OK ou Divergente em cada um):
+                      </label>
 
-                      <button type="button" onClick={() => toggleChecklist('chavesOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.chavesOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Quadro de chaves confere com devoluções e retiradas ativas.</span>
-                      </button>
+                      <div className="grid grid-cols-1 gap-2.5 text-xs">
+                        {/* 1.1 Encomendas */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.encomendas.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.encomendas.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Package className="w-3.5 h-3.5 text-purple-600" /> Módulo 01: RE & Encomendas Recebidas
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.encomendas.totalRePlantao} REs recebidas • {consolidacao.encomendas.reFaltandoTriagem} lote(s) pendentes de triagem ({consolidacao.encomendas.qtdFaltaTriagem} vol.)
+                              </span>
+                            </div>
 
-                      <button type="button" onClick={() => toggleChecklist('materiaisOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.materiaisOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>HTs, celulares e lanternas testados e carregando.</span>
-                      </button>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('encomendas', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.encomendas.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('encomendas', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.encomendas.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
 
-                      <button type="button" onClick={() => toggleChecklist('rondasOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.rondasOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Relatório de rondas e divergências GPS/NFC verificado.</span>
-                      </button>
+                          {auditModulos.encomendas.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Encomendas:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.encomendas.obs}
+                                onChange={(e) => setObsModuloAudit('encomendas', e.target.value)}
+                                placeholder="Descreva o que está divergente em encomendas/RE..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
 
-                      <button type="button" onClick={() => toggleChecklist('prestadoresOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.prestadoresOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Prestadores e crachás ativos no condomínio conferidos.</span>
-                      </button>
+                        {/* 1.2 Rondas */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.rondas.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.rondas.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Footprints className="w-3.5 h-3.5 text-indigo-600" /> Módulo 02: Rondas Patrimoniais
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.rondas.totalExecutadasPlantao} executadas ({consolidacao.rondas.concluidas} concluídas) • {consolidacao.rondas.temDivergencias ? '🚨 Constam divergências no plantão' : '✓ Sem falhas'}
+                              </span>
+                            </div>
 
-                      <button type="button" onClick={() => toggleChecklist('ocorrenciasCientes')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.ocorrenciasCientes ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Ciente de todas as ocorrências pendentes (mesmo de 10+ dias).</span>
-                      </button>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('rondas', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.rondas.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('rondas', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.rondas.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
 
-                      <button type="button" onClick={() => toggleChecklist('limpezaOk')} className="flex items-center gap-2 text-left p-1.5 rounded hover:bg-slate-50">
-                        {checklist.limpezaOk ? <CheckSquare className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-                        <span>Guarita e bancadas limpas e organizadas.</span>
-                      </button>
+                          {auditModulos.rondas.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Rondas:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.rondas.obs}
+                                onChange={(e) => setObsModuloAudit('rondas', e.target.value)}
+                                placeholder="Descreva a falha ou divergência de ronda..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 1.3 Chaves */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.chaves.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.chaves.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Key className="w-3.5 h-3.5 text-amber-600" /> Módulo 05: Quadro de Chaves
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.chaves.totalFora} chave(s) fora do quadro ({consolidacao.chaves.listaChavesFora.filter(k => k.atrasado).length} atrasadas)
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('chaves', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.chaves.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('chaves', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.chaves.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
+
+                          {auditModulos.chaves.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Chaves:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.chaves.obs}
+                                onChange={(e) => setObsModuloAudit('chaves', e.target.value)}
+                                placeholder="Descreva a divergência encontrada nas chaves..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 1.4 Autorizados & Prestadores */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.prestadores.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.prestadores.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <HardHat className="w-3.5 h-3.5 text-blue-600" /> Módulo 06: Autorizados & Prestadores (Dentro e Liberados)
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.prestadores.totalPresentes} pessoas DENTRO do condomínio • {consolidacao.prestadores.totalLiberados ?? (consolidacao.prestadores.listaLiberados?.length || 0)} cadastros LIBERADOS ativos
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('prestadores', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.prestadores.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('prestadores', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.prestadores.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
+
+                          {auditModulos.prestadores.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Prestadores / Autorizados:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.prestadores.obs}
+                                onChange={(e) => setObsModuloAudit('prestadores', e.target.value)}
+                                placeholder="Descreva a divergência de prestador ou crachá..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 1.5 Custódia */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.custodia.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.custodia.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Box className="w-3.5 h-3.5 text-sky-600" /> Módulo 03: Custódia de Objetos na Portaria
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.custodia.totalAguardando} item(ns) aguardando retirada pelos destinatários
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('custodia', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.custodia.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('custodia', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.custodia.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
+
+                          {auditModulos.custodia.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Custódia:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.custodia.obs}
+                                onChange={(e) => setObsModuloAudit('custodia', e.target.value)}
+                                placeholder="Descreva a divergência em objetos guardados..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 1.6 Materiais */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.materiais.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.materiais.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Radio className="w-3.5 h-3.5 text-emerald-600" /> Módulo 04: Equipamentos & Materiais da Guarita
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.materiais.totalEquipamentos} equipamentos ({consolidacao.materiais.perfeitos} perfeitos, {consolidacao.materiais.avariados} avariados)
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('materiais', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.materiais.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('materiais', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.materiais.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
+
+                          {auditModulos.materiais.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Materiais:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.materiais.obs}
+                                onChange={(e) => setObsModuloAudit('materiais', e.target.value)}
+                                placeholder="Descreva o equipamento avariado ou ausente..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 1.7 Ocorrências */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.ocorrencias.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.ocorrencias.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Módulo 08: Livro de Ocorrências Pendentes
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.ocorrencias.totalPendentes} pendência(s) em aberto que exigem ciência do próximo operador
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('ocorrencias', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.ocorrencias.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('ocorrencias', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.ocorrencias.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
+
+                          {auditModulos.ocorrencias.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência em Ocorrências:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.ocorrencias.obs}
+                                onChange={(e) => setObsModuloAudit('ocorrencias', e.target.value)}
+                                placeholder="Descreva a pendência ou ocorrência sem registro..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PARTE 2: CHECKLIST FÍSICO OBRIGATÓRIO (C ou NC) */}
+                    <div className="space-y-2 pt-2 border-t border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-black text-slate-700 uppercase">
+                          2. Checklist Físico Obrigatório da Guarita (Marque C ou NC para checagem confiável):
+                        </label>
+                        <span className="text-[10px] text-slate-400">
+                          [C = Conforme | NC = Não Conforme]
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        {[
+                          { key: 'encomendasOk', texto: 'Volumes físicos de encomendas conferidos com saldo retido' },
+                          { key: 'custodiaOk', texto: 'Itens de custódia na portaria conferidos' },
+                          { key: 'chavesOk', texto: 'Quadro de chaves confere com devoluções e retiradas ativas' },
+                          { key: 'materiaisOk', texto: 'HTs, celulares e lanternas testados e carregando' },
+                          { key: 'rondasOk', texto: 'Relatório de rondas e divergências GPS/NFC verificado' },
+                          { key: 'prestadoresOk', texto: 'Prestadores e crachás ativos no condomínio conferidos' },
+                          { key: 'ocorrenciasCientes', texto: 'Ciente de todas as ocorrências pendentes (mesmo de 10+ dias)' },
+                          { key: 'limpezaOk', texto: 'Guarita e bancadas limpas e organizadas' }
+                        ].map(({ key, texto }) => {
+                          const itemVal = auditFisico[key];
+                          return (
+                            <div key={key} className={`p-2.5 rounded-xl border transition ${
+                              itemVal.status === 'C'
+                                ? 'bg-emerald-50/70 border-emerald-300'
+                                : itemVal.status === 'NC'
+                                ? 'bg-red-50/80 border-red-300'
+                                : 'bg-white border-slate-200'
+                            }`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] text-slate-800 leading-tight">
+                                  {texto}
+                                </span>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => marcarFisicoAudit(key, 'C')}
+                                    className={`px-2 py-1 rounded font-black text-[11px] transition cursor-pointer ${
+                                      itemVal.status === 'C'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                    title="Conforme"
+                                  >
+                                    C
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => marcarFisicoAudit(key, 'NC')}
+                                    className={`px-2 py-1 rounded font-black text-[11px] transition cursor-pointer ${
+                                      itemVal.status === 'NC'
+                                        ? 'bg-red-600 text-white shadow-xs'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                    title="Não Conforme"
+                                  >
+                                    NC
+                                  </button>
+                                </div>
+                              </div>
+
+                              {itemVal.status === 'NC' && (
+                                <div className="mt-2 pt-2 border-t border-red-200">
+                                  <input
+                                    type="text"
+                                    value={itemVal.obs}
+                                    onChange={(e) => setObsFisicoAudit(key, e.target.value)}
+                                    placeholder="Descreva o que está Não Conforme neste item..."
+                                    className="w-full p-1.5 bg-white rounded border border-red-300 text-[11px] text-red-950 font-medium"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setEtapa(2)}
-                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition uppercase shadow-md"
-                  >
-                    Avançar para Observações & Divergências <ChevronRight className="w-4 h-4" />
-                  </button>
+                  {/* BOTÃO DE AVANÇAR COM VALIDAÇÃO */}
+                  <div className="space-y-1.5">
+                    {!checklistCompletoValido && (
+                      <p className="text-[11px] text-amber-600 text-center font-bold">
+                        ⚠️ Atenção: Para avançar, é obrigatório clicar em todos os 7 módulos (OK ou Divergente) e nos 8 itens físicos (C ou NC). Faltam {15 - totalGeralAuditado} itens.
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={!checklistCompletoValido}
+                      onClick={avancarParaEtapa2}
+                      className={`w-full font-bold py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition uppercase shadow-md ${
+                        checklistCompletoValido
+                          ? 'bg-slate-900 hover:bg-slate-800 text-white cursor-pointer'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
+                      Avançar para Observações & Divergências ({totalGeralAuditado}/15) <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
 
