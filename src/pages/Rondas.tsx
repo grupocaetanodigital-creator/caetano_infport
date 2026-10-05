@@ -146,6 +146,7 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
   const [operadorSelecionadoId, setOperadorSelecionadoId] = useState('');
   const [senhaLoginEntrante, setSenhaLoginEntrante] = useState('');
   const [ocorrenciasPlantao, setOcorrenciasPlantao] = useState('');
+  const [pontoParaExcluir, setPontoParaExcluir] = useState<{ id: string; nome: string } | null>(null);
 
   useEffect(() => {
     if (!usuarioLogado?.condominio_id) return;
@@ -800,25 +801,29 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
     }
   };
 
-  const excluirPonto = async (pontoId: string) => {
+  const excluirPonto = (ponto: any) => {
     if (!podeGerenciarPontos) {
       setMensagem({ tipo: 'erro', texto: 'Operadores não têm permissão para excluir pontos de ronda.' });
       return;
     }
+    setPontoParaExcluir({ id: ponto.id, nome: ponto.nome_ponto || 'Ponto de Ronda' });
+  };
 
-    if (!window.confirm('Tem certeza que deseja excluir este ponto de ronda?')) return;
-
+  const confirmarExclusaoPonto = async () => {
+    if (!pontoParaExcluir) return;
+    const { id, nome } = pontoParaExcluir;
+    setPontoParaExcluir(null);
     setLoading(true);
     try {
       const { error } = await supabase
         .from('rondas_pontos')
         .delete()
-        .eq('id', pontoId)
+        .eq('id', id)
         .eq('condominio_id', usuarioLogado.condominio_id);
 
       if (error) throw error;
 
-      setMensagem({ tipo: 'sucesso', texto: 'Ponto removido com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: `Ponto "${nome}" removido com sucesso!` });
       carregarPontos();
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: err.message });
