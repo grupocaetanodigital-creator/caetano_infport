@@ -11,7 +11,19 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Clock, 
-  User 
+  User,
+  History,
+  FileSpreadsheet,
+  RefreshCw,
+  Eye,
+  Filter,
+  Calendar,
+  X,
+  Copy,
+  ArrowRight,
+  Share2,
+  Check,
+  FileText
 } from 'lucide-react';
 
 interface CustodiaProps {
@@ -19,13 +31,25 @@ interface CustodiaProps {
 }
 
 export default function Custodia({ usuarioLogado }: CustodiaProps) {
-  const [aba, setAba] = useState<'entrada' | 'saida'>('entrada');
+  const [aba, setAba] = useState<'entrada' | 'saida' | 'auditoria'>('entrada');
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
   const [moradores, setMoradores] = useState<any[]>([]);
   const [itensGuardados, setItensGuardados] = useState<any[]>([]);
+  const [historicoCompleto, setHistoricoCompleto] = useState<any[]>([]);
+
+  // Filtros de Auditoria & Histórico
+  const [buscaAuditoria, setBuscaAuditoria] = useState('');
+  const [filtroStatusAuditoria, setFiltroStatusAuditoria] = useState<'todos' | 'aguardando' | 'retirado'>('todos');
+  const [filtroFluxoAuditoria, setFiltroFluxoAuditoria] = useState<'todos' | 'M-M' | 'M-T' | 'T-M'>('todos');
+  const [filtroPeriodoAuditoria, setFiltroPeriodoAuditoria] = useState<'todos' | 'hoje' | '7dias' | '30dias'>('todos');
+
+  // Modais de Auditoria
+  const [itemDossieModal, setItemDossieModal] = useState<any | null>(null);
+  const [fotoAmpliadaModal, setFotoAmpliadaModal] = useState<{ url: string; titulo: string } | null>(null);
+  const [copiadoDossie, setCopiadoDossie] = useState(false);
 
   const [fluxo, setFluxo] = useState('M-M');
   
@@ -66,13 +90,22 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
         .order('nome');
       setMoradores(moradData || []);
 
-      const { data: custodiaData } = await supabase
+      const { data: custodiaData, error: errCustodia } = await supabase
         .from('custodia')
         .select('*')
         .eq('condominio_id', usuarioLogado.condominio_id)
-        .eq('status', 'Aguardando Retirada')
         .order('created_at', { ascending: false });
-      setItensGuardados(custodiaData || []);
+
+      if (errCustodia) throw errCustodia;
+
+      const todos = custodiaData || [];
+      setHistoricoCompleto(todos);
+
+      const guardados = todos.filter((c: any) => {
+        const s = (c.status || '').trim().toLowerCase();
+        return s === 'aguardando retirada' || s === 'guardado' || s === 'retido' || s === 'pendente';
+      });
+      setItensGuardados(guardados);
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
@@ -253,9 +286,180 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
     return cod.includes(termo) || desc.includes(termo) || dest.includes(termo) || orig.includes(termo) || unid.includes(termo);
   });
 
+  // Funções de Cálculo e Auditoria
+  const calcularPermanencia = (entradaIso: string, saidaIso?: string | null) => {
+    if (!entradaIso) return 'N/D';
+    const inicio = new Date(entradaIso).getTime();
+    const fim = saidaIso ? new Date(saidaIso).getTime() : Date.now();
+    const diffMs = fim - inicio;
+    if (diffMs < 0) return '0 min';
+
+    const minutos = Math.floor(diffMs / (1000 * 60));
+    const horas = Math.floor(minutos / 60);
+    const dias = Math.floor(horas / 24);
+
+    if (dias > 0) {
+      const horasRestantes = horas % 24;
+      return `${dias}d ${horasRestantes}h`;
+    }
+    if (horas > 0) {
+      const minsRestantes = minutos % 60;
+      return `${horas}h ${minsRestantes}m`;
+    }
+    return `${minutos} min`;
+  };
+
+  const exportarCSVCustodia = (itens: any[]) => {
+    if (!itens || itens.length === 0) return;
+    const cabecalhos = [
+      'Codigo_Custodia',
+      'Status',
+      'Descricao',
+      'Fluxo',
+      'Origem_Tipo',
+      'Origem_Nome',
+      'Origem_Unidade',
+      'Origem_Bloco',
+      'Origem_Whats',
+      'Destino_Tipo',
+      'Destino_Nome',
+      'Destino_Unidade',
+      'Destino_Bloco',
+      'Destino_Whats',
+      'Data_Entrada',
+      'Operador_Entrada',
+      'Data_Saida',
+      'Operador_Saida',
+      'Recebedor_Nome',
+      'Recebedor_Doc',
+      'Foto_Entrada_URL',
+      'Foto_Saida_URL'
+    ];
+
+    const linhas = itens.map(i => [
+      `"${i.codigo_custodia || ''}"`,
+      `"${i.status || ''}"`,
+      `"${(i.descricao || '').replace(/"/g, '""')}"`,
+      `"${i.fluxo || ''}"`,
+      `"${i.origem_tipo || ''}"`,
+      `"${(i.origem_nome_doc || '').replace(/"/g, '""')}"`,
+      `"${i.origem_unidade || ''}"`,
+      `"${i.origem_bloco || ''}"`,
+      `"${i.origem_whats || ''}"`,
+      `"${i.destino_tipo || ''}"`,
+      `"${(i.destino_nome_doc || '').replace(/"/g, '""')}"`,
+      `"${i.destino_unidade || ''}"`,
+      `"${i.destino_bloco || ''}"`,
+      `"${i.destino_whats || ''}"`,
+      `"${i.created_at ? new Date(i.created_at).toLocaleString('pt-BR') : ''}"`,
+      `"${i.operador_entrada || ''}"`,
+      `"${i.data_hora_saida ? new Date(i.data_hora_saida).toLocaleString('pt-BR') : ''}"`,
+      `"${i.operador_saida || ''}"`,
+      `"${(i.recebedor_nome || '').replace(/"/g, '""')}"`,
+      `"${i.recebedor_doc || ''}"`,
+      `"${i.foto_entrada_url || ''}"`,
+      `"${i.foto_saida_url || ''}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [cabecalhos.join(';'), ...linhas.map(l => l.join(';'))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `auditoria_custodia_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Filtragem de Auditoria
+  const itensAuditoriaFiltrados = historicoCompleto.filter((item: any) => {
+    // 1. Filtro por status
+    if (filtroStatusAuditoria === 'aguardando') {
+      const s = (item.status || '').toLowerCase();
+      if (s !== 'aguardando retirada' && s !== 'guardado' && s !== 'retido' && s !== 'pendente') return false;
+    } else if (filtroStatusAuditoria === 'retirado') {
+      const s = (item.status || '').toLowerCase();
+      if (s !== 'retirado') return false;
+    }
+
+    // 2. Filtro por fluxo
+    if (filtroFluxoAuditoria !== 'todos') {
+      if (item.fluxo !== filtroFluxoAuditoria) return false;
+    }
+
+    // 3. Filtro por período
+    if (filtroPeriodoAuditoria !== 'todos') {
+      const dataItem = new Date(item.created_at || item.data_hora_entrada || Date.now());
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+
+      if (filtroPeriodoAuditoria === 'hoje') {
+        const itemDia = new Date(dataItem);
+        itemDia.setHours(0, 0, 0, 0);
+        if (itemDia.getTime() !== hoje.getTime()) return false;
+      } else if (filtroPeriodoAuditoria === '7dias') {
+        const limite = new Date();
+        limite.setDate(limite.getDate() - 7);
+        if (dataItem < limite) return false;
+      } else if (filtroPeriodoAuditoria === '30dias') {
+        const limite = new Date();
+        limite.setDate(limite.getDate() - 30);
+        if (dataItem < limite) return false;
+      }
+    }
+
+    // 4. Filtro por busca textual
+    if (buscaAuditoria.trim()) {
+      const t = buscaAuditoria.toLowerCase();
+      const cod = (item.codigo_custodia || '').toLowerCase();
+      const desc = (item.descricao || '').toLowerCase();
+      const origNome = (item.origem_nome_doc || '').toLowerCase();
+      const origUnid = (item.origem_unidade || '').toString().toLowerCase();
+      const origBloc = (item.origem_bloco || '').toLowerCase();
+      const destNome = (item.destino_nome_doc || '').toLowerCase();
+      const destUnid = (item.destino_unidade || '').toString().toLowerCase();
+      const destBloc = (item.destino_bloco || '').toLowerCase();
+      const recNome = (item.recebedor_nome || '').toLowerCase();
+      const recDoc = (item.recebedor_doc || '').toLowerCase();
+      const opEnt = (item.operador_entrada || '').toLowerCase();
+      const opSai = (item.operador_saida || '').toLowerCase();
+
+      return (
+        cod.includes(t) ||
+        desc.includes(t) ||
+        origNome.includes(t) ||
+        origUnid.includes(t) ||
+        origBloc.includes(t) ||
+        destNome.includes(t) ||
+        destUnid.includes(t) ||
+        destBloc.includes(t) ||
+        recNome.includes(t) ||
+        recDoc.includes(t) ||
+        opEnt.includes(t) ||
+        opSai.includes(t)
+      );
+    }
+
+    return true;
+  });
+
+  // Métricas de Auditoria
+  const metricasAuditoria = {
+    total: historicoCompleto.length,
+    aguardando: itensGuardados.length,
+    retirados: historicoCompleto.filter(i => (i.status || '').toLowerCase() === 'retirado').length,
+    retiradosHoje: historicoCompleto.filter(i => {
+      if ((i.status || '').toLowerCase() !== 'retirado' || !i.data_hora_saida) return false;
+      const d = new Date(i.data_hora_saida);
+      const h = new Date();
+      return d.toDateString() === h.toDateString();
+    }).length
+  };
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 bg-white rounded-xl shadow-2xs border border-slate-200 overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-3 bg-white rounded-xl shadow-2xs border border-slate-200 overflow-hidden">
         <button
           onClick={() => setAba('entrada')}
           className={`p-2.5 text-left border-b-2 transition cursor-pointer ${aba === 'entrada' ? 'border-emerald-600 bg-slate-50' : 'border-transparent'}`}
@@ -270,6 +474,14 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
         >
           <span className="text-[10px] font-bold uppercase text-slate-400 block">Fluxo 2</span>
           <strong className="text-xs sm:text-sm text-slate-900 flex items-center gap-1.5"><PackageCheck className="w-3.5 h-3.5 text-blue-600" /> Baixa / Devolução ({itensGuardados.length})</strong>
+        </button>
+
+        <button
+          onClick={() => setAba('auditoria')}
+          className={`p-2.5 text-left border-b-2 transition cursor-pointer ${aba === 'auditoria' ? 'border-purple-600 bg-purple-50/50' : 'border-transparent'}`}
+        >
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Fluxo 3</span>
+          <strong className="text-xs sm:text-sm text-slate-900 flex items-center gap-1.5"><History className="w-3.5 h-3.5 text-purple-600" /> Auditoria & Histórico ({historicoCompleto.length})</strong>
         </button>
       </div>
 
@@ -748,6 +960,627 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
               </a>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* FLUXO 3: AUDITORIA & HISTÓRICO COMPLETO DE ITENS DE CUSTÓDIA              */}
+      {/* ========================================================================= */}
+      {aba === 'auditoria' && (
+        <div className="bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200 space-y-4 animate-fade-in">
+          {/* Header da Auditoria */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 w-fit">
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-600" /> Auditoria & Dossiê de Custódia
+              </span>
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base mt-1 flex items-center gap-2">
+                <History className="w-4 h-4 text-purple-600" />
+                Histórico Pericial de Custódia na Portaria
+              </h3>
+              <p className="text-xs text-slate-500">
+                Cadeia de custódia irrefutável com fotos de entrada, comprovantes de devolução, operadores e horários.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={carregarDados}
+                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5"
+                title="Atualizar Dados"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-purple-600' : ''}`} />
+                <span className="hidden sm:inline">Atualizar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => exportarCSVCustodia(itensAuditoriaFiltrados)}
+                disabled={itensAuditoriaFiltrados.length === 0}
+                className="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer text-xs font-black flex items-center justify-center gap-1.5 shadow-2xs disabled:opacity-50"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Exportar Planilha CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cards de Métricas / Resumo */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold uppercase text-slate-500 block">Total de Objetos</span>
+              <div className="text-xl sm:text-2xl font-black text-slate-900">{metricasAuditoria.total}</div>
+              <p className="text-[10px] text-slate-400">Registrados na base</p>
+            </div>
+
+            <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold uppercase text-amber-800 block flex items-center gap-1">
+                <Clock className="w-3 h-3 text-amber-600" /> Em Custódia (Guarda)
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-amber-900">{metricasAuditoria.aguardando}</div>
+              <p className="text-[10px] text-amber-700 font-semibold">Aguardando retirada</p>
+            </div>
+
+            <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold uppercase text-emerald-800 block flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Já Devolvidos
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-emerald-900">{metricasAuditoria.retirados}</div>
+              <p className="text-[10px] text-emerald-700 font-semibold">Baixas efetivadas</p>
+            </div>
+
+            <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold uppercase text-blue-800 block flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-blue-600" /> Devolvidos Hoje
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-blue-900">{metricasAuditoria.retiradosHoje}</div>
+              <p className="text-[10px] text-blue-700 font-semibold">Entregas no plantão</p>
+            </div>
+          </div>
+
+          {/* Barra de Pesquisa e Filtros */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={buscaAuditoria}
+                onChange={(e) => setBuscaAuditoria(e.target.value)}
+                placeholder="Pesquisar por código (CUST-...), descrição, morador, unidade, documento, retirante ou operador..."
+                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 font-medium focus:ring-1 focus:ring-purple-600 focus:outline-none"
+              />
+              {buscaAuditoria && (
+                <button
+                  type="button"
+                  onClick={() => setBuscaAuditoria('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Linha de Filtros por Botões */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200 text-xs">
+              {/* Filtro Status */}
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="text-[10px] font-bold uppercase text-slate-500 mr-1 flex items-center gap-1">
+                  <Filter className="w-3 h-3" /> Status:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusAuditoria('todos')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    filtroStatusAuditoria === 'todos' ? 'bg-purple-900 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Todos ({historicoCompleto.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusAuditoria('aguardando')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    filtroStatusAuditoria === 'aguardando' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  🟡 Em Guarda ({metricasAuditoria.aguardando})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusAuditoria('retirado')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    filtroStatusAuditoria === 'retirado' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  🟢 Devolvidos ({metricasAuditoria.retirados})
+                </button>
+              </div>
+
+              {/* Filtro Fluxo */}
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="text-[10px] font-bold uppercase text-slate-500 mr-1">Fluxo:</span>
+                <button
+                  type="button"
+                  onClick={() => setFiltroFluxoAuditoria('todos')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
+                    filtroFluxoAuditoria === 'todos' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroFluxoAuditoria('M-M')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
+                    filtroFluxoAuditoria === 'M-M' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  Morador ➔ Morador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroFluxoAuditoria('M-T')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
+                    filtroFluxoAuditoria === 'M-T' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  Morador ➔ Terceiro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroFluxoAuditoria('T-M')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
+                    filtroFluxoAuditoria === 'T-M' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  Terceiro ➔ Morador
+                </button>
+              </div>
+
+              {/* Filtro Período */}
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-bold uppercase text-slate-500 mr-1 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> Período:
+                </span>
+                {(['todos', 'hoje', '7dias', '30dias'] as const).map((per) => (
+                  <button
+                    key={per}
+                    type="button"
+                    onClick={() => setFiltroPeriodoAuditoria(per)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
+                      filtroPeriodoAuditoria === per ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {per === 'todos' ? 'Todos' : per === 'hoje' ? 'Hoje' : per === '7dias' ? '7 dias' : '30 dias'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Listagem de Cards de Auditoria */}
+          {loading ? (
+            <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-xs flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-purple-600" /> Carregando registros de custódia e comprovantes...
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-xs text-slate-500 px-1">
+                <span>Exibindo <strong>{itensAuditoriaFiltrados.length}</strong> de {historicoCompleto.length} registros</span>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                {itensAuditoriaFiltrados.map((item) => {
+                  const estaRetirado = (item.status || '').toLowerCase() === 'retirado';
+                  const permanencia = calcularPermanencia(item.created_at || item.data_hora_entrada, item.data_hora_saida);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`bg-white rounded-2xl border p-3.5 shadow-2xs space-y-3 transition flex flex-col justify-between ${
+                        estaRetirado ? 'border-slate-200 hover:border-slate-300' : 'border-amber-300 bg-amber-50/20 hover:border-amber-400'
+                      }`}
+                    >
+                      {/* Cabeçalho do Card */}
+                      <div className="space-y-2 border-b border-slate-100 pb-2.5">
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-black text-xs bg-slate-900 text-white px-2 py-0.5 rounded tracking-wider shadow-2xs">
+                              {item.codigo_custodia || 'CUST-PORTARIA'}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-300">
+                              {item.fluxo === 'M-M' ? 'Morador ➔ Morador' : item.fluxo === 'M-T' ? 'Morador ➔ Terceiro' : 'Terceiro ➔ Morador'}
+                            </span>
+                          </div>
+
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 ${
+                            estaRetirado 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}>
+                            {estaRetirado ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Clock className="w-3 h-3 text-amber-600" />}
+                            {estaRetirado ? 'Devolvido / Retirado' : 'Em Guarda (Portaria)'}
+                          </span>
+                        </div>
+
+                        {/* Descrição do Objeto */}
+                        <div className="pt-0.5">
+                          <h4 className="font-black text-slate-900 text-sm">
+                            📦 {item.descricao}
+                          </h4>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>Permanência: <strong>{permanencia}</strong></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bloco de Informações: Origem e Destino */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        {/* Origem */}
+                        <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                          <span className="text-[9px] font-black uppercase text-slate-500 block flex items-center gap-1">
+                            <User className="w-3 h-3 text-emerald-600" /> Quem Deixou (Origem)
+                          </span>
+                          <p className="font-bold text-slate-900 truncate">
+                            {item.origem_nome_doc || 'Não informado'}
+                          </p>
+                          <p className="text-[11px] text-slate-600">
+                            {item.origem_unidade ? `Apt ${item.origem_unidade} ${item.origem_bloco ? '• Bl ' + item.origem_bloco : ''}` : item.origem_tipo || 'Externo'}
+                          </p>
+                          {item.origem_whats && (
+                            <p className="text-[10px] text-slate-500 font-mono">
+                              📱 {item.origem_whats}
+                            </p>
+                          )}
+                          <div className="pt-1 border-t border-slate-200/80 text-[10px] text-slate-500">
+                            <span>Entrada: <strong>{new Date(item.created_at || item.data_hora_entrada).toLocaleString('pt-BR')}</strong></span>
+                            <span className="block text-[9px] text-slate-400">Por: {item.operador_entrada || 'Portaria'}</span>
+                          </div>
+                        </div>
+
+                        {/* Destino */}
+                        <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                          <span className="text-[9px] font-black uppercase text-slate-500 block flex items-center gap-1">
+                            <ArrowRight className="w-3 h-3 text-blue-600" /> Destinatário Autorizado
+                          </span>
+                          <p className="font-bold text-slate-900 truncate">
+                            {item.destino_nome_doc || 'Não informado'}
+                          </p>
+                          <p className="text-[11px] text-slate-600">
+                            {item.destino_unidade ? `Apt ${item.destino_unidade} ${item.destino_bloco ? '• Bl ' + item.destino_bloco : ''}` : item.destino_tipo || 'Terceiro'}
+                          </p>
+                          {item.destino_whats && (
+                            <p className="text-[10px] text-slate-500 font-mono">
+                              📱 {item.destino_whats}
+                            </p>
+                          )}
+                          <div className="pt-1 border-t border-slate-200/80 text-[10px] text-slate-500">
+                            {estaRetirado ? (
+                              <>
+                                <span className="text-emerald-700 font-bold">Retirado em: {new Date(item.data_hora_saida).toLocaleString('pt-BR')}</span>
+                                <span className="block text-[9px] text-slate-500">Por: {item.recebedor_nome} {item.recebedor_doc ? `(${item.recebedor_doc})` : ''}</span>
+                              </>
+                            ) : (
+                              <span className="text-amber-800 font-semibold italic">Aguardando comparecimento</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Miniaturas de Fotos com Zoom */}
+                      <div className="flex items-center gap-2 pt-1">
+                        {item.foto_entrada_url && (
+                          <div 
+                            onClick={() => setFotoAmpliadaModal({ url: item.foto_entrada_url, titulo: `Foto do Objeto: ${item.codigo_custodia}` })}
+                            className="relative group cursor-pointer w-14 h-14 rounded-lg overflow-hidden border border-slate-300 hover:border-purple-500 shrink-0"
+                            title="Clique para ampliar foto de entrada"
+                          >
+                            <img src={item.foto_entrada_url} alt="Entrada" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[8px] text-white text-center py-0.5 font-bold">
+                              Entrada
+                            </span>
+                          </div>
+                        )}
+
+                        {item.foto_saida_url && (
+                          <div 
+                            onClick={() => setFotoAmpliadaModal({ url: item.foto_saida_url, titulo: `Comprovante de Devolução: ${item.codigo_custodia}` })}
+                            className="relative group cursor-pointer w-14 h-14 rounded-lg overflow-hidden border border-emerald-400 hover:border-emerald-600 shrink-0"
+                            title="Clique para ampliar comprovante de retirada"
+                          >
+                            <img src={item.foto_saida_url} alt="Saída" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            <span className="absolute bottom-0 inset-x-0 bg-emerald-900/80 text-[8px] text-white text-center py-0.5 font-bold">
+                              Baixa
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex-1 text-[11px] text-slate-500 pl-1">
+                          <p className="font-semibold text-slate-700">Evidências Fotográficas:</p>
+                          <p className="text-[10px] text-slate-400">
+                            {item.foto_entrada_url && item.foto_saida_url 
+                              ? 'Foto de guarda e entrega anexadas' 
+                              : item.foto_entrada_url 
+                              ? 'Foto de guarda anexada' 
+                              : 'Sem foto anexada'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Ações no Rodapé do Card */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setItemDossieModal(item)}
+                          className="flex-1 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-900 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 border border-purple-200"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Ver Dossiê Completo</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tel = (item.destino_whats || item.origem_whats || '').replace(/\D/g, '');
+                            const textoDossie = `📋 *DOSSIÊ DE AUDITORIA DE CUSTÓDIA - INFPORT*\n` +
+                              `Código: ${item.codigo_custodia}\n` +
+                              `Item: ${item.descricao}\n` +
+                              `Status: ${estaRetirado ? 'RETIRADO / DEVOLVIDO' : 'EM GUARDA NA PORTARIA'}\n` +
+                              `De: ${item.origem_nome_doc} ${item.origem_unidade ? '(Apt ' + item.origem_unidade + ')' : ''}\n` +
+                              `Para: ${item.destino_nome_doc} ${item.destino_unidade ? '(Apt ' + item.destino_unidade + ')' : ''}\n` +
+                              `Entrada: ${new Date(item.created_at || item.data_hora_entrada).toLocaleString('pt-BR')} por ${item.operador_entrada || 'Portaria'}\n` +
+                              (estaRetirado ? `Devolvido em: ${new Date(item.data_hora_saida).toLocaleString('pt-BR')} para ${item.recebedor_nome} (Doc: ${item.recebedor_doc || 'N/I'}) por ${item.operador_saida}\n` : '') +
+                              `Foto Entrada: ${item.foto_entrada_url || 'N/A'}\n` +
+                              (item.foto_saida_url ? `Foto Comprovante: ${item.foto_saida_url}\n` : '');
+
+                            const link = tel ? `https://wa.me/55${tel}?text=${encodeURIComponent(textoDossie)}` : `https://wa.me/?text=${encodeURIComponent(textoDossie)}`;
+                            window.open(link, '_blank');
+                          }}
+                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition cursor-pointer border border-emerald-200"
+                          title="Enviar Dossiê via WhatsApp"
+                        >
+                          <MessageCircle className="w-4 h-4 text-emerald-600" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {itensAuditoriaFiltrados.length === 0 && (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs space-y-2">
+                  <p className="font-bold text-slate-700">Nenhum registro encontrado para os filtros selecionados.</p>
+                  <p className="text-[11px] text-slate-400">Tente ajustar o termo de pesquisa ou o filtro de período e status.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL DE DOSSIÊ COMPLETO DE AUDITORIA (CUSTÓDIA)                          */}
+      {/* ========================================================================= */}
+      {itemDossieModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-8 relative">
+            {/* Topo do Modal */}
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-purple-100 text-purple-800 rounded-xl">
+                  <FileText className="w-5 h-5 text-purple-700" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">
+                    Dossiê Pericial de Custódia
+                  </h3>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {itemDossieModal.codigo_custodia}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setItemDossieModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Status e Descrição */}
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-500">Objeto em Custódia</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                  (itemDossieModal.status || '').toLowerCase() === 'retirado'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-900'
+                }`}>
+                  {itemDossieModal.status}
+                </span>
+              </div>
+              <h4 className="font-black text-slate-900 text-sm sm:text-base">
+                {itemDossieModal.descricao}
+              </h4>
+              <p className="text-[11px] text-slate-600">
+                Fluxo: <strong>{itemDossieModal.fluxo === 'M-M' ? 'Morador ➔ Morador' : itemDossieModal.fluxo === 'M-T' ? 'Morador ➔ Terceiro' : 'Terceiro ➔ Morador'}</strong> • Permanência: <strong>{calcularPermanencia(itemDossieModal.created_at || itemDossieModal.data_hora_entrada, itemDossieModal.data_hora_saida)}</strong>
+              </p>
+            </div>
+
+            {/* Linha do Tempo da Cadeia de Custódia */}
+            <div className="space-y-3">
+              <h5 className="text-xs font-black uppercase text-slate-700 tracking-wider">
+                Linha do Tempo da Cadeia de Responsabilidade
+              </h5>
+
+              {/* Etapa 1: Entrada */}
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                  1
+                </div>
+                <div className="flex-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-900">Entrada e Recebimento na Guarita</span>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      {new Date(itemDossieModal.created_at || itemDossieModal.data_hora_entrada).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <p><strong>Entregue por:</strong> {itemDossieModal.origem_nome_doc} {itemDossieModal.origem_unidade ? `(Apt ${itemDossieModal.origem_unidade} ${itemDossieModal.origem_bloco ? 'Bl ' + itemDossieModal.origem_bloco : ''})` : ''}</p>
+                  <p><strong>Destinatário Previsto:</strong> {itemDossieModal.destino_nome_doc} {itemDossieModal.destino_unidade ? `(Apt ${itemDossieModal.destino_unidade})` : ''}</p>
+                  <p className="text-[10px] text-slate-500">Operador Responsável: <strong>{itemDossieModal.operador_entrada || 'Portaria'}</strong></p>
+                </div>
+              </div>
+
+              {/* Etapa 2: Saída / Devolução */}
+              <div className="flex gap-3 items-start">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 ${
+                  (itemDossieModal.status || '').toLowerCase() === 'retirado'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-slate-200 text-slate-500'
+                }`}>
+                  2
+                </div>
+                <div className="flex-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-900">Baixa e Devolução do Objeto</span>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      {itemDossieModal.data_hora_saida ? new Date(itemDossieModal.data_hora_saida).toLocaleString('pt-BR') : 'Pendente'}
+                    </span>
+                  </div>
+                  {(itemDossieModal.status || '').toLowerCase() === 'retirado' ? (
+                    <>
+                      <p><strong>Retirado por:</strong> {itemDossieModal.recebedor_nome} {itemDossieModal.recebedor_doc ? `(Doc: ${itemDossieModal.recebedor_doc})` : ''}</p>
+                      <p className="text-[10px] text-slate-500">Operador da Baixa: <strong>{itemDossieModal.operador_saida || 'Portaria'}</strong></p>
+                    </>
+                  ) : (
+                    <p className="text-amber-800 italic text-[11px]">Objeto ainda em custódia na portaria aguardando a retirada.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Fotos Ampliadas no Dossiê */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <span className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Foto Entrada:</span>
+                {itemDossieModal.foto_entrada_url ? (
+                  <div 
+                    onClick={() => setFotoAmpliadaModal({ url: itemDossieModal.foto_entrada_url, titulo: `Foto de Entrada: ${itemDossieModal.codigo_custodia}` })}
+                    className="h-28 rounded-xl overflow-hidden border border-slate-300 cursor-pointer hover:opacity-90"
+                  >
+                    <img src={itemDossieModal.foto_entrada_url} alt="Entrada" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="h-28 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs italic">
+                    Sem foto
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Foto Devolução / Retirante:</span>
+                {itemDossieModal.foto_saida_url ? (
+                  <div 
+                    onClick={() => setFotoAmpliadaModal({ url: itemDossieModal.foto_saida_url, titulo: `Comprovante de Devolução: ${itemDossieModal.codigo_custodia}` })}
+                    className="h-28 rounded-xl overflow-hidden border border-emerald-400 cursor-pointer hover:opacity-90"
+                  >
+                    <img src={itemDossieModal.foto_saida_url} alt="Saída" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="h-28 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs italic">
+                    Ainda não devolvido
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ações do Dossiê */}
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const textoDossie = `📋 *DOSSIÊ DE AUDITORIA DE CUSTÓDIA - INFPORT*\n` +
+                    `Código: ${itemDossieModal.codigo_custodia}\n` +
+                    `Item: ${itemDossieModal.descricao}\n` +
+                    `Status: ${itemDossieModal.status}\n` +
+                    `De: ${itemDossieModal.origem_nome_doc} ${itemDossieModal.origem_unidade ? '(Apt ' + itemDossieModal.origem_unidade + ')' : ''}\n` +
+                    `Para: ${itemDossieModal.destino_nome_doc} ${itemDossieModal.destino_unidade ? '(Apt ' + itemDossieModal.destino_unidade + ')' : ''}\n` +
+                    `Entrada: ${new Date(itemDossieModal.created_at || itemDossieModal.data_hora_entrada).toLocaleString('pt-BR')} por ${itemDossieModal.operador_entrada || 'Portaria'}\n` +
+                    (itemDossieModal.status?.toLowerCase() === 'retirado' ? `Devolvido em: ${new Date(itemDossieModal.data_hora_saida).toLocaleString('pt-BR')} para ${itemDossieModal.recebedor_nome} (Doc: ${itemDossieModal.recebedor_doc || 'N/I'}) por ${itemDossieModal.operador_saida}\n` : '') +
+                    `Foto Entrada: ${itemDossieModal.foto_entrada_url || 'N/A'}\n` +
+                    (itemDossieModal.foto_saida_url ? `Foto Comprovante: ${itemDossieModal.foto_saida_url}\n` : '');
+
+                  navigator.clipboard.writeText(textoDossie);
+                  setCopiadoDossie(true);
+                  setTimeout(() => setCopiadoDossie(false), 3000);
+                }}
+                className="flex-1 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {copiadoDossie ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copiadoDossie ? 'Dossiê Copiado!' : 'Copiar Dossiê Pericial'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setItemDossieModal(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL DE FOTO EM ALTA RESOLUÇÃO                                           */}
+      {/* ========================================================================= */}
+      {fotoAmpliadaModal && (
+        <div 
+          onClick={() => setFotoAmpliadaModal(null)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-4 space-y-3 overflow-hidden shadow-2xl relative"
+          >
+            <div className="flex items-center justify-between text-white border-b border-slate-800 pb-2">
+              <h4 className="font-bold text-xs sm:text-sm text-slate-200">
+                {fotoAmpliadaModal.titulo}
+              </h4>
+              <button
+                type="button"
+                onClick={() => setFotoAmpliadaModal(null)}
+                className="text-slate-400 hover:text-white p-1 text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-[75vh] flex items-center justify-center overflow-hidden rounded-xl bg-black">
+              <img 
+                src={fotoAmpliadaModal.url} 
+                alt="Comprovante em Alta Resolução" 
+                className="max-h-[75vh] w-auto object-contain rounded-xl"
+              />
+            </div>
+
+            <div className="flex justify-between items-center text-[11px] text-slate-400 pt-1">
+              <span>Evidência registrada no sistema INFPORT</span>
+              <a 
+                href={fotoAmpliadaModal.url} 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-emerald-400 hover:underline flex items-center gap-1 font-bold"
+              >
+                Abrir imagem original <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
         </div>
       )}
     </div>
