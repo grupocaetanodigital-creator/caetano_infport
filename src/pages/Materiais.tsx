@@ -28,6 +28,7 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
   const [buscaTermo, setBuscaTermo] = useState('');
 
   const [modalAberto, setModalAberto] = useState(false);
+  const [itemParaExcluir, setItemParaExcluir] = useState<{ id: string; nome: string } | null>(null);
   const [idEdicao, setIdEdicao] = useState<string | null>(null);
   const [nomeMaterial, setNomeMaterial] = useState('');
   const [categoria, setCategoria] = useState('Rádio HT');
@@ -180,8 +181,14 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
     }
   };
 
-  const excluirMaterial = async (id: string, nome: string) => {
-    if (!window.confirm(`Tem certeza que deseja remover o item "${nome}" do inventário do posto?`)) return;
+  const excluirMaterial = (id: string, nome: string) => {
+    setItemParaExcluir({ id, nome });
+  };
+
+  const confirmarExclusaoMaterial = async () => {
+    if (!itemParaExcluir) return;
+    const { id, nome } = itemParaExcluir;
+    setItemParaExcluir(null);
     setLoading(true);
     try {
       const { error } = await supabase
@@ -494,6 +501,43 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {itemParaExcluir && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 border border-red-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 font-bold">
+                🗑️
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Remover do Inventário?</h3>
+                <p className="text-xs text-slate-500">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <p>Tem certeza que deseja remover o item <strong>"{itemParaExcluir.nome}"</strong> do posto?</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setItemParaExcluir(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarExclusaoMaterial}
+                className="px-4 py-2 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition cursor-pointer"
+              >
+                Sim, Remover
+              </button>
+            </div>
           </div>
         </div>
       )}
