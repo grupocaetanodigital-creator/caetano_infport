@@ -61,6 +61,7 @@ export default function ModalGerenciarSetores({
 
   // Confirmação de exclusão
   const [setorParaExcluir, setSetorParaExcluir] = useState<SetorRonda | null>(null);
+  const [confirmandoRestaurarPadroes, setConfirmandoRestaurarPadroes] = useState(false);
 
   useEffect(() => {
     if (aberto) {
@@ -231,11 +232,12 @@ export default function ModalGerenciarSetores({
     }
   };
 
-  const restaurarPadroes = async () => {
-    if (!window.confirm('Deseja restaurar a lista original de 9 setores (SETOR A ao I com seus checklists padrão)? Isso substituirá as customizações atuais.')) {
-      return;
-    }
+  const solicitarRestaurarPadroes = () => {
+    setConfirmandoRestaurarPadroes(true);
+  };
 
+  const executarRestaurarPadroes = async () => {
+    setConfirmandoRestaurarPadroes(false);
     setSalvando(true);
     try {
       await salvarSetoresRonda(condominioId || '', SETORES_RONDA_PADRAO);
@@ -332,7 +334,7 @@ export default function ModalGerenciarSetores({
 
               <button
                 type="button"
-                onClick={restaurarPadroes}
+                onClick={solicitarRestaurarPadroes}
                 disabled={salvando}
                 className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-1 border border-slate-300 transition cursor-pointer"
                 title="Restaurar a lista padrão de 9 setores"
@@ -669,6 +671,43 @@ export default function ModalGerenciarSetores({
                 className="flex-1 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition shadow-sm disabled:opacity-50"
               >
                 {salvando ? 'Excluindo...' : 'Sim, Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE CONFIRMAÇÃO DE RESTAURAÇÃO DE PADRÕES */}
+      {confirmandoRestaurarPadroes && (
+        <div className="fixed inset-0 bg-slate-900/80 z-60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-200 text-center animate-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h4 className="font-bold text-slate-900 text-sm sm:text-base">
+                Restaurar Setores Padrão?
+              </h4>
+              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                Deseja restaurar a lista original de <strong>9 setores (SETOR A ao I)</strong> com seus checklists de fábrica? Isso substituirá as customizações atuais.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmandoRestaurarPadroes(false)}
+                className="flex-1 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executarRestaurarPadroes}
+                disabled={salvando}
+                className="flex-1 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                {salvando ? 'Restaurando...' : 'Sim, Restaurar'}
               </button>
             </div>
           </div>
