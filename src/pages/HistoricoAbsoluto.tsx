@@ -61,17 +61,48 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const [detalheSelecionado, setDetalheSelecionado] = useState<RegistroAuditoria | null>(null);
 
   // Estados da Limpeza por Período (Apenas ADM)
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const trintaDiasAtras = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+
   const [tabelaSelecionada, setTabelaSelecionada] = useState('encomendas_itens');
-  const [limpezaDataInicio, setLimpezaDataInicio] = useState('2026-03-01');
-  const [limpezaDataFim, setLimpezaDataFim] = useState('2026-06-03');
+  const [limpezaDataInicio, setLimpezaDataInicio] = useState(trintaDiasAtras);
+  const [limpezaDataFim, setLimpezaDataFim] = useState(hojeIso);
   const [limpezaMotivo, setLimpezaMotivo] = useState('Expurgo periódico e limpeza de histórico de portaria');
   const [consultandoContagem, setConsultandoContagem] = useState(false);
   const [contagemPeriodo, setContagemPeriodo] = useState<number | null>(null);
   const [campoDataUtilizado, setCampoDataUtilizado] = useState('');
+  const [amostrasExclusao, setAmostrasExclusao] = useState<any[]>([]);
+  const [erroConsulta, setErroConsulta] = useState<string | null>(null);
   const [baixandoBackup, setBaixandoBackup] = useState(false);
   const [executandoLimpeza, setExecutandoLimpeza] = useState(false);
   const [textoConfirmacao, setTextoConfirmacao] = useState('');
   const [resultadoLimpeza, setResultadoLimpeza] = useState<{ sucesso: boolean; removidos: number; msg: string } | null>(null);
+
+  const aplicarAtalhoPeriodoLimpeza = (tipo: '30dias' | '60dias' | '90dias' | 'ano' | '180dias') => {
+    const hoje = new Date();
+    const hojeStr = hoje.toISOString().slice(0, 10);
+    setLimpezaDataFim(hojeStr);
+
+    if (tipo === '30dias') {
+      const d = new Date(Date.now() - 30 * 86400000);
+      setLimpezaDataInicio(d.toISOString().slice(0, 10));
+    } else if (tipo === '60dias') {
+      const d = new Date(Date.now() - 60 * 86400000);
+      setLimpezaDataInicio(d.toISOString().slice(0, 10));
+    } else if (tipo === '90dias') {
+      const d = new Date(Date.now() - 90 * 86400000);
+      setLimpezaDataInicio(d.toISOString().slice(0, 10));
+    } else if (tipo === 'ano') {
+      setLimpezaDataInicio(`${hoje.getFullYear()}-01-01`);
+    } else if (tipo === '180dias') {
+      const d = new Date(Date.now() - 180 * 86400000);
+      setLimpezaDataInicio(d.toISOString().slice(0, 10));
+    }
+    setContagemPeriodo(null);
+    setAmostrasExclusao([]);
+    setErroConsulta(null);
+    setResultadoLimpeza(null);
+  };
 
   // Estado da cópia SQL
   const [copiadoSql, setCopiadoSql] = useState(false);
@@ -91,7 +122,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
         dataInicio,
         dataFim,
         termoBusca,
-        limite: 200
+        limite: 250
       });
       setRegistros(res.registros);
       setFonteDados(res.fonte);
@@ -135,20 +166,26 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   // Consulta quantidade de registros na tabela antes de limpar
   const handleConsultarPeriodo = async () => {
     if (!limpezaDataInicio || !limpezaDataFim) {
-      alert('Informe a Data Inicial e a Data Final para consulta.');
+      setErroConsulta('Informe a Data Inicial e a Data Final para consulta.');
       return;
     }
+    setErroConsulta(null);
     setConsultandoContagem(true);
     setResultadoLimpeza(null);
     try {
+      const targetCondo = filtroCondominio !== 'todos' ? filtroCondominio : (condominioAtivo?.id || null);
       const res = await consultarRegistrosTabelaPeriodo({
         tabela: tabelaSelecionada,
         dataInicio: limpezaDataInicio,
         dataFim: limpezaDataFim,
-        condominio_id: condominioAtivo?.id
+        condominio_id: targetCondo
       });
       setContagemPeriodo(res.total);
       setCampoDataUtilizado(res.campoDataUsado);
+      setAmostrasExclusao(res.amostras || []);
+      if (res.erro && res.total === 0) {
+        setErroConsulta(`Aviso: ${res.erro}`);
+      }
     } finally {
       setConsultandoContagem(false);
     }
@@ -667,40 +704,97 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                 })()}
               </div>
 
-              {/* 2. Seleção do Período */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-black uppercase text-slate-300 mb-2 flex items-center gap-2">
+              {/* 2. Seleção do Período com Atalhos Dinâmicos */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="block text-xs font-black uppercase text-slate-300 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-emerald-400" />
-                    Data Inicial do Período
+                    2. Selecione o Intervalo de Datas para Expurgo
                   </label>
-                  <input
-                    type="date"
-                    value={limpezaDataInicio}
-                    onChange={(e) => {
-                      setLimpezaDataInicio(e.target.value);
-                      setContagemPeriodo(null);
-                    }}
-                    className="w-full bg-slate-950 text-white text-sm font-bold p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
-                  />
+
+                  {/* Atalhos Rápidos */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Atalhos:</span>
+                    <button
+                      type="button"
+                      onClick={() => aplicarAtalhoPeriodoLimpeza('30dias')}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                    >
+                      30 dias
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => aplicarAtalhoPeriodoLimpeza('60dias')}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                    >
+                      60 dias
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => aplicarAtalhoPeriodoLimpeza('90dias')}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                    >
+                      90 dias
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => aplicarAtalhoPeriodoLimpeza('ano')}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                    >
+                      Ano 2026
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => aplicarAtalhoPeriodoLimpeza('180dias')}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 transition cursor-pointer"
+                    >
+                      +180 dias
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-black uppercase text-slate-300 mb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-rose-400" />
-                    Data Final do Período
-                  </label>
-                  <input
-                    type="date"
-                    value={limpezaDataFim}
-                    onChange={(e) => {
-                      setLimpezaDataFim(e.target.value);
-                      setContagemPeriodo(null);
-                    }}
-                    className="w-full bg-slate-950 text-white text-sm font-bold p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                      Data Inicial do Período
+                    </label>
+                    <input
+                      type="date"
+                      value={limpezaDataInicio}
+                      onChange={(e) => {
+                        setLimpezaDataInicio(e.target.value);
+                        setContagemPeriodo(null);
+                        setAmostrasExclusao([]);
+                      }}
+                      className="w-full bg-slate-950 text-white text-sm font-bold p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                      Data Final do Período
+                    </label>
+                    <input
+                      type="date"
+                      value={limpezaDataFim}
+                      onChange={(e) => {
+                        setLimpezaDataFim(e.target.value);
+                        setContagemPeriodo(null);
+                        setAmostrasExclusao([]);
+                      }}
+                      className="w-full bg-slate-950 text-white text-sm font-bold p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Mensagem de Erro de Consulta */}
+              {erroConsulta && (
+                <div className="p-3 bg-amber-950/60 border border-amber-500/50 rounded-xl text-xs text-amber-200 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>{erroConsulta}</span>
+                </div>
+              )}
 
               {/* Motivo do Expurgo */}
               <div>
@@ -763,6 +857,27 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                       </button>
                     )}
                   </div>
+
+                  {/* Amostra dos Registros Localizados */}
+                  {amostrasExclusao.length > 0 && (
+                    <div className="border-t border-slate-800 pt-3 space-y-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                        Amostra dos registros que serão excluídos (primeiros {amostrasExclusao.length}):
+                      </span>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        {amostrasExclusao.map((am, idx) => (
+                          <div key={idx} className="bg-slate-900 p-2 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono flex items-center justify-between gap-2">
+                            <span className="truncate flex-1">
+                              {am.descricao || am.titulo || am.nome || am.nome_completo || am.retirante_nome || am.codigo_barras || am.codigo_custodia || JSON.stringify(am).slice(0, 80)}
+                            </span>
+                            <span className="text-slate-500 text-[10px] shrink-0">
+                              {am.created_at ? new Date(am.created_at).toLocaleString('pt-BR') : (am.data_hora ? new Date(am.data_hora).toLocaleString('pt-BR') : '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {contagemPeriodo > 0 && (
                     <div className="border-t border-slate-800 pt-4 space-y-3">
