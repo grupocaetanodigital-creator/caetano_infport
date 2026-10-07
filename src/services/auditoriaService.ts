@@ -455,7 +455,7 @@ export async function buscarHistoricoAbsoluto(filtros: {
         itens.forEach((item: any) => {
           const rastreio = item.codigo_barras || item.codigo_rastreio || item.rastreio || 'S/ Rastreio';
           const dest = item.destinatario || item.nome_morador || 'Morador';
-          const apt = `Apt ${item.unidade || ''} ${item.bloco ? '• Bl ' + item.bloco : ''}`.trim();
+          const apFormatado = `Ap. ${item.unidade || ''} ${item.bloco ? '• Bl ' + item.bloco : ''}`.trim();
 
           // Evento de Recebimento
           listaConsolidada.push({
@@ -465,7 +465,7 @@ export async function buscarHistoricoAbsoluto(filtros: {
             operador_nome: item.operador_entrada || 'Portaria',
             modulo: 'Encomendas',
             acao: 'CRIAR',
-            descricao: `Encomenda recebida no posto para ${apt} (${dest}) - Rastreio: ${rastreio} - Local: ${item.local_armazenamento || 'Escaninho'}`,
+            descricao: `Encomenda recebida no posto para ${apFormatado} (${dest}) - Rastreio: ${rastreio} - Local: ${item.local_armazenamento || 'Escaninho'}`,
             detalhes: item,
             criado_em: item.created_at || item.data_recebimento || new Date().toISOString()
           });
@@ -479,7 +479,7 @@ export async function buscarHistoricoAbsoluto(filtros: {
               operador_nome: item.operador_baixa || 'Portaria',
               modulo: 'Encomendas',
               acao: 'BAIXA',
-              descricao: `Baixa e entrega de encomenda concluída para ${item.retirado_por || dest} (${apt}) - Rastreio: ${rastreio}`,
+              descricao: `Baixa e entrega de encomenda concluída para ${item.retirado_por || dest} (${apFormatado}) - Rastreio: ${rastreio}`,
               detalhes: item,
               criado_em: item.data_retirada || item.created_at || new Date().toISOString()
             });
@@ -603,7 +603,7 @@ export async function buscarHistoricoAbsoluto(filtros: {
             operador_nome: p.operador_entrada_nome || 'Portaria',
             modulo: 'Prestadores',
             acao: 'CRIAR',
-            descricao: `Entrada liberada: ${p.nome_completo || 'Prestador'} (${p.empresa || p.perfil_acesso || 'Visitante/Obra'}) - Destino: ${p.unidade ? 'Apt ' + p.unidade : 'Condomínio'} - Crachá: ${p.cracha || p.cracha_atribuido || 'S/ Crachá'}`,
+            descricao: `Entrada liberada: ${p.nome_completo || 'Prestador'} (${p.empresa || p.perfil_acesso || 'Visitante/Obra'}) - Destino: ${p.unidade ? 'Ap. ' + p.unidade : 'Condomínio'} - Crachá: ${p.cracha || p.cracha_atribuido || 'S/ Crachá'}`,
             detalhes: p,
             criado_em: p.data_hora_entrada || p.created_at || new Date().toISOString()
           });

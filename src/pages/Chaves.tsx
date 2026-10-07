@@ -425,7 +425,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 <h4 className="font-bold text-slate-900 text-xs mt-1 truncate" title={chave.nome_chave}>{chave.nome_chave}</h4>
                 {chave.unidade && (
                   <p className="text-[10px] text-slate-500 truncate">
-                    Ap {chave.unidade} {chave.bloco ? `• Bl. ${chave.bloco}` : ''}
+                    Ap. {chave.unidade} {chave.bloco ? `• Bl. ${chave.bloco}` : ''}
                   </p>
                 )}
               </div>
@@ -517,7 +517,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / AP</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / Ap.</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -579,7 +579,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 <Key className="w-4 h-4 text-emerald-600" /> Retirada da Chave {modalRetirada.codigo_chave}
               </h3>
               <p className="text-[11px] text-slate-500 font-medium">
-                {modalRetirada.nome_chave} {modalRetirada.unidade ? `(Ap ${modalRetirada.unidade}${modalRetirada.bloco ? ` Bl.${modalRetirada.bloco}` : ''})` : ''}
+                {modalRetirada.nome_chave} {modalRetirada.unidade ? `(Ap. ${modalRetirada.unidade}${modalRetirada.bloco ? ` Bl.${modalRetirada.bloco}` : ''})` : ''}
               </p>
 
               <form onSubmit={efetivarRetirada} className="space-y-2.5">
@@ -613,7 +613,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                   <div className="space-y-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Unidade / AP *</label>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Unidade / Ap. *</label>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -642,7 +642,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                     {moradoresDaUnidade.length > 0 && (
                       <div className="space-y-1">
                         <label className="block text-[10px] font-bold text-emerald-800 uppercase">
-                          Moradores do Ap {retiranteUnidade}:
+                          Moradores do Ap. {retiranteUnidade}:
                         </label>
                         <div className="flex flex-wrap gap-1">
                           {moradoresDaUnidade.map((m) => (

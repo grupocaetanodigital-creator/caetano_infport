@@ -422,7 +422,7 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
                     required
                     value={unidadeBloco}
                     onChange={(e) => setUnidadeBloco(e.target.value)}
-                    placeholder="Ex: Bloco A - Apto 302"
+                    placeholder="Ex: Bloco A - Ap. 302"
                     className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium"
                   />
                 </div>

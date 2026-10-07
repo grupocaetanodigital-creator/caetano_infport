@@ -1490,7 +1490,7 @@ export default function PainelSindico({
                   type="text"
                   value={formOcorrencia.unidade_bloco}
                   onChange={(e) => setFormOcorrencia({ ...formOcorrencia, unidade_bloco: e.target.value })}
-                  placeholder="Ex: Apto 102 - Bloco A"
+                  placeholder="Ex: Ap. 102 - Bloco A"
                   className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-900"
                 />
               </div>

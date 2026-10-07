@@ -679,7 +679,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       registrarAtividade({
         modulo: 'Encomendas',
         acao: 'CRIAR',
-        descricao: `Recebeu e triou encomenda para ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' Bloco ' + blocoTriagem : ''}) - Lote ${loteAtivo.codigo_re}. Local de guarda: ${localArmazenar}.`,
+        descricao: `Recebeu e triou encomenda para ${nomeDestinatario} (Ap. ${unidadeTriagem}${blocoTriagem ? ' Bloco ' + blocoTriagem : ''}) - Lote ${loteAtivo.codigo_re}. Local de guarda: ${localArmazenar}.`,
         detalhes: {
           loteId: loteAtivo.id,
           codigoRe: loteAtivo.codigo_re,
@@ -695,7 +695,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         condominio_id: usuarioLogado?.condominio_id
       });
 
-      const textoWhatsMorador = `Olá, ${nomeDestinatario} (Apt ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Local Físico de Guarda: ${localArmazenar}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria informando seu apartamento!`;
+      const textoWhatsMorador = `Olá, ${nomeDestinatario} (Ap. ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Local Físico de Guarda: ${localArmazenar}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria informando seu apartamento!`;
 
       setItemTriadoWhats({
         destinatario: nomeDestinatario,
@@ -841,7 +841,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const u = String(item.unidade || 'Sem Unidade').trim();
       const b = String(item.bloco || '').trim();
       const chave = `${u}__${b}`;
-      const label = `Apt ${u}${b ? ` - Bloco ${b}` : ''}`;
+      const label = `Ap. ${u}${b ? ` - Bloco ${b}` : ''}`;
 
       if (!mapa[chave]) {
         mapa[chave] = {
@@ -1025,7 +1025,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   <div className="flex items-center justify-between gap-1 flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-black uppercase text-slate-900 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
-                        #{idx + 1} Apt {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
+                        #{idx + 1} Ap. {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
                       </span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
                         isConferido 
@@ -1145,10 +1145,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const volumesDetalhados = itensSelecionadosObjetos.map((it: any, idx: number) => {
         const cod = it.codigo_barras ? ` (Cód: ${it.codigo_barras})` : '';
         const loc = it.local_armazenamento ? ` [${it.local_armazenamento}]` : '';
-        return `  ${idx + 1}. Apt ${it.unidade}${it.bloco ? ' Bloco ' + it.bloco : ''}${cod}${loc}`;
+        return `  ${idx + 1}. Ap. ${it.unidade}${it.bloco ? ' Bloco ' + it.bloco : ''}${cod}${loc}`;
       }).join('\n');
 
-      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Apt ${primeiroItem?.unidade || ''}${primeiroItem?.bloco ? ' - Bloco ' + primeiroItem.bloco : ''}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: Ap. ${primeiroItem?.unidade || ''}${primeiroItem?.bloco ? ' - Bloco ' + primeiroItem.bloco : ''}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
 
       setBaixaConcluidaWhats({
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
@@ -1439,7 +1439,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   </div>
                   
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Unidade / AP *</label>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Unidade / Ap. *</label>
                     <input
                       type="number"
                       inputMode="numeric"
@@ -1710,11 +1710,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                           ? 'bg-slate-100 border-slate-400 shadow-2xs'
                           : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-2xs'
                       }`}
-                      title={`Clique para selecionar os ${item.qtd} pacote(s) do Apt ${item.unidade}`}
+                      title={`Clique para selecionar os ${item.qtd} pacote(s) do Ap. ${item.unidade}`}
                     >
                       <div className="flex items-center justify-between gap-1 w-full mb-1">
                         <span className="text-[11px] font-black text-slate-900 truncate">
-                          Apt {item.unidade}
+                          Ap. {item.unidade}
                         </span>
                         {/* BADGE / CONTADOR DE ENCOMENDAS PENDENTES */}
                         <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono flex items-center gap-0.5 shrink-0 ${
@@ -1808,7 +1808,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center gap-1.5">
                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-900 bg-slate-100 px-1.5 py-0.2 rounded">
-                              Apt {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
+                              Ap. {item.unidade}{item.bloco ? ` - Bloco ${item.bloco}` : ''}
                             </span>
                             <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-mono font-bold">
                               {new Date(item.created_at).toLocaleDateString('pt-BR')}
@@ -2228,7 +2228,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl text-xs space-y-1.5 text-slate-700">
                 <div className="flex justify-between items-center">
                   <strong className="text-slate-900 text-sm">
-                    Apt {itemParaMover.unidade}{itemParaMover.bloco ? ` - Bloco ${itemParaMover.bloco}` : ''}
+                    Ap. {itemParaMover.unidade}{itemParaMover.bloco ? ` - Bloco ${itemParaMover.bloco}` : ''}
                   </strong>
                   <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded font-mono">
                     {itemParaMover.codigo_barras || 'Sem rastreio'}
@@ -2281,7 +2281,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 />
                 <div>
                   <span className="font-bold block">
-                    Agrupar todas as encomendas do Apt {itemParaMover.unidade}{itemParaMover.bloco ? ` - Bloco ${itemParaMover.bloco}` : ''}
+                    Agrupar todas as encomendas do Ap. {itemParaMover.unidade}{itemParaMover.bloco ? ` - Bloco ${itemParaMover.bloco}` : ''}
                   </span>
                   <span className="text-[11px] text-slate-500">
                     Conforme chegam novos pacotes, move todos para ficarem juntos no mesmo local físico.
@@ -2480,7 +2480,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-black text-slate-900 text-sm">
-                                Apt {item.unidade} {item.bloco ? `• Bloco ${item.bloco}` : ''}
+                                Ap. {item.unidade} {item.bloco ? `• Bloco ${item.bloco}` : ''}
                               </span>
                               <span className="text-[11px] text-slate-500">
                                 ({item.moradores?.nome || 'Morador'})
@@ -2609,7 +2609,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                 const dataStr = new Date(item.data_retirada).toLocaleString('pt-BR');
                                 const msg = `📦 *COMPROVANTE DE ENTREGA DE ENCOMENDA - INFPORT*\n` +
                                   `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                                  `🏢 *Unidade:* Apt ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}\n` +
+                                  `🏢 *Unidade:* Ap. ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}\n` +
                                   `👤 *Destinatário Cadastrado:* ${item.moradores?.nome || 'Morador'}\n` +
                                   `🏷️ *Código de Rastreio:* ${item.codigo_barras || 'S/ Código'}\n` +
                                   `✅ *Status:* ENTREGUE COM SUCESSO\n` +
@@ -2657,7 +2657,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 <ShieldCheck className="w-3.5 h-3.5 text-purple-600" /> Dossiê Oficial de Auditoria & Custódia
               </span>
               <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-                Encomenda Apt {itemModalDossie.unidade} {itemModalDossie.bloco ? `• Bloco ${itemModalDossie.bloco}` : ''}
+                Encomenda Ap. {itemModalDossie.unidade} {itemModalDossie.bloco ? `• Bloco ${itemModalDossie.bloco}` : ''}
               </h3>
               <p className="text-xs text-slate-500">
                 Morador: <strong>{itemModalDossie.moradores?.nome || 'Não cadastrado'}</strong> • Telefone: {itemModalDossie.moradores?.telefone || 'S/ Tel'} • Código: <strong>{itemModalDossie.codigo_barras || 'S/ Rastreio'}</strong>
@@ -2757,7 +2757,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               <div className="bg-slate-950 p-3.5 rounded-2xl text-slate-200 font-mono text-[11px] space-y-1 border border-slate-800">
                 <div className="text-emerald-400 font-bold">DOSSIÊ INFPORT — REGISTRO DE AUDITORIA DE ENCOMENDA</div>
                 <div>ID: {itemModalDossie.id}</div>
-                <div>DESTINO: Apt {itemModalDossie.unidade} {itemModalDossie.bloco ? 'Bloco ' + itemModalDossie.bloco : ''}</div>
+                <div>DESTINO: Ap. {itemModalDossie.unidade} {itemModalDossie.bloco ? 'Bloco ' + itemModalDossie.bloco : ''}</div>
                 <div>MORADOR TITULAR: {itemModalDossie.moradores?.nome || 'Não informado'} ({itemModalDossie.moradores?.telefone || 'S/ Tel'})</div>
                 <div>CÓDIGO DE RASTREIO: {itemModalDossie.codigo_barras || itemModalDossie.codigo_rastreio || itemModalDossie.rastreio || (itemModalDossie.lotes_re?.codigo_re ? `Lote RE ${itemModalDossie.lotes_re.codigo_re}` : 'Sem código')}</div>
                 <div>LOCAL DE GUARDA: {itemModalDossie.local_armazenamento || 'Escaninho'}</div>
@@ -2780,7 +2780,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 onClick={() => {
                   const codDossie = itemModalDossie.codigo_barras || itemModalDossie.codigo_rastreio || itemModalDossie.rastreio || (itemModalDossie.lotes_re?.codigo_re ? `RE ${itemModalDossie.lotes_re.codigo_re}` : 'S/ Código');
                   const texto = `DOSSIÊ DE ENCOMENDA - INFPORT\n` +
-                    `Apt ${itemModalDossie.unidade} ${itemModalDossie.bloco ? 'Bloco ' + itemModalDossie.bloco : ''} - Morador: ${itemModalDossie.moradores?.nome || 'N/A'}\n` +
+                    `Ap. ${itemModalDossie.unidade} ${itemModalDossie.bloco ? 'Bloco ' + itemModalDossie.bloco : ''} - Morador: ${itemModalDossie.moradores?.nome || 'N/A'}\n` +
                     `Código de Rastreio: ${codDossie}\n` +
                     `Status: ${itemModalDossie.status === 'entregue' ? 'ENTREGUE' : 'RETIDO'}\n` +
                     `Entrada: ${new Date(itemModalDossie.created_at).toLocaleString('pt-BR')}\n` +

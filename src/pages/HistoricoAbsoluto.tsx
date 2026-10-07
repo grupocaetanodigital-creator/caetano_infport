@@ -65,6 +65,10 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const trintaDiasAtras = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
   const [tabelaSelecionada, setTabelaSelecionada] = useState('encomendas_itens');
+  const [escopoCondominioLimpeza, setEscopoCondominioLimpeza] = useState<string>(condominioAtivo?.id || 'todos');
+  const [detalhesPorTabelaLimpeza, setDetalhesPorTabelaLimpeza] = useState<{ id: string; nomeAmigavel: string; modulo: string; total: number; campoData: string }[]>([]);
+  const [detalheRemocaoConsolidada, setDetalheRemocaoConsolidada] = useState<Record<string, number> | null>(null);
+  const [erroConfirmacao, setErroConfirmacao] = useState<string | null>(null);
   const [limpezaDataInicio, setLimpezaDataInicio] = useState(trintaDiasAtras);
   const [limpezaDataFim, setLimpezaDataFim] = useState(hojeIso);
   const [limpezaMotivo, setLimpezaMotivo] = useState('Expurgo periódico e limpeza de histórico de portaria');
@@ -172,8 +176,9 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
     setErroConsulta(null);
     setConsultandoContagem(true);
     setResultadoLimpeza(null);
+    setDetalhesPorTabelaLimpeza([]);
     try {
-      const targetCondo = filtroCondominio !== 'todos' ? filtroCondominio : (condominioAtivo?.id || null);
+      const targetCondo = escopoCondominioLimpeza !== 'todos' ? escopoCondominioLimpeza : null;
       const res = await consultarRegistrosTabelaPeriodo({
         tabela: tabelaSelecionada,
         dataInicio: limpezaDataInicio,
@@ -183,6 +188,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
       setContagemPeriodo(res.total);
       setCampoDataUtilizado(res.campoDataUsado);
       setAmostrasExclusao(res.amostras || []);
+      setDetalhesPorTabelaLimpeza(res.detalhesPorTabela || []);
       if (res.erro && res.total === 0) {
         setErroConsulta(`Aviso: ${res.erro}`);
       }
@@ -195,11 +201,12 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const handleBaixarBackup = async () => {
     setBaixandoBackup(true);
     try {
+      const targetCondo = escopoCondominioLimpeza !== 'todos' ? escopoCondominioLimpeza : null;
       const dados = await baixarBackupSegurancaPeriodo({
         tabela: tabelaSelecionada,
         dataInicio: limpezaDataInicio,
         dataFim: limpezaDataFim,
-        condominio_id: condominioAtivo?.id
+        condominio_id: targetCondo
       });
 
       const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
@@ -219,19 +226,20 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   // Executa a exclusão irreversível controlada
   const handleExecutarLimpeza = async () => {
     if (textoConfirmacao.trim().toUpperCase() !== 'CONFIRMAR EXCLUSAO') {
-      alert('Para confirmar a exclusão com segurança, digite exatamente: CONFIRMAR EXCLUSAO');
+      setErroConfirmacao('Digite exatamente "CONFIRMAR EXCLUSAO" no campo abaixo para prosseguir com segurança.');
       return;
     }
-
+    setErroConfirmacao(null);
     setExecutandoLimpeza(true);
     setResultadoLimpeza(null);
 
     try {
+      const targetCondo = escopoCondominioLimpeza !== 'todos' ? escopoCondominioLimpeza : null;
       const res = await executarLimpezaTabelaPorPeriodo({
         tabela: tabelaSelecionada,
         dataInicio: limpezaDataInicio,
         dataFim: limpezaDataFim,
-        condominio_id: condominioAtivo?.id,
+        condominio_id: targetCondo,
         operador: {
           id: operadorLogado?.id,
           nome: operadorLogado?.nome || operadorLogado?.login || 'Administrador',
@@ -247,6 +255,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
           removidos: res.registrosRemovidos,
           msg: `Limpeza concluída com sucesso! ${res.registrosRemovidos} registro(s) foram apagados e auditados no histórico.`
         });
+        setDetalheRemocaoConsolidada(res.detalheRemocao || null);
         setContagemPeriodo(null);
         setTextoConfirmacao('');
         // Recarrega o feed para mostrar o log da limpeza gerado
@@ -458,6 +467,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                   <option value="Ocorrências">📖 Livro de Ocorrências</option>
                   <option value="Passagem de Posto">🔄 Passagem de Posto</option>
                   <option value="Prestadores">👷 Prestadores & Obras</option>
+                  <option value="Manutenção">🔧 Manutenção Predial & Checklists</option>
                   <option value="Cadastros">👥 Moradores & Unidades</option>
                   <option value="Limpeza de Dados">🧹 Limpeza de Dados (ADM)</option>
                   <option value="Sistema">⚙️ Sistema & Login</option>
@@ -667,11 +677,40 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
           {/* Formulário de Seleção e Período */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-6 shadow-xl">
             <div className="space-y-4">
-              {/* 1. Seleção da Tabela */}
+              {/* 1. Escopo de Condomínio */}
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-300 mb-2 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-purple-400" />
+                  1. Escopo de Condomínio para a Limpeza
+                </label>
+                <select
+                  value={escopoCondominioLimpeza}
+                  onChange={(e) => {
+                    setEscopoCondominioLimpeza(e.target.value);
+                    setContagemPeriodo(null);
+                    setResultadoLimpeza(null);
+                  }}
+                  className="w-full bg-slate-950 text-white font-bold text-sm p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
+                >
+                  <option value="todos">🌐 Todos os Condomínios (Base Geral do Sistema)</option>
+                  {listaCondominios.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      🏢 {c.nome} {c.id === condominioAtivo?.id ? ' (Condomínio Ativo)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  {escopoCondominioLimpeza === 'todos' 
+                    ? 'Atenção: A consulta e a limpeza serão aplicadas em todos os condomínios cadastrados.' 
+                    : 'A consulta e a limpeza serão restritas apenas ao condomínio selecionado acima.'}
+                </p>
+              </div>
+
+              {/* 2. Seleção da Tabela */}
               <div>
                 <label className="block text-xs font-black uppercase text-slate-300 mb-2 flex items-center gap-2">
                   <Database className="w-4 h-4 text-indigo-400" />
-                  1. Selecione a Tabela / Histórico para Limpeza
+                  2. Selecione a Tabela / Módulo para Limpeza
                 </label>
                 <select
                   value={tabelaSelecionada}
@@ -704,12 +743,12 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                 })()}
               </div>
 
-              {/* 2. Seleção do Período com Atalhos Dinâmicos */}
+              {/* 3. Seleção do Período com Atalhos Dinâmicos */}
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <label className="block text-xs font-black uppercase text-slate-300 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-emerald-400" />
-                    2. Selecione o Intervalo de Datas para Expurgo
+                    3. Selecione o Intervalo de Datas para Expurgo
                   </label>
 
                   {/* Atalhos Rápidos */}
@@ -858,6 +897,41 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                     )}
                   </div>
 
+                  {/* Grade de Detalhamento por Tabela (Quando Todas as Tabelas estiver selecionado) */}
+                  {detalhesPorTabelaLimpeza.length > 0 && (
+                    <div className="border-t border-slate-800 pt-3 space-y-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 block">
+                        Detalhamento por Módulo / Tabela (Expurgo Consolidado):
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {detalhesPorTabelaLimpeza.map((d) => (
+                          <div 
+                            key={d.id} 
+                            className={`p-2.5 rounded-xl border text-xs flex items-center justify-between ${
+                              d.total > 0 
+                                ? 'bg-rose-950/30 border-rose-800/60 text-white' 
+                                : 'bg-slate-900 border-slate-800 text-slate-400 opacity-60'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block truncate">
+                                {d.modulo}
+                              </span>
+                              <span className="font-bold text-xs truncate block">
+                                {d.nomeAmigavel}
+                              </span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-lg text-xs font-black font-mono shrink-0 ${
+                              d.total > 0 ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-500'
+                            }`}>
+                              {d.total}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Amostra dos Registros Localizados */}
                   {amostrasExclusao.length > 0 && (
                     <div className="border-t border-slate-800 pt-3 space-y-2">
@@ -867,11 +941,18 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                       <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                         {amostrasExclusao.map((am, idx) => (
                           <div key={idx} className="bg-slate-900 p-2 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono flex items-center justify-between gap-2">
-                            <span className="truncate flex-1">
-                              {am.descricao || am.titulo || am.nome || am.nome_completo || am.retirante_nome || am.codigo_barras || am.codigo_custodia || JSON.stringify(am).slice(0, 80)}
-                            </span>
+                            <div className="flex items-center gap-2 truncate flex-1">
+                              {am.__tabela_origem && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-indigo-300 border border-slate-700 shrink-0">
+                                  {am.__tabela_origem}
+                                </span>
+                              )}
+                              <span className="truncate">
+                                {am.descricao || am.titulo || am.nome || am.nome_completo || am.retirante_nome || am.codigo_re || am.codigo_barras || am.codigo_custodia || JSON.stringify(am).slice(0, 80)}
+                              </span>
+                            </div>
                             <span className="text-slate-500 text-[10px] shrink-0">
-                              {am.created_at ? new Date(am.created_at).toLocaleString('pt-BR') : (am.data_hora ? new Date(am.data_hora).toLocaleString('pt-BR') : '')}
+                              {am.created_at ? new Date(am.created_at).toLocaleString('pt-BR') : (am.data_hora ? new Date(am.data_hora).toLocaleString('pt-BR') : (am.data_hora_entrada ? new Date(am.data_hora_entrada).toLocaleString('pt-BR') : ''))}
                             </span>
                           </div>
                         ))}
@@ -889,11 +970,21 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                         </p>
                       </div>
 
+                      {erroConfirmacao && (
+                        <div className="p-2.5 bg-red-900/60 border border-red-500 rounded-xl text-xs text-red-200 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                          <span>{erroConfirmacao}</span>
+                        </div>
+                      )}
+
                       <div className="flex flex-col sm:flex-row gap-3">
                         <input
                           type="text"
                           value={textoConfirmacao}
-                          onChange={(e) => setTextoConfirmacao(e.target.value)}
+                          onChange={(e) => {
+                            setTextoConfirmacao(e.target.value);
+                            setErroConfirmacao(null);
+                          }}
                           placeholder="Digite: CONFIRMAR EXCLUSAO"
                           className="flex-1 bg-slate-900 text-white font-mono font-bold text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-rose-500 uppercase"
                         />
@@ -932,6 +1023,23 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                     <p className="text-xs mt-0.5 leading-relaxed">
                       {resultadoLimpeza.msg}
                     </p>
+                    {detalheRemocaoConsolidada && Object.keys(detalheRemocaoConsolidada).length > 0 && (
+                      <div className="mt-2.5 pt-2 border-t border-emerald-700/50 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-emerald-300 block">
+                          Detalhamento de registros removidos por tabela:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {Object.entries(detalheRemocaoConsolidada).map(([tId, qtd]) => {
+                            const defT = TABELAS_LIMPAGEM.find(t => t.id === tId);
+                            return (
+                              <span key={tId} className="px-2 py-0.5 rounded bg-emerald-900/60 border border-emerald-600/50 text-[11px] font-mono text-emerald-200">
+                                {defT ? defT.nomeAmigavel : tId}: <strong>{qtd}</strong>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

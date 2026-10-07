@@ -562,7 +562,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
           nome: p.nome_profissional || p.nome_completo || p.nome || 'Pessoa Autorizada',
           empresa: p.empresa || (p.perfil_acesso === 'autorizado' ? (p.parentesco_vinculo || 'Visitante/Família') : 'Autônomo'),
           documento: p.documento || 'Não informado',
-          destino: `${p.unidade ? 'Apt ' + p.unidade : (p.unidade_destino ? 'Apt ' + p.unidade_destino : '')} ${p.bloco ? 'Bloco ' + p.bloco : (p.bloco_destino ? 'Bloco ' + p.bloco_destino : '')}`.trim() || 'Área Comum',
+          destino: `${p.unidade ? 'Ap. ' + p.unidade : (p.unidade_destino ? 'Ap. ' + p.unidade_destino : '')} ${p.bloco ? 'Bloco ' + p.bloco : (p.bloco_destino ? 'Bloco ' + p.bloco_destino : '')}`.trim() || 'Área Comum',
           cracha: p.cracha || p.cracha_atribuido || 'Portaria',
           entradaEm: p.data_hora_entrada || p.created_at,
           tipoServico: p.tipo_servico || p.tipo || (p.perfil_acesso === 'autorizado' ? 'Visita Familiar' : 'Prestação de Serviço'),
@@ -586,7 +586,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         nome: p.nome_profissional || p.nome_completo || p.nome || 'Autorizado',
         empresa: p.empresa || (p.perfil_acesso === 'autorizado' ? (p.parentesco_vinculo || 'Familiar') : 'Serviço'),
         documento: p.documento || 'Não informado',
-        destino: `${p.unidade ? 'Apt ' + p.unidade : ''} ${p.bloco ? 'Bloco ' + p.bloco : ''}`.trim() || 'Área Comum',
+        destino: `${p.unidade ? 'Ap. ' + p.unidade : ''} ${p.bloco ? 'Bloco ' + p.bloco : ''}`.trim() || 'Área Comum',
         perfil: p.perfil_acesso || 'autorizado',
         validade: p.tipo_validade === 'permanente' ? 'Permanente' : `Até ${p.data_validade_fim ? new Date(p.data_validade_fim + 'T12:00:00').toLocaleDateString('pt-BR') : 'Hoje'}`,
         telefone: p.telefone || 'Não informado'
@@ -606,8 +606,8 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         id: c.id,
         codigo: c.codigo_custodia || 'CUST',
         descricao: c.descricao || 'Item em custódia',
-        origem: `${c.origem_nome_doc || 'Origem'} (${c.origem_unidade ? 'Apt ' + c.origem_unidade : c.origem_tipo || 'Externo'})`,
-        destino: `${c.destino_nome_doc || 'Destino'} (${c.destino_unidade ? 'Apt ' + c.destino_unidade : c.destino_tipo || 'Morador'})`,
+        origem: `${c.origem_nome_doc || 'Origem'} (${c.origem_unidade ? 'Ap. ' + c.origem_unidade : c.origem_tipo || 'Externo'})`,
+        destino: `${c.destino_nome_doc || 'Destino'} (${c.destino_unidade ? 'Ap. ' + c.destino_unidade : c.destino_tipo || 'Morador'})`,
         entradaEm: c.created_at,
         fotoUrl: c.foto_entrada_url
       }));

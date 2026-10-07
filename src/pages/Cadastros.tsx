@@ -817,7 +817,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
                         <div>
                           <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-200">
-                            Apt {m.unidade} {m.bloco ? `• Bloco ${m.bloco}` : ''}
+                            Ap. {m.unidade} {m.bloco ? `• Bloco ${m.bloco}` : ''}
                           </span>
                           <h4 className="font-extrabold text-slate-900 text-sm mt-1">{m.nome}</h4>
                         </div>

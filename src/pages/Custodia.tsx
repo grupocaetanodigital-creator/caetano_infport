@@ -216,7 +216,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
       if (error) throw error;
 
       const telDestino = destinoWhats.replace(/\D/g, '');
-      const textoWhats = `🔑 *ITEM EM CUSTÓDIA NA PORTARIA*\nCódigo: ${codigoCustodia}\nDe: ${origemNome} (${origemUnidade ? 'Apt ' + origemUnidade : 'Terceiro'})\nPara: ${destinoNome}\nDescrição: ${descricaoItem}\nFoto do Objeto: ${fotoEntradaUrl}\n\nPor favor, retire na guarita informando o código!`;
+      const textoWhats = `🔑 *ITEM EM CUSTÓDIA NA PORTARIA*\nCódigo: ${codigoCustodia}\nDe: ${origemNome} (${origemUnidade ? 'Ap. ' + origemUnidade : 'Terceiro'})\nPara: ${destinoNome}\nDescrição: ${descricaoItem}\nFoto do Objeto: ${fotoEntradaUrl}\n\nPor favor, retire na guarita informando o código!`;
 
       setWhatsEntradaLink({
         codigo: codigoCustodia,
@@ -548,7 +548,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 uppercase">Unidade / AP *</label>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase">Unidade / Ap. *</label>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -583,7 +583,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                     {moradoresOrigemFiltrados.length > 0 && (
                       <div className="space-y-1">
                         <label className="block text-[10px] font-bold text-emerald-800 uppercase">
-                          Moradores do Ap {origemUnidade}:
+                          Moradores do Ap. {origemUnidade}:
                         </label>
                         <div className="flex flex-wrap gap-1">
                           {moradoresOrigemFiltrados.map((m) => (
@@ -650,7 +650,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Unidade / AP *</label>
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Unidade / Ap. *</label>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -685,7 +685,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                     {moradoresDestinoFiltrados.length > 0 && (
                       <div className="space-y-1">
                         <label className="block text-[10px] font-bold text-blue-800 uppercase">
-                          Moradores do Ap {destinoUnidade}:
+                          Moradores do Ap. {destinoUnidade}:
                         </label>
                         <div className="flex flex-wrap gap-1">
                           {moradoresDestinoFiltrados.map((m) => (
@@ -854,10 +854,10 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
 
                 <div className="text-[11px] text-slate-600 space-y-0.5 bg-white p-2 rounded-md border border-slate-200">
                   <p className="truncate">
-                    <span className="font-bold text-slate-800">De:</span> {item.origem_nome_doc} {item.origem_unidade ? `(Ap ${item.origem_unidade})` : ''}
+                    <span className="font-bold text-slate-800">De:</span> {item.origem_nome_doc} {item.origem_unidade ? `(Ap. ${item.origem_unidade})` : ''}
                   </p>
                   <p className="truncate">
-                    <span className="font-bold text-slate-800">Para:</span> {item.destino_nome_doc} {item.destino_unidade ? `(Ap ${item.destino_unidade})` : ''}
+                    <span className="font-bold text-slate-800">Para:</span> {item.destino_nome_doc} {item.destino_unidade ? `(Ap. ${item.destino_unidade})` : ''}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
                     <Clock className="w-2.5 h-2.5" /> {new Date(item.data_hora_entrada || item.created_at).toLocaleString('pt-BR')}
@@ -1227,7 +1227,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                             {item.origem_nome_doc || 'Não informado'}
                           </p>
                           <p className="text-[11px] text-slate-600">
-                            {item.origem_unidade ? `Apt ${item.origem_unidade} ${item.origem_bloco ? '• Bl ' + item.origem_bloco : ''}` : item.origem_tipo || 'Externo'}
+                            {item.origem_unidade ? `Ap. ${item.origem_unidade} ${item.origem_bloco ? '• Bl ' + item.origem_bloco : ''}` : item.origem_tipo || 'Externo'}
                           </p>
                           {item.origem_whats && (
                             <p className="text-[10px] text-slate-500 font-mono">
@@ -1249,7 +1249,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                             {item.destino_nome_doc || 'Não informado'}
                           </p>
                           <p className="text-[11px] text-slate-600">
-                            {item.destino_unidade ? `Apt ${item.destino_unidade} ${item.destino_bloco ? '• Bl ' + item.destino_bloco : ''}` : item.destino_tipo || 'Terceiro'}
+                            {item.destino_unidade ? `Ap. ${item.destino_unidade} ${item.destino_bloco ? '• Bl ' + item.destino_bloco : ''}` : item.destino_tipo || 'Terceiro'}
                           </p>
                           {item.destino_whats && (
                             <p className="text-[10px] text-slate-500 font-mono">
@@ -1328,8 +1328,8 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                               `Código: ${item.codigo_custodia}\n` +
                               `Item: ${item.descricao}\n` +
                               `Status: ${estaRetirado ? 'RETIRADO / DEVOLVIDO' : 'EM GUARDA NA PORTARIA'}\n` +
-                              `De: ${item.origem_nome_doc} ${item.origem_unidade ? '(Apt ' + item.origem_unidade + ')' : ''}\n` +
-                              `Para: ${item.destino_nome_doc} ${item.destino_unidade ? '(Apt ' + item.destino_unidade + ')' : ''}\n` +
+                              `De: ${item.origem_nome_doc} ${item.origem_unidade ? '(Ap. ' + item.origem_unidade + ')' : ''}\n` +
+                              `Para: ${item.destino_nome_doc} ${item.destino_unidade ? '(Ap. ' + item.destino_unidade + ')' : ''}\n` +
                               `Entrada: ${new Date(item.created_at || item.data_hora_entrada).toLocaleString('pt-BR')} por ${item.operador_entrada || 'Portaria'}\n` +
                               (estaRetirado ? `Devolvido em: ${new Date(item.data_hora_saida).toLocaleString('pt-BR')} para ${item.recebedor_nome} (Doc: ${item.recebedor_doc || 'N/I'}) por ${item.operador_saida}\n` : '') +
                               `Foto Entrada: ${item.foto_entrada_url || 'N/A'}\n` +
@@ -1429,8 +1429,8 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                       {new Date(itemDossieModal.created_at || itemDossieModal.data_hora_entrada).toLocaleString('pt-BR')}
                     </span>
                   </div>
-                  <p><strong>Entregue por:</strong> {itemDossieModal.origem_nome_doc} {itemDossieModal.origem_unidade ? `(Apt ${itemDossieModal.origem_unidade} ${itemDossieModal.origem_bloco ? 'Bl ' + itemDossieModal.origem_bloco : ''})` : ''}</p>
-                  <p><strong>Destinatário Previsto:</strong> {itemDossieModal.destino_nome_doc} {itemDossieModal.destino_unidade ? `(Apt ${itemDossieModal.destino_unidade})` : ''}</p>
+                  <p><strong>Entregue por:</strong> {itemDossieModal.origem_nome_doc} {itemDossieModal.origem_unidade ? `(Ap. ${itemDossieModal.origem_unidade} ${itemDossieModal.origem_bloco ? 'Bl ' + itemDossieModal.origem_bloco : ''})` : ''}</p>
+                  <p><strong>Destinatário Previsto:</strong> {itemDossieModal.destino_nome_doc} {itemDossieModal.destino_unidade ? `(Ap. ${itemDossieModal.destino_unidade})` : ''}</p>
                   <p className="text-[10px] text-slate-500">Operador Responsável: <strong>{itemDossieModal.operador_entrada || 'Portaria'}</strong></p>
                 </div>
               </div>
@@ -1507,8 +1507,8 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                     `Código: ${itemDossieModal.codigo_custodia}\n` +
                     `Item: ${itemDossieModal.descricao}\n` +
                     `Status: ${itemDossieModal.status}\n` +
-                    `De: ${itemDossieModal.origem_nome_doc} ${itemDossieModal.origem_unidade ? '(Apt ' + itemDossieModal.origem_unidade + ')' : ''}\n` +
-                    `Para: ${itemDossieModal.destino_nome_doc} ${itemDossieModal.destino_unidade ? '(Apt ' + itemDossieModal.destino_unidade + ')' : ''}\n` +
+                    `De: ${itemDossieModal.origem_nome_doc} ${itemDossieModal.origem_unidade ? '(Ap. ' + itemDossieModal.origem_unidade + ')' : ''}\n` +
+                    `Para: ${itemDossieModal.destino_nome_doc} ${itemDossieModal.destino_unidade ? '(Ap. ' + itemDossieModal.destino_unidade + ')' : ''}\n` +
                     `Entrada: ${new Date(itemDossieModal.created_at || itemDossieModal.data_hora_entrada).toLocaleString('pt-BR')} por ${itemDossieModal.operador_entrada || 'Portaria'}\n` +
                     (itemDossieModal.status?.toLowerCase() === 'retirado' ? `Devolvido em: ${new Date(itemDossieModal.data_hora_saida).toLocaleString('pt-BR')} para ${itemDossieModal.recebedor_nome} (Doc: ${itemDossieModal.recebedor_doc || 'N/I'}) por ${itemDossieModal.operador_saida}\n` : '') +
                     `Foto Entrada: ${itemDossieModal.foto_entrada_url || 'N/A'}\n` +

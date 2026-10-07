@@ -820,7 +820,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         (!item.bloco || m.bloco?.toString().trim().toLowerCase() === item.bloco?.toString().trim().toLowerCase())
       );
       const telMorador = moradorDestino?.telefone?.replace(/\D/g, '') || item.telefone?.replace(/\D/g, '') || '';
-      const texto = `Olá! Informamos que *${nome}* acabou de registrar *ENTRADA* na portaria para a sua unidade (Apt ${item.unidade}${item.bloco ? ' Bloco ' + item.bloco : ''}) às *${hora}*.`;
+      const texto = `Olá! Informamos que *${nome}* acabou de registrar *ENTRADA* na portaria para a sua unidade (Ap. ${item.unidade}${item.bloco ? ' Bloco ' + item.bloco : ''}) às *${hora}*.`;
       const url = telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(texto)}` : `https://wa.me/?text=${encodeURIComponent(texto)}`;
       window.open(url, '_blank');
     }
@@ -1099,7 +1099,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                         <div className="flex items-center justify-between text-slate-300">
                           <span className="text-slate-400">Destino:</span>
                           <span className="font-bold text-white">
-                            {perfil === 'prestador_condominio' ? 'Área Comum / Condomínio' : `Apto ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}`}
+                            {perfil === 'prestador_condominio' ? 'Área Comum / Condomínio' : `Ap. ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}`}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-slate-300">
@@ -1194,7 +1194,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                     type="text"
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
-                    placeholder="Nome, documento, apto, empresa..."
+                    placeholder="Nome, documento, ap., empresa..."
                     className="w-full bg-slate-950 text-white text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
                   />
                 </div>
@@ -1301,7 +1301,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                           )}
                           <span>
                             Destino: <strong className="text-amber-300">
-                              {perfil === 'prestador_condominio' ? 'Área Comum' : `Apt ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}`}
+                              {perfil === 'prestador_condominio' ? 'Área Comum' : `Ap. ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}`}
                             </strong>
                           </span>
                         </div>
@@ -1397,7 +1397,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                         {h.cracha && <span className="font-mono text-amber-300">Crachá {h.cracha}</span>}
                       </div>
                       <p className="text-slate-400 text-[11px] mt-0.5">
-                        Destino: <strong className="text-slate-200">Apt {h.unidade} {h.bloco || ''}</strong> • Empresa/Vínculo: {h.empresa || h.parentesco_vinculo || 'Geral'}
+                        Destino: <strong className="text-slate-200">Ap. {h.unidade} {h.bloco || ''}</strong> • Empresa/Vínculo: {h.empresa || h.parentesco_vinculo || 'Geral'}
                       </p>
                     </div>
 
@@ -1429,7 +1429,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                     {modalEditarCadastro ? 'Editar Cadastro / Liberação' : 'Nova Liberação de Acesso'}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    {modalEditarCadastro ? 'Atualize dados, validade ou fotos da pessoa' : 'Cadastre a autorização para familiares, prestadores de apto ou condomínio'}
+                    {modalEditarCadastro ? 'Atualize dados, validade ou fotos da pessoa' : 'Cadastre a autorização para familiares, prestadores de ap. ou condomínio'}
                   </p>
                 </div>
               </div>
@@ -1886,7 +1886,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                   {itemSelecionado.nome_profissional || itemSelecionado.nome_completo}
                 </h4>
                 <p className="text-xs text-slate-300">
-                  {itemSelecionado.empresa || itemSelecionado.parentesco_vinculo || 'Visitante'} • Destino: <strong>Apt {itemSelecionado.unidade} {itemSelecionado.bloco || ''}</strong>
+                  {itemSelecionado.empresa || itemSelecionado.parentesco_vinculo || 'Visitante'} • Destino: <strong>Ap. {itemSelecionado.unidade} {itemSelecionado.bloco || ''}</strong>
                 </p>
               </div>
             </div>
@@ -2076,7 +2076,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 {itemSelecionado.nome_completo || itemSelecionado.nome_profissional}
               </strong>
               <p className="text-xs text-slate-400">
-                Destino: Apt {itemSelecionado.unidade} {itemSelecionado.bloco || ''}
+                Destino: Ap. {itemSelecionado.unidade} {itemSelecionado.bloco || ''}
               </p>
               {itemSelecionado.cracha && (
                 <p className="text-xs text-amber-300 font-mono font-bold pt-1">

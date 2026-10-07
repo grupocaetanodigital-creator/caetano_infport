@@ -562,7 +562,7 @@ export default function TabelasResumoPosto({
                     <th className="p-2.5">Setor</th>
                     <th className="p-2.5">Com Quem Está</th>
                     <th className="p-2.5">Documento / Fone</th>
-                    <th className="p-2.5">Empresa / Apto</th>
+                    <th className="p-2.5">Empresa / Ap.</th>
                     <th className="p-2.5">Retirada Em</th>
                     <th className="p-2.5 text-center">Status</th>
                   </tr>
