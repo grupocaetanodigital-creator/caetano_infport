@@ -1549,7 +1549,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                       </div>
                       <div className="text-[10px]">
                         {consolidacao.prestadores.totalPresentes > 0 ? (
-                          <span className="text-blue-700 font-bold">Ver crachás e aptos</span>
+                          <span className="text-blue-700 font-bold">Ver crachás e Aps.</span>
                         ) : (
                           <span className="text-slate-500">Nenhum no momento</span>
                         )}
