@@ -36,8 +36,13 @@ import {
   OPCOES_ESCALA, 
   OPCOES_TIPO_ESTRUTURA,
   isEstruturaCasas,
+  isEstruturaTorres,
+  isEstruturaBlocos,
+  isEstruturaNumeralDireto,
   getNomeRotuloBloco,
   getNomeRotuloUnidade,
+  obterListaBlocosOuTorres,
+  formatarIdentificacaoUnidade,
   gerarCardsUnidadesCondominio,
   saoUnidadesEquivalentes,
   normalizarNumeroUnidade,
@@ -400,11 +405,15 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setLoading(true);
 
     try {
+      const nivelNum = parseInt(nivelAcesso, 10);
+      const perfilStr = nivelNum === 0 ? 'admin' : nivelNum === 1 ? 'master' : nivelNum === 2 ? 'supervisor' : nivelNum === 4 ? 'sindico' : 'operador';
+
       if (idEdicao) {
         const dadosAtualizacao: any = {
           nome: nomeOperador.trim(),
-          login: loginOperador.trim(),
-          nivel_acesso: parseInt(nivelAcesso),
+          login: loginOperador.trim().toLowerCase(),
+          nivel_acesso: nivelNum,
+          perfil: perfilStr,
           condominio_id: targetCondominioId
         };
         if (senhaOperador.trim()) {
@@ -429,7 +438,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             nome: nomeOperador.trim(),
             login: loginOperador.trim().toLowerCase(),
             senha: senhaOperador.trim(),
-            nivel_acesso: parseInt(nivelAcesso),
+            nivel_acesso: nivelNum,
+            perfil: perfilStr,
             condominio_id: targetCondominioId,
             ativo: true
           }
@@ -451,10 +461,13 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const prepararEdicaoOperador = (op: any) => {
     if (eOperador) return;
     setIdEdicao(op.id);
-    setNomeOperador(op.nome);
-    setLoginOperador(op.login);
+    setNomeOperador(op.nome || '');
+    setLoginOperador(op.login || '');
     setSenhaOperador('');
-    setNivelAcesso(String(op.nivel_acesso));
+    const nivelDefinido = (op.nivel_acesso !== undefined && op.nivel_acesso !== null && !isNaN(Number(op.nivel_acesso)))
+      ? String(op.nivel_acesso)
+      : (op.perfil === 'admin' ? '0' : op.perfil === 'master' ? '1' : op.perfil === 'supervisor' ? '2' : (op.perfil === 'sindico' || op.perfil === 'Síndico') ? '4' : '3');
+    setNivelAcesso(nivelDefinido);
     setCondominioIdOperador(op.condominio_id || '');
     setTipoModalFlutuante('operador');
     setModalFlutuanteAberto(true);
@@ -1175,29 +1188,33 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 return (op.nome || '').toLowerCase().includes(termo) || (op.login || '').toLowerCase().includes(termo);
               })
               .map((op) => {
-                const nivelStr = op.nivel_acesso === 0 
+                const nivelStr = op.nivel_acesso === 0 || op.perfil === 'admin'
                   ? 'Admin Geral' 
-                  : op.nivel_acesso === 1 
-                  ? 'Master (Síndico)' 
-                  : op.nivel_acesso === 2 
+                  : op.nivel_acesso === 1 || op.perfil === 'master'
+                  ? 'Master (Auditoria)' 
+                  : op.nivel_acesso === 2 || op.perfil === 'supervisor'
                   ? 'Supervisor' 
+                  : op.nivel_acesso === 4 || op.perfil === 'sindico'
+                  ? 'Síndico'
                   : 'Operador Guarita';
+
+                const badgeCor = op.nivel_acesso === 0 || op.perfil === 'admin'
+                  ? 'bg-purple-100 text-purple-900 border-purple-200' 
+                  : op.nivel_acesso === 1 || op.perfil === 'master'
+                  ? 'bg-amber-100 text-amber-900 border-amber-200' 
+                  : op.nivel_acesso === 4 || op.perfil === 'sindico'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                  : 'bg-blue-100 text-blue-900 border-blue-200';
 
                 return (
                   <div 
-                    key={op.id}
+                    key={op.id} 
                     className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-blue-300 transition space-y-3 flex flex-col justify-between"
                   >
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
                         <div>
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
-                            op.nivel_acesso === 0 
-                              ? 'bg-purple-100 text-purple-900 border-purple-200' 
-                              : op.nivel_acesso === 1 
-                              ? 'bg-amber-100 text-amber-900 border-amber-200' 
-                              : 'bg-blue-100 text-blue-900 border-blue-200'
-                          }`}>
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${badgeCor}`}>
                             {nivelStr}
                           </span>
                           <h4 className="font-extrabold text-slate-900 text-sm mt-1">{op.nome}</h4>
@@ -2173,12 +2190,13 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   <select
                     value={nivelAcesso}
                     onChange={(e) => setNivelAcesso(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
                   >
-                    {eAdmin && <option value="0">Nível 0 — Administrador Geral</option>}
-                    <option value="1">Nível 1 — Master (Síndico / Auditoria)</option>
+                    {(eAdmin || nivelAcesso === '0') && <option value="0">Nível 0 — Administrador Geral</option>}
+                    <option value="1">Nível 1 — Master (Auditoria e Controle)</option>
                     <option value="2">Nível 2 — Supervisor de Segurança</option>
                     <option value="3">Nível 3 — Operador de Guarita / Portaria</option>
+                    <option value="4">Nível 4 — Síndico (Visualização e Relatórios)</option>
                   </select>
                 </div>
 
@@ -2211,7 +2229,14 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     </label>
                     <select
                       value={condominioIdMorador}
-                      onChange={(e) => setCondominioIdMorador(e.target.value)}
+                      onChange={(e) => {
+                        const novoId = e.target.value;
+                        setCondominioIdMorador(novoId);
+                        const cfgNovo = mapaConfigsCondos[novoId];
+                        if (isEstruturaCasas(cfgNovo?.tipo_estrutura)) {
+                          setBlocoMorador('Casa');
+                        }
+                      }}
                       required
                       className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
                     >
@@ -2242,9 +2267,18 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   const targetCondo = eAdmin ? (condominioIdMorador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
                   const cfgTarget = mapaConfigsCondos[targetCondo];
                   const eCasasModal = isEstruturaCasas(cfgTarget?.tipo_estrutura);
+                  const eTorresModal = isEstruturaTorres(cfgTarget?.tipo_estrutura);
+                  const eNumeralModal = isEstruturaNumeralDireto(cfgTarget?.tipo_estrutura);
+                  const listaBlocosSugestao = obterListaBlocosOuTorres(cfgTarget, moradores);
+                  const rotuloBlocoModal = eTorresModal ? 'Torre' : 'Bloco';
+                  const rotuloUnidadeModal = eCasasModal 
+                    ? 'Número da Casa *' 
+                    : eNumeralModal 
+                    ? 'Número da Unidade / Lote *' 
+                    : 'Apartamento / Unidade *';
 
                   return (
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className={eNumeralModal ? 'space-y-2' : 'grid grid-cols-2 gap-2.5'}>
                       {eCasasModal ? (
                         <div>
                           <label className="block text-[11px] font-bold text-emerald-900 uppercase mb-1 flex items-center gap-1">
@@ -2257,31 +2291,64 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                             </span>
                           </div>
                         </div>
-                      ) : (
+                      ) : eNumeralModal ? null : (
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                            Bloco / Torre
-                          </label>
-                          <input
-                            type="text"
-                            value={blocoMorador}
-                            onChange={(e) => setBlocoMorador(e.target.value)}
-                            placeholder="Ex: Bloco A"
-                            className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
-                          />
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                              {rotuloBlocoModal} *
+                            </label>
+                            {listaBlocosSugestao.length > 0 && (
+                              <span className="text-[10px] text-purple-700 font-bold">
+                                {listaBlocosSugestao.length} {eTorresModal ? 'torres' : 'blocos'} cadastrados
+                              </span>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              list="lista-sugestoes-blocos"
+                              value={blocoMorador}
+                              onChange={(e) => setBlocoMorador(e.target.value)}
+                              placeholder={eTorresModal ? "Selecione ou digite a Torre..." : "Selecione ou digite o Bloco..."}
+                              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                            />
+                            <datalist id="lista-sugestoes-blocos">
+                              {listaBlocosSugestao.map((b) => (
+                                <option key={b} value={b} />
+                              ))}
+                            </datalist>
+                          </div>
+                          {listaBlocosSugestao.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto">
+                              {listaBlocosSugestao.map((b) => (
+                                <button
+                                  key={b}
+                                  type="button"
+                                  onClick={() => setBlocoMorador(b)}
+                                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                                    blocoMorador.toLowerCase() === b.toLowerCase()
+                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-purple-50 hover:text-purple-700'
+                                  }`}
+                                >
+                                  {b}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                          {eCasasModal ? 'Número da Casa *' : 'Unidade / Apartamento *'}
+                          {rotuloUnidadeModal}
                         </label>
                         <input
                           type="text"
                           required
                           value={unidadeMorador}
                           onChange={(e) => setUnidadeMorador(e.target.value)}
-                          placeholder={eCasasModal ? "Ex: 117" : "Ex: 101"}
+                          placeholder={eCasasModal ? "Ex: 01 ou 117" : "Ex: 101"}
                           className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
                         />
                       </div>
