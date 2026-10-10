@@ -12,6 +12,132 @@ export interface CondominioConfig {
   telefone_portaria?: string;
   sindico_nome?: string;
   sindico_whatsapp?: string;
+  tipo_estrutura?: 'casas' | 'blocos' | 'torres' | 'numeral_direto' | string;
+  qtd_blocos?: number;
+  unidades_por_bloco?: number;
+  nomes_blocos?: string;
+}
+
+export type TipoEstruturaCondominio = 'casas' | 'blocos' | 'torres' | 'numeral_direto';
+
+export const OPCOES_TIPO_ESTRUTURA: {
+  id: TipoEstruturaCondominio;
+  label: string;
+  descricao: string;
+  rotuloBloco: string;
+  rotuloUnidade: string;
+}[] = [
+  {
+    id: 'casas',
+    label: '🏡 Condomínio de Casas (Casas Horizontais)',
+    descricao: 'Onde seria "Bloco" vira "Casa" fixo em todo o sistema. Ideal para vilas e residenciais.',
+    rotuloBloco: 'Casa',
+    rotuloUnidade: 'Número da Casa'
+  },
+  {
+    id: 'blocos',
+    label: '🏢 Condomínio de Apartamentos / Edifícios',
+    descricao: 'Estrutura tradicional com Blocos e Apartamentos.',
+    rotuloBloco: 'Bloco',
+    rotuloUnidade: 'Apartamento'
+  },
+  {
+    id: 'torres',
+    label: '🏙️ Condomínio de Torres',
+    descricao: 'Estrutura vertical com Torres e Apartamentos.',
+    rotuloBloco: 'Torre',
+    rotuloUnidade: 'Apartamento'
+  },
+  {
+    id: 'numeral_direto',
+    label: '🔢 Numeral Direto / Lotes',
+    descricao: 'Numeração sequencial contínua sem necessidade de bloco.',
+    rotuloBloco: 'Unidade',
+    rotuloUnidade: 'Lote / Unidade'
+  }
+];
+
+export function isEstruturaCasas(tipo?: string): boolean {
+  if (!tipo) return true; // Padrão inteligente
+  const lower = tipo.toString().toLowerCase();
+  return lower.includes('casa');
+}
+
+export function getNomeRotuloBloco(tipo?: string): string {
+  if (isEstruturaCasas(tipo)) return 'Casa';
+  if (!tipo) return 'Bloco';
+  const lower = tipo.toString().toLowerCase();
+  if (lower.includes('torre')) return 'Torre';
+  if (lower.includes('numeral') || lower.includes('lote')) return 'Unidade';
+  return 'Bloco';
+}
+
+export function getNomeRotuloUnidade(tipo?: string): string {
+  if (isEstruturaCasas(tipo)) return 'Casa';
+  if (!tipo) return 'Apartamento';
+  const lower = tipo.toString().toLowerCase();
+  if (lower.includes('numeral') || lower.includes('lote')) return 'Lote';
+  return 'Apartamento';
+}
+
+export interface UnidadeEstruturada {
+  id: string; // Ex: "casa-1" ou "bloco-A-ap-101"
+  numero: string; // Ex: "1", "101"
+  bloco: string; // Ex: "Casa", "A"
+  label: string; // Ex: "Casa 1" ou "Bloco A - Ap. 101"
+}
+
+export function gerarCardsUnidadesCondominio(config?: CondominioConfig | null): UnidadeEstruturada[] {
+  const lista: UnidadeEstruturada[] = [];
+  if (!config) return lista;
+
+  const tipo = config.tipo_estrutura || 'casas';
+  const eCasas = isEstruturaCasas(tipo);
+  const totalCasas = config.unidades_por_bloco ? Number(config.unidades_por_bloco) : 117;
+
+  if (eCasas) {
+    const qtd = Math.max(1, Math.min(totalCasas, 1000));
+    for (let i = 1; i <= qtd; i++) {
+      lista.push({
+        id: `casa-${i}`,
+        numero: String(i),
+        bloco: 'Casa',
+        label: `Casa ${i}`
+      });
+    }
+  } else if (tipo === 'numeral_direto') {
+    const qtd = Math.max(1, Math.min(totalCasas, 1000));
+    for (let i = 1; i <= qtd; i++) {
+      lista.push({
+        id: `und-${i}`,
+        numero: String(i),
+        bloco: '',
+        label: `Unidade ${i}`
+      });
+    }
+  } else {
+    // blocos ou torres
+    const qBlocos = Math.max(1, Math.min(Number(config.qtd_blocos) || 1, 50));
+    const nomesBlocosCustom = config.nomes_blocos 
+      ? config.nomes_blocos.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const undPorBloco = Math.max(1, Math.min(Number(config.unidades_por_bloco) || 20, 200));
+
+    for (let b = 0; b < qBlocos; b++) {
+      const nomeBloco = nomesBlocosCustom[b] || (tipo === 'torres' ? `Torre ${b + 1}` : `Bloco ${String.fromCharCode(65 + b)}`);
+      for (let u = 1; u <= undPorBloco; u++) {
+        const numFormatado = u < 100 ? (100 + u) : u;
+        lista.push({
+          id: `${nomeBloco}-${numFormatado}`,
+          numero: String(numFormatado),
+          bloco: nomeBloco,
+          label: `${nomeBloco} • Ap. ${numFormatado}`
+        });
+      }
+    }
+  }
+
+  return lista;
 }
 
 export const OPCOES_ESCALA = [
@@ -88,7 +214,11 @@ export async function carregarCondominioConfig(condominioId: string): Promise<Co
     whatsapp_grupo_url: '',
     telefone_portaria: '',
     sindico_nome: '',
-    sindico_whatsapp: ''
+    sindico_whatsapp: '',
+    tipo_estrutura: 'casas',
+    qtd_blocos: 1,
+    unidades_por_bloco: 117,
+    nomes_blocos: ''
   };
 
   if (local) {
@@ -107,6 +237,18 @@ export async function carregarCondominioConfig(condominioId: string): Promise<Co
       defaultConfig.endereco = data.endereco || defaultConfig.endereco;
 
       // Se existirem colunas específicas no Supabase:
+      if (data.tipo_estrutura) {
+        defaultConfig.tipo_estrutura = data.tipo_estrutura;
+      }
+      if (data.qtd_blocos !== undefined && data.qtd_blocos !== null) {
+        defaultConfig.qtd_blocos = Number(data.qtd_blocos);
+      }
+      if (data.unidades_por_bloco !== undefined && data.unidades_por_bloco !== null) {
+        defaultConfig.unidades_por_bloco = Number(data.unidades_por_bloco);
+      }
+      if (data.nomes_blocos) {
+        defaultConfig.nomes_blocos = data.nomes_blocos;
+      }
       if (data.whatsapp_grupo_url) {
         defaultConfig.whatsapp_grupo_url = data.whatsapp_grupo_url;
       }
@@ -169,6 +311,10 @@ export async function salvarCondominioConfig(
     // Tentar com as colunas extras
     const updateCompleto: any = {
       ...updateBasico,
+      tipo_estrutura: atualizada.tipo_estrutura || 'casas',
+      qtd_blocos: atualizada.qtd_blocos !== undefined ? Number(atualizada.qtd_blocos) : 1,
+      unidades_por_bloco: atualizada.unidades_por_bloco !== undefined ? Number(atualizada.unidades_por_bloco) : 117,
+      nomes_blocos: atualizada.nomes_blocos || '',
       whatsapp_grupo_url: atualizada.whatsapp_grupo_url,
       escala_plantao: atualizada.escala_plantao,
       horario_diurno_inicio: atualizada.horario_diurno_inicio,

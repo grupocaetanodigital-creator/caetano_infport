@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { 
   Building2, 
@@ -18,12 +18,27 @@ import {
   ExternalLink,
   Phone,
   Sparkles,
-  Edit3
+  Edit3,
+  LayoutGrid,
+  List,
+  Trash2,
+  Check,
+  ArrowRight,
+  UserCheck,
+  Layers,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { 
   carregarCondominioConfig, 
   salvarCondominioConfig, 
   OPCOES_ESCALA, 
+  OPCOES_TIPO_ESTRUTURA,
+  isEstruturaCasas,
+  getNomeRotuloBloco,
+  getNomeRotuloUnidade,
+  gerarCardsUnidadesCondominio,
+  UnidadeEstruturada,
   CondominioConfig 
 } from '../services/condominioService';
 
@@ -57,9 +72,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [buscaOperador, setBuscaOperador] = useState('');
   const [termoBuscaMorador, setTermoBuscaMorador] = useState('');
 
+  // Estrutura e Visualização de Unidades
+  const [modoVisaoMoradores, setModoVisaoMoradores] = useState<'cards_unidades' | 'lista_moradores'>('cards_unidades');
+  const [filtroStatusUnidade, setFiltroStatusUnidade] = useState<'todas' | 'ocupadas' | 'vagas'>('todas');
+
   // Formulário Condomínio
   const [nomeCondominio, setNomeCondominio] = useState('');
   const [enderecoCondominio, setEnderecoCondominio] = useState('');
+  const [tipoEstruturaCondominio, setTipoEstruturaCondominio] = useState<string>('casas');
+  const [unidadesPorBlocoCondominio, setUnidadesPorBlocoCondominio] = useState<number>(117);
+  const [qtdBlocosCondominio, setQtdBlocosCondominio] = useState<number>(1);
+  const [nomesBlocosCondominio, setNomesBlocosCondominio] = useState<string>('');
   const [escalaPlantao, setEscalaPlantao] = useState<'06_18' | '07_19' | '08_20' | 'personalizado'>('06_18');
   const [horarioDiurnoInicio, setHorarioDiurnoInicio] = useState('06:00');
   const [horarioNoturnoInicio, setHorarioNoturnoInicio] = useState('18:00');
@@ -82,6 +105,13 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [telefoneMorador, setTelefoneMorador] = useState('');
   const [condominioIdMorador, setCondominioIdMorador] = useState('');
 
+  // Identificação do condomínio ativo em foco
+  const condoAtivoId = eAdmin 
+    ? (condominioFiltroAdmin || (condominios[0]?.id || ''))
+    : (usuarioLogado?.condominio_id || '');
+  const configCondoAtivo = mapaConfigsCondos[condoAtivoId];
+  const eEstruturaCasasAtivo = isEstruturaCasas(configCondoAtivo?.tipo_estrutura);
+
   useEffect(() => {
     carregarDados();
   }, [abaAtiva, condominioFiltroAdmin]);
@@ -90,6 +120,10 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setIdEdicao(null);
     setNomeCondominio('');
     setEnderecoCondominio('');
+    setTipoEstruturaCondominio('casas');
+    setUnidadesPorBlocoCondominio(117);
+    setQtdBlocosCondominio(1);
+    setNomesBlocosCondominio('');
     setEscalaPlantao('06_18');
     setHorarioDiurnoInicio('06:00');
     setHorarioNoturnoInicio('18:00');
@@ -103,7 +137,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setNivelAcesso('3');
     setCondominioIdOperador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
     setNomeMorador('');
-    setBlocoMorador('');
+    setBlocoMorador(eEstruturaCasasAtivo ? 'Casa' : '');
     setUnidadeMorador('');
     setTelefoneMorador('');
     setCondominioIdMorador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
@@ -127,9 +161,25 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setModalFlutuanteAberto(true);
   };
 
-  const abrirNovoMorador = () => {
+  const abrirNovoMorador = (unidadePredefinida?: { numero: string; bloco?: string }) => {
     limparFormularios();
-    setCondominioIdMorador(condominioFiltroAdmin || usuarioLogado?.condominio_id || (condominios[0]?.id || ''));
+    const targetCondo = condoAtivoId;
+    setCondominioIdMorador(targetCondo);
+    const cfg = mapaConfigsCondos[targetCondo];
+    const eCasas = isEstruturaCasas(cfg?.tipo_estrutura);
+
+    if (eCasas) {
+      setBlocoMorador('Casa');
+    } else if (unidadePredefinida?.bloco) {
+      setBlocoMorador(unidadePredefinida.bloco);
+    } else {
+      setBlocoMorador('');
+    }
+
+    if (unidadePredefinida?.numero) {
+      setUnidadeMorador(unidadePredefinida.numero);
+    }
+
     setTipoModalFlutuante('morador');
     setModalFlutuanteAberto(true);
   };
@@ -165,24 +215,31 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         }
       } else if (abaAtiva === 'moradores') {
         let query = supabase.from('moradores').select('*').order('unidade');
-        if (eAdmin && condominioFiltroAdmin) {
-          query = query.eq('condominio_id', condominioFiltroAdmin);
-        } else if (!eAdmin && usuarioLogado?.condominio_id) {
-          query = query.eq('condominio_id', usuarioLogado.condominio_id);
-        }
-
-        if (termoBuscaMorador.trim()) {
-          query = query.ilike('nome', `%${termoBuscaMorador.trim()}%`);
+        const targetCondo = condoAtivoId;
+        if (targetCondo) {
+          query = query.eq('condominio_id', targetCondo);
         }
 
         const { data, error } = await query;
         if (error) throw error;
         setMoradores(data || []);
 
-        if (condominios.length === 0) {
-          const { data: condoData } = await supabase.from('condominios').select('id, nome');
-          setCondominios(condoData || []);
+        let listaCondos = condominios;
+        if (listaCondos.length === 0) {
+          const { data: condoData } = await supabase.from('condominios').select('*');
+          if (condoData) {
+            listaCondos = condoData;
+            setCondominios(condoData);
+          }
         }
+
+        const configs = { ...mapaConfigsCondos };
+        for (const c of listaCondos) {
+          if (!configs[c.id]) {
+            configs[c.id] = await carregarCondominioConfig(c.id);
+          }
+        }
+        setMapaConfigsCondos(configs);
       }
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: `Erro ao carregar dados: ${err.message}` });
@@ -213,6 +270,10 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         id: targetId || '',
         nome: nomeCondominio.trim(),
         endereco: enderecoCondominio.trim(),
+        tipo_estrutura: tipoEstruturaCondominio || 'casas',
+        unidades_por_bloco: Number(unidadesPorBlocoCondominio) || 117,
+        qtd_blocos: Number(qtdBlocosCondominio) || 1,
+        nomes_blocos: nomesBlocosCondominio.trim(),
         escala_plantao: escalaPlantao,
         horario_diurno_inicio: horarioDiurnoInicio,
         horario_noturno_inicio: horarioNoturnoInicio,
@@ -227,11 +288,22 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
       if (idEdicao) {
         await salvarCondominioConfig(idEdicao, configCondo);
-        setMensagem({ tipo: 'sucesso', texto: 'Condomínio e configurações de plantão/WhatsApp atualizados com sucesso!' });
+        setMensagem({ 
+          tipo: 'sucesso', 
+          texto: isEstruturaCasas(tipoEstruturaCondominio)
+            ? `Condomínio de Casas atualizado! ${unidadesPorBlocoCondominio || 117} cards de casas gerados para moradores.`
+            : 'Condomínio e estrutura atualizados com sucesso!' 
+        });
       } else {
         const { data: novoCond, error } = await supabase
           .from('condominios')
-          .insert([{ nome: nomeCondominio.trim(), endereco: enderecoCondominio.trim() }])
+          .insert([{ 
+            nome: nomeCondominio.trim(), 
+            endereco: enderecoCondominio.trim(),
+            tipo_estrutura: tipoEstruturaCondominio || 'casas',
+            unidades_por_bloco: Number(unidadesPorBlocoCondominio) || 117,
+            qtd_blocos: Number(qtdBlocosCondominio) || 1
+          }])
           .select()
           .single();
 
@@ -239,7 +311,12 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         targetId = novoCond.id;
         configCondo.id = novoCond.id;
         await salvarCondominioConfig(novoCond.id, configCondo);
-        setMensagem({ tipo: 'sucesso', texto: 'Condomínio e configurações cadastrados com sucesso!' });
+        setMensagem({ 
+          tipo: 'sucesso', 
+          texto: isEstruturaCasas(tipoEstruturaCondominio)
+            ? `Condomínio cadastrado com sucesso! ${unidadesPorBlocoCondominio || 117} cards de casas gerados para moradores.`
+            : 'Condomínio e configurações cadastrados com sucesso!' 
+        });
       }
 
       fecharModalFlutuante();
@@ -260,6 +337,10 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
     const cfg = mapaConfigsCondos[c.id];
     if (cfg) {
+      setTipoEstruturaCondominio(cfg.tipo_estrutura || 'casas');
+      setUnidadesPorBlocoCondominio(cfg.unidades_por_bloco !== undefined ? Number(cfg.unidades_por_bloco) : 117);
+      setQtdBlocosCondominio(cfg.qtd_blocos !== undefined ? Number(cfg.qtd_blocos) : 1);
+      setNomesBlocosCondominio(cfg.nomes_blocos || '');
       setEscalaPlantao(cfg.escala_plantao || '06_18');
       setHorarioDiurnoInicio(cfg.horario_diurno_inicio || '06:00');
       setHorarioNoturnoInicio(cfg.horario_noturno_inicio || '18:00');
@@ -268,6 +349,10 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       setSindicoNome(cfg.sindico_nome || '');
       setSindicoWhatsapp(cfg.sindico_whatsapp || '');
     } else {
+      setTipoEstruturaCondominio(c.tipo_estrutura || 'casas');
+      setUnidadesPorBlocoCondominio(c.unidades_por_bloco ? Number(c.unidades_por_bloco) : 117);
+      setQtdBlocosCondominio(c.qtd_blocos ? Number(c.qtd_blocos) : 1);
+      setNomesBlocosCondominio(c.nomes_blocos || '');
       setEscalaPlantao('06_18');
       setHorarioDiurnoInicio('06:00');
       setHorarioNoturnoInicio('18:00');
@@ -368,13 +453,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     }
     setLoading(true);
 
+    const cfg = mapaConfigsCondos[targetCondominioId];
+    const eCasas = isEstruturaCasas(cfg?.tipo_estrutura);
+    const blocoFinal = eCasas ? 'Casa' : (blocoMorador.trim() || '');
+
     try {
       if (idEdicao) {
         const { error } = await supabase
           .from('moradores')
           .update({
             nome: nomeMorador.trim(),
-            bloco: blocoMorador.trim(),
+            bloco: blocoFinal,
             unidade: unidadeMorador.trim(),
             telefone: telefoneMorador.trim(),
             condominio_id: targetCondominioId
@@ -386,10 +475,11 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         const { error } = await supabase.from('moradores').insert([
           {
             nome: nomeMorador.trim(),
-            bloco: blocoMorador.trim(),
+            bloco: blocoFinal,
             unidade: unidadeMorador.trim(),
             telefone: telefoneMorador.trim(),
-            condominio_id: targetCondominioId
+            condominio_id: targetCondominioId,
+            tipo: 'Morador'
           }
         ]);
         if (error) throw error;
@@ -397,7 +487,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       }
 
       fecharModalFlutuante();
-      carregarDados();
+      await carregarDados();
       setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: `Erro ao salvar morador: ${err.message}` });
@@ -409,13 +499,81 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const prepararEdicaoMorador = (m: any) => {
     setIdEdicao(m.id);
     setNomeMorador(m.nome);
-    setBlocoMorador(m.bloco || '');
+    const cfg = mapaConfigsCondos[m.condominio_id || condoAtivoId];
+    const eCasas = isEstruturaCasas(cfg?.tipo_estrutura);
+    setBlocoMorador(eCasas ? 'Casa' : (m.bloco || ''));
     setUnidadeMorador(m.unidade || '');
     setTelefoneMorador(m.telefone || '');
     setCondominioIdMorador(m.condominio_id || '');
     setTipoModalFlutuante('morador');
     setModalFlutuanteAberto(true);
   };
+
+  const excluirMorador = async (m: any) => {
+    const ident = m.bloco ? `${m.bloco} - Unidade ${m.unidade}` : `Unidade ${m.unidade}`;
+    if (!window.confirm(`Tem certeza que deseja remover o morador "${m.nome}" (${ident})?`)) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('moradores').delete().eq('id', m.id);
+      if (error) throw error;
+      setMensagem({ tipo: 'sucesso', texto: `Morador "${m.nome}" removido com sucesso!` });
+      await carregarDados();
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao remover morador: ${err.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Processamento e geração dos cards de unidades para a aba Moradores
+  const listaCardsGerados = useMemo(() => {
+    const cards = gerarCardsUnidadesCondominio(configCondoAtivo);
+    // Assegura que se houver moradores com unidades fora do range, eles também ganhem card
+    const setNums = new Set(cards.map(c => c.numero.trim()));
+    const extras: UnidadeEstruturada[] = [];
+    moradores.forEach(m => {
+      const num = (m.unidade || '').toString().trim();
+      if (num && !setNums.has(num)) {
+        setNums.add(num);
+        extras.push({
+          id: `extra-${num}`,
+          numero: num,
+          bloco: m.bloco || (eEstruturaCasasAtivo ? 'Casa' : ''),
+          label: eEstruturaCasasAtivo ? `Casa ${num}` : `${m.bloco ? `${m.bloco} - ` : ''}Ap. ${num}`
+        });
+      }
+    });
+    return [...cards, ...extras];
+  }, [configCondoAtivo, moradores, eEstruturaCasasAtivo]);
+
+  const unidadesComMoradores = useMemo(() => {
+    return listaCardsGerados.map(u => {
+      const moradoresDestaUnidade = moradores.filter(m => {
+        const numMatch = (m.unidade || '').toString().trim() === u.numero.trim();
+        if (!numMatch) return false;
+        if (eEstruturaCasasAtivo) return true;
+        if (u.bloco && m.bloco) {
+          return m.bloco.toString().trim().toLowerCase() === u.bloco.toString().trim().toLowerCase();
+        }
+        return true;
+      });
+      return {
+        unidade: u,
+        moradores: moradoresDestaUnidade,
+        ocupada: moradoresDestaUnidade.length > 0
+      };
+    });
+  }, [listaCardsGerados, moradores, eEstruturaCasasAtivo]);
+
+  const contadoresUnidades = useMemo(() => {
+    const total = unidadesComMoradores.length;
+    const ocupadas = unidadesComMoradores.filter(u => u.ocupada).length;
+    const vagas = total - ocupadas;
+    return { total, ocupadas, vagas, totalMoradores: moradores.length };
+  }, [unidadesComMoradores, moradores]);
 
   return (
     <div className="space-y-4 pb-12">
@@ -593,8 +751,29 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                         📍 {c.endereco || 'Endereço não informado'}
                       </p>
 
-                      <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                        <div className="flex items-center gap-1.5 text-slate-700">
+                      {/* Informações de Estrutura de Casas / Unidades */}
+                      <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between text-slate-800">
+                          <span className="font-bold flex items-center gap-1.5">
+                            {isEstruturaCasas(cfg.tipo_estrutura) ? (
+                              <Home className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                            )}
+                            {isEstruturaCasas(cfg.tipo_estrutura) ? 'Condomínio de Casas' : 'Condomínio Vertical'}
+                          </span>
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
+                            {isEstruturaCasas(cfg.tipo_estrutura) 
+                              ? `${cfg.unidades_por_bloco || 117} Casas Totais` 
+                              : `${(cfg.qtd_blocos || 1) * (cfg.unidades_por_bloco || 20)} Unidades`}
+                          </span>
+                        </div>
+                        {isEstruturaCasas(cfg.tipo_estrutura) && (
+                          <p className="text-[10px] text-emerald-800 font-medium">
+                            ✓ Onde seria Bloco fica <strong>FIXO como "Casa"</strong> automaticamente.
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1.5 text-slate-700 pt-0.5 border-t border-slate-200/60">
                           <Clock className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Plantão: <strong>{cfg.escala_label || '06:00 às 18:00 / 18:00 às 06:00'}</strong></span>
                         </div>
@@ -625,23 +804,39 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
                       <button
                         type="button"
-                        onClick={() => setCondominioFiltroAdmin(c.id)}
-                        className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition cursor-pointer"
+                        onClick={() => {
+                          setCondominioFiltroAdmin(c.id);
+                          setCondominioIdMorador(c.id);
+                          setAbaAtiva('moradores');
+                        }}
+                        className="px-3 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black rounded-xl border border-emerald-200 transition cursor-pointer flex items-center justify-center gap-1"
+                        title="Ver e gerenciar cards de casas e moradores deste condomínio"
                       >
-                        Filtrar Este
+                        <Home className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Gerenciar {cfg.unidades_por_bloco || 117} Casas</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => prepararEdicaoCondominio(c)}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>Editar no Card</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setCondominioFiltroAdmin(c.id)}
+                          className="px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition cursor-pointer"
+                        >
+                          Filtrar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => prepararEdicaoCondominio(c)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Editar no Card</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -767,118 +962,426 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         </div>
       )}
 
-      {/* 3. ABA MORADORES (VISÃO DE CARDS COMPLETA COM MENU FLUTUANTE) */}
+      {/* 3. ABA MORADORES & UNIDADES (VISÃO DE CARDS POR CASAS/UNIDADES EDITÁVEIS) */}
       {abaAtiva === 'moradores' && (
         <div className="space-y-4">
-          {/* Barra de Ações: Busca Rápida e Botão de Novo Morador */}
-          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="text"
-                value={termoBuscaMorador}
-                onChange={(e) => {
-                  setTermoBuscaMorador(e.target.value);
-                }}
-                placeholder="Buscar por nome, unidade ou bloco..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-purple-500"
-              />
+          {/* Banner de Identificação do Condomínio e Estrutura */}
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                  <Home className="w-3.5 h-3.5 text-emerald-400" />
+                  {eEstruturaCasasAtivo ? 'Condomínio de Casas (Horizontal)' : 'Condomínio Vertical'}
+                </span>
+                <span className="text-[10px] font-bold text-slate-300">
+                  {eEstruturaCasasAtivo ? '• Bloco FIXO como "Casa"' : `• ${configCondoAtivo?.qtd_blocos || 1} Bloco(s)`}
+                </span>
+              </div>
+              <h4 className="text-base sm:text-lg font-black text-white mt-1">
+                {getNomeCondominioPorId(condoAtivoId)}
+              </h4>
+              <p className="text-xs text-slate-300">
+                {eEstruturaCasasAtivo
+                  ? `Gestão direta por Casas: ${contadoresUnidades.total} cards de casas prontos para cadastro e edição dos moradores.`
+                  : `Gestão de unidades e moradores vinculados ao posto.`}
+              </p>
             </div>
 
-            <button
-              type="button"
-              onClick={abrirNovoMorador}
-              className="w-full sm:w-auto px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer active:scale-95"
-            >
-              <Plus className="w-4 h-4" /> Cadastrar Novo Morador
-            </button>
+            {/* Contadores em Tempo Real */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
+              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Total Unidades</p>
+                <p className="text-base font-black text-emerald-400">{contadoresUnidades.total}</p>
+              </div>
+              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+                <p className="text-[10px] font-bold uppercase text-emerald-400">Ocupadas</p>
+                <p className="text-base font-black text-white">{contadoresUnidades.ocupadas}</p>
+              </div>
+              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Disponíveis</p>
+                <p className="text-base font-black text-slate-300">{contadoresUnidades.vagas}</p>
+              </div>
+              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+                <p className="text-[10px] font-bold uppercase text-purple-400">Moradores</p>
+                <p className="text-base font-black text-white">{contadoresUnidades.totalMoradores}</p>
+              </div>
+            </div>
           </div>
 
-          {/* Grid de Cards dos Moradores */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {moradores
-              .filter(m => {
-                if (!termoBuscaMorador.trim()) return true;
-                const termo = termoBuscaMorador.toLowerCase();
-                const nm = (m.nome || '').toLowerCase();
-                const und = (m.unidade || '').toString().toLowerCase();
-                const blc = (m.bloco || '').toLowerCase();
-                return nm.includes(termo) || und.includes(termo) || blc.includes(termo);
-              })
-              .map((m) => {
-                const telLimpo = (m.telefone || '').replace(/\D/g, '');
+          {/* Barra de Controle: Alternador de Visualização, Filtros e Busca */}
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+              {/* Alternador de Modo de Visualização */}
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setModoVisaoMoradores('cards_unidades')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                    modoVisaoMoradores === 'cards_unidades'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Cards de Unidades ({contadoresUnidades.total})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoVisaoMoradores('lista_moradores')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                    modoVisaoMoradores === 'lista_moradores'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Lista de Moradores ({moradores.length})</span>
+                </button>
+              </div>
 
-                return (
-                  <div 
-                    key={m.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-purple-300 transition space-y-3 flex flex-col justify-between"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-200">
-                            Ap. {m.unidade} {m.bloco ? `• Bloco ${m.bloco}` : ''}
-                          </span>
-                          <h4 className="font-extrabold text-slate-900 text-sm mt-1">{m.nome}</h4>
-                        </div>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
-                          Titular
-                        </span>
-                      </div>
-
-                      <div className="space-y-1 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          <span>{m.telefone || 'Telefone não informado'}</span>
-                        </div>
-                        {eAdmin && (
-                          <div className="text-[11px] text-slate-400">
-                            🏢 {getNomeCondominioPorId(m.condominio_id)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                      {telLimpo ? (
-                        <a
-                          href={`https://wa.me/55${telLimpo}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1 transition"
-                          title="Conversar no WhatsApp"
-                        >
-                          <MessageCircle className="w-3 h-3 text-emerald-600" />
-                          <span>WhatsApp</span>
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">Sem WhatsApp</span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => prepararEdicaoMorador(m)}
-                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>Editar no Card</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-
-          {moradores.length === 0 && (
-            <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 space-y-2">
-              <Home className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="text-xs text-slate-500">Nenhum morador encontrado com os filtros atuais.</p>
+              {/* Botão de Adicionar Novo Morador */}
               <button
-                onClick={abrirNovoMorador}
-                className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+                type="button"
+                onClick={() => abrirNovoMorador()}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer active:scale-95"
               >
-                + Cadastrar Primeiro Morador
+                <Plus className="w-4 h-4" /> Cadastrar Novo Morador
               </button>
+            </div>
+
+            {/* Linha de Busca e Filtros de Status */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-1 border-t border-slate-100">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={termoBuscaMorador}
+                  onChange={(e) => setTermoBuscaMorador(e.target.value)}
+                  placeholder={eEstruturaCasasAtivo ? "Buscar casa (ex: 15, 117), nome ou telefone..." : "Buscar unidade, bloco, nome ou telefone..."}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Filtro por Status da Unidade */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusUnidade('todas')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+                    filtroStatusUnidade === 'todas'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Todas ({contadoresUnidades.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusUnidade('ocupadas')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    filtroStatusUnidade === 'ocupadas'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  Ocupadas ({contadoresUnidades.ocupadas})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroStatusUnidade('vagas')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    filtroStatusUnidade === 'vagas'
+                      ? 'bg-slate-700 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                  Disponíveis ({contadoresUnidades.vagas})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MODO 1: GRID DE CARDS POR CASAS / UNIDADES (117 CARDS GERADOS)            */}
+          {/* ========================================================================= */}
+          {modoVisaoMoradores === 'cards_unidades' && (
+            <div className="space-y-3">
+              {/* Contagem de cards exibidos */}
+              <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+                <span>
+                  Exibindo{' '}
+                  <strong className="text-slate-800">
+                    {unidadesComMoradores.filter(item => {
+                      if (filtroStatusUnidade === 'ocupadas' && !item.ocupada) return false;
+                      if (filtroStatusUnidade === 'vagas' && item.ocupada) return false;
+                      if (termoBuscaMorador.trim()) {
+                        const t = termoBuscaMorador.trim().toLowerCase();
+                        const num = item.unidade.numero.toLowerCase();
+                        const lbl = item.unidade.label.toLowerCase();
+                        const matchNum = num === t || num.includes(t) || lbl.includes(t);
+                        const matchMorador = item.moradores.some(m => 
+                          (m.nome || '').toLowerCase().includes(t) || 
+                          (m.telefone || '').includes(t)
+                        );
+                        return matchNum || matchMorador;
+                      }
+                      return true;
+                    }).length}
+                  </strong>{' '}
+                  de {contadoresUnidades.total} {eEstruturaCasasAtivo ? 'casas' : 'unidades'}
+                </span>
+                {eEstruturaCasasAtivo && (
+                  <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                    🏡 Bloco Fixo como "Casa"
+                  </span>
+                )}
+              </div>
+
+              {/* Grid Responsivo de Cards de Casas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {unidadesComMoradores
+                  .filter(item => {
+                    if (filtroStatusUnidade === 'ocupadas' && !item.ocupada) return false;
+                    if (filtroStatusUnidade === 'vagas' && item.ocupada) return false;
+                    if (termoBuscaMorador.trim()) {
+                      const t = termoBuscaMorador.trim().toLowerCase();
+                      const num = item.unidade.numero.toLowerCase();
+                      const lbl = item.unidade.label.toLowerCase();
+                      const matchNum = num === t || num.includes(t) || lbl.includes(t);
+                      const matchMorador = item.moradores.some(m => 
+                        (m.nome || '').toLowerCase().includes(t) || 
+                        (m.telefone || '').includes(t)
+                      );
+                      return matchNum || matchMorador;
+                    }
+                    return true;
+                  })
+                  .map((item) => {
+                    return (
+                      <div
+                        key={item.unidade.id}
+                        className={`bg-white rounded-2xl border p-3.5 shadow-2xs hover:shadow-sm transition flex flex-col justify-between space-y-3 ${
+                          item.ocupada 
+                            ? 'border-emerald-200 hover:border-emerald-400 bg-gradient-to-b from-emerald-50/20 to-white' 
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        {/* Topo do Card: Número da Casa / Unidade e Status */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-2">
+                            <span className={`px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs ${
+                              eEstruturaCasasAtivo 
+                                ? 'bg-emerald-100 text-emerald-950 border border-emerald-300' 
+                                : 'bg-indigo-100 text-indigo-950 border border-indigo-300'
+                            }`}>
+                              <Home className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>{eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}</span>
+                            </span>
+
+                            {item.ocupada ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                {item.moradores.length} {item.moradores.length > 1 ? 'Moradores' : 'Morador'}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                Disponível
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Lista de Moradores da Unidade / Casa */}
+                          {item.moradores.length > 0 ? (
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
+                              {item.moradores.map((m) => {
+                                const telLimpo = (m.telefone || '').replace(/\D/g, '');
+                                return (
+                                  <div
+                                    key={m.id}
+                                    className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200/80 space-y-1 transition"
+                                  >
+                                    <div className="flex items-start justify-between gap-1">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-black text-slate-900 truncate flex items-center gap-1" title={m.nome}>
+                                          <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                          <span className="truncate">{m.nome}</span>
+                                        </p>
+                                        <p className="text-[11px] text-slate-500 truncate">
+                                          {m.telefone || 'Sem telefone'}
+                                        </p>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {telLimpo && (
+                                          <a
+                                            href={`https://wa.me/55${telLimpo}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="p-1 text-emerald-700 hover:bg-emerald-100 rounded-lg transition"
+                                            title="WhatsApp"
+                                          >
+                                            <MessageCircle className="w-3.5 h-3.5" />
+                                          </a>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => prepararEdicaoMorador(m)}
+                                          className="p-1 text-slate-600 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition cursor-pointer"
+                                          title="Editar Morador"
+                                        >
+                                          <Pencil className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => excluirMorador(m)}
+                                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                          title="Excluir Morador"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="py-3 px-2 bg-slate-50/80 rounded-xl border border-dashed border-slate-200 text-center space-y-1">
+                              <p className="text-[11px] font-semibold text-slate-400">
+                                Casa sem morador cadastrado
+                              </p>
+                              <p className="text-[10px] text-slate-400/80">
+                                Clique abaixo para cadastrar.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Botão de Ação Direta no Card da Casa */}
+                        <div className="pt-2 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => abrirNovoMorador({ numero: item.unidade.numero, bloco: item.unidade.bloco })}
+                            className="w-full py-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-800 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border border-emerald-200 hover:border-emerald-600 cursor-pointer shadow-2xs active:scale-95"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>
+                              {eEstruturaCasasAtivo 
+                                ? (item.ocupada ? `+ Outro Morador na Casa ${item.unidade.numero}` : `+ Cadastrar Casa ${item.unidade.numero}`)
+                                : (item.ocupada ? `+ Outro Morador` : `+ Cadastrar Unidade`)}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* MODO 2: LISTA DE MORADORES (VISÃO EM TABELA / CARDS DE PESSOAS)           */}
+          {/* ========================================================================= */}
+          {modoVisaoMoradores === 'lista_moradores' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {moradores
+                  .filter(m => {
+                    if (!termoBuscaMorador.trim()) return true;
+                    const termo = termoBuscaMorador.toLowerCase();
+                    const nm = (m.nome || '').toLowerCase();
+                    const und = (m.unidade || '').toString().toLowerCase();
+                    const blc = (m.bloco || '').toLowerCase();
+                    return nm.includes(termo) || und.includes(termo) || blc.includes(termo);
+                  })
+                  .map((m) => {
+                    const telLimpo = (m.telefone || '').replace(/\D/g, '');
+
+                    return (
+                      <div 
+                        key={m.id}
+                        className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-purple-300 transition space-y-3 flex flex-col justify-between"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-950 border border-emerald-200">
+                                {eEstruturaCasasAtivo ? `Casa ${m.unidade}` : `${m.bloco ? `${m.bloco} - ` : ''}Ap. ${m.unidade}`}
+                              </span>
+                              <h4 className="font-extrabold text-slate-900 text-sm mt-1">{m.nome}</h4>
+                            </div>
+                            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+                              Morador
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span>{m.telefone || 'Telefone não informado'}</span>
+                            </div>
+                            {eAdmin && (
+                              <div className="text-[11px] text-slate-400">
+                                🏢 {getNomeCondominioPorId(m.condominio_id)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                          {telLimpo ? (
+                            <a
+                              href={`https://wa.me/55${telLimpo}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1 transition"
+                              title="Conversar no WhatsApp"
+                            >
+                              <MessageCircle className="w-3 h-3 text-emerald-600" />
+                              <span>WhatsApp</span>
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">Sem WhatsApp</span>
+                          )}
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => prepararEdicaoMorador(m)}
+                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => excluirMorador(m)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {moradores.length === 0 && (
+                <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 space-y-2">
+                  <Home className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-500">Nenhum morador encontrado com os filtros atuais.</p>
+                  <button
+                    onClick={() => abrirNovoMorador()}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    + Cadastrar Primeiro Morador
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -967,6 +1470,130 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     placeholder="Av. Exemplo, 1234 - Bairro, Cidade/UF"
                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
                   />
+                </div>
+
+                {/* Estrutura das Casas / Unidades */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-slate-900 uppercase flex items-center gap-1.5">
+                      <Home className="w-4 h-4 text-emerald-600" />
+                      Estrutura do Condomínio & Unidades
+                    </label>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                      Geração Automática de Cards
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                      Tipo de Condomínio *
+                    </label>
+                    <select
+                      value={tipoEstruturaCondominio}
+                      onChange={(e) => {
+                        const novoTipo = e.target.value;
+                        setTipoEstruturaCondominio(novoTipo);
+                        if (isEstruturaCasas(novoTipo)) {
+                          if (!unidadesPorBlocoCondominio || unidadesPorBlocoCondominio <= 1) {
+                            setUnidadesPorBlocoCondominio(117);
+                          }
+                        }
+                      }}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                    >
+                      {OPCOES_TIPO_ESTRUTURA.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Se for Condomínio de Casas */}
+                  {isEstruturaCasas(tipoEstruturaCondominio) && (
+                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2 animate-fade-in">
+                      <div className="flex items-start gap-2">
+                        <Home className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-black text-emerald-950">
+                            Modo Casas Ativo: Bloco FIXO como "Casa"
+                          </p>
+                          <p className="text-[11px] text-emerald-800 leading-relaxed">
+                            Onde seria Bloco vira <strong>"Casa" fixo</strong> sem precisar editar nem o operador selecionar! O sistema gera automaticamente os cards editáveis em Moradores.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-1">
+                        <label className="block text-[10px] font-black text-emerald-950 uppercase mb-1">
+                          Quantidade Total de Casas / Unidades * (Ex: 117)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000"
+                          required
+                          value={unidadesPorBlocoCondominio}
+                          onChange={(e) => setUnidadesPorBlocoCondominio(Math.max(1, parseInt(e.target.value) || 1))}
+                          placeholder="Ex: 117"
+                          className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                        />
+                        <p className="text-[10px] text-emerald-700 mt-1 font-semibold">
+                          ✓ Serão criados {unidadesPorBlocoCondominio || 117} cards editáveis (Casa 1 a Casa {unidadesPorBlocoCondominio || 117}) em Moradores para adicionar todos os residentes!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Se for Blocos ou Torres */}
+                  {(tipoEstruturaCondominio === 'blocos' || tipoEstruturaCondominio === 'torres') && (
+                    <div className="grid grid-cols-2 gap-2.5 animate-fade-in">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                          Qtd de {tipoEstruturaCondominio === 'torres' ? 'Torres' : 'Blocos'}
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          value={qtdBlocosCondominio}
+                          onChange={(e) => setQtdBlocosCondominio(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                          Unidades por Bloco
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="300"
+                          value={unidadesPorBlocoCondominio}
+                          onChange={(e) => setUnidadesPorBlocoCondominio(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Se for Numeral Direto */}
+                  {tipoEstruturaCondominio === 'numeral_direto' && (
+                    <div className="animate-fade-in">
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                        Quantidade Total de Unidades / Lotes
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={unidadesPorBlocoCondominio}
+                        onChange={(e) => setUnidadesPorBlocoCondominio(Math.max(1, parseInt(e.target.value) || 1))}
+                        placeholder="Ex: 100"
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Escala e Horários */}
@@ -1214,34 +1841,57 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Bloco (Opcional)
-                    </label>
-                    <input
-                      type="text"
-                      value={blocoMorador}
-                      onChange={(e) => setBlocoMorador(e.target.value)}
-                      placeholder="Ex: Bloco A"
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
-                    />
-                  </div>
+                {/* Estrutura: Se for Condomínio de Casas, Bloco vira "Casa" fixo sem operador selecionar ou digitar */}
+                {(() => {
+                  const targetCondo = eAdmin ? (condominioIdMorador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
+                  const cfgTarget = mapaConfigsCondos[targetCondo];
+                  const eCasasModal = isEstruturaCasas(cfgTarget?.tipo_estrutura);
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Unidade / Apartamento *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={unidadeMorador}
-                      onChange={(e) => setUnidadeMorador(e.target.value)}
-                      placeholder="Ex: 101"
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
-                    />
-                  </div>
-                </div>
+                  return (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {eCasasModal ? (
+                        <div>
+                          <label className="block text-[11px] font-bold text-emerald-900 uppercase mb-1 flex items-center gap-1">
+                            <Home className="w-3.5 h-3.5 text-emerald-600" /> Bloco / Tipo
+                          </label>
+                          <div className="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-black text-emerald-950 flex items-center justify-between">
+                            <span>🏠 Casa (Fixo)</span>
+                            <span className="text-[9px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
+                              Automático
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Bloco / Torre
+                          </label>
+                          <input
+                            type="text"
+                            value={blocoMorador}
+                            onChange={(e) => setBlocoMorador(e.target.value)}
+                            placeholder="Ex: Bloco A"
+                            className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          {eCasasModal ? 'Número da Casa *' : 'Unidade / Apartamento *'}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={unidadeMorador}
+                          onChange={(e) => setUnidadeMorador(e.target.value)}
+                          placeholder={eCasasModal ? "Ex: 117" : "Ex: 101"}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
