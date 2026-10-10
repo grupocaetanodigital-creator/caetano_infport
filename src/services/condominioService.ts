@@ -66,21 +66,157 @@ export function isEstruturaCasas(tipo?: string): boolean {
   return lower.includes('casa');
 }
 
+export function isEstruturaTorres(tipo?: string): boolean {
+  if (!tipo) return false;
+  const lower = tipo.toString().toLowerCase();
+  return lower.includes('torre');
+}
+
+export function isEstruturaBlocos(tipo?: string): boolean {
+  if (!tipo) return false;
+  const lower = tipo.toString().toLowerCase();
+  return lower.includes('bloco') || lower.includes('edificio') || lower.includes('apartamento');
+}
+
+export function isEstruturaNumeralDireto(tipo?: string): boolean {
+  if (!tipo) return false;
+  const lower = tipo.toString().toLowerCase();
+  return lower.includes('numeral') || lower.includes('lote');
+}
+
 export function getNomeRotuloBloco(tipo?: string): string {
   if (isEstruturaCasas(tipo)) return 'Casa';
-  if (!tipo) return 'Bloco';
-  const lower = tipo.toString().toLowerCase();
-  if (lower.includes('torre')) return 'Torre';
-  if (lower.includes('numeral') || lower.includes('lote')) return 'Unidade';
+  if (isEstruturaTorres(tipo)) return 'Torre';
+  if (isEstruturaNumeralDireto(tipo)) return 'Unidade';
   return 'Bloco';
 }
 
 export function getNomeRotuloUnidade(tipo?: string): string {
-  if (isEstruturaCasas(tipo)) return 'Casa';
-  if (!tipo) return 'Apartamento';
-  const lower = tipo.toString().toLowerCase();
-  if (lower.includes('numeral') || lower.includes('lote')) return 'Lote';
+  if (isEstruturaCasas(tipo)) return 'Número da Casa';
+  if (isEstruturaNumeralDireto(tipo)) return 'Lote / Unidade';
   return 'Apartamento';
+}
+
+/**
+ * Retorna a lista de blocos ou torres cadastrados para o condomínio.
+ * Se for casas, retorna ['Casa'].
+ * Se for torres ou blocos, retorna as torres/blocos definidos na configuração (nomes_blocos ou qtd_blocos)
+ * e também quaisquer blocos já existentes em moradores.
+ */
+export function obterListaBlocosOuTorres(config?: CondominioConfig | null, moradores?: { bloco?: string }[]): string[] {
+  if (!config) {
+    const blocosMoradores = Array.from(new Set((moradores || []).map(m => m.bloco?.trim()).filter(Boolean))) as string[];
+    return blocosMoradores.length > 0 ? blocosMoradores : ['Casa'];
+  }
+
+  const tipo = config.tipo_estrutura || 'casas';
+  if (isEstruturaCasas(tipo)) {
+    return ['Casa'];
+  }
+
+  if (isEstruturaNumeralDireto(tipo)) {
+    return [];
+  }
+
+  const lista: string[] = [];
+
+  // 1. Nomes configurados explicitamente
+  if (config.nomes_blocos) {
+    const partes = config.nomes_blocos
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    lista.push(...partes);
+  }
+
+  // 2. Se a lista estiver vazia ou menor que qtd_blocos, gera os nomes padronizados
+  const qtd = Math.max(1, Math.min(Number(config.qtd_blocos) || 1, 50));
+  if (lista.length === 0) {
+    const eTorre = isEstruturaTorres(tipo);
+    for (let i = 0; i < qtd; i++) {
+      if (eTorre) {
+        lista.push(`Torre ${i + 1}`);
+      } else {
+        lista.push(`Bloco ${String.fromCharCode(65 + i)}`);
+      }
+    }
+  }
+
+  // 3. Mescla com blocos que já existam em moradores para não perder nenhum histórico
+  if (moradores && Array.isArray(moradores)) {
+    moradores.forEach(m => {
+      const b = (m.bloco || '').trim();
+      if (b && !lista.some(existente => existente.toLowerCase() === b.toLowerCase())) {
+        lista.push(b);
+      }
+    });
+  }
+
+  // Ordenação inteligente (natural / alfanumérica)
+  return lista.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+/**
+ * Formata visualmente o rótulo de uma unidade respeitando a estrutura do condomínio.
+ * Ex: Casas: "Casa 07"
+ *     Torres: "Torre 1 • Ap. 102"
+ *     Blocos: "Bloco B • Ap. 42"
+ *     Numeral: "Unidade 15"
+ */
+export function formatarIdentificacaoUnidade(
+  unidade: string | number | null | undefined, 
+  bloco?: string | null | undefined, 
+  tipoEstrutura?: string
+): string {
+  const u = String(unidade || '').trim();
+  const b = String(bloco || '').trim();
+  const tipo = tipoEstrutura || 'casas';
+
+  if (isEstruturaCasas(tipo)) {
+    return `Casa ${u}`;
+  }
+
+  if (isEstruturaNumeralDireto(tipo)) {
+    return `Unidade ${u}`;
+  }
+
+  if (isEstruturaTorres(tipo)) {
+    const torreStr = b ? (b.toLowerCase().startsWith('torre') ? b : `Torre ${b}`) : '';
+    return torreStr ? `${torreStr} • Ap. ${u}` : `Ap. ${u}`;
+  }
+
+  // Blocos
+  const blocoStr = b && b.toLowerCase() !== 'casa' ? (b.toLowerCase().startsWith('bloco') ? b : `Bloco ${b}`) : '';
+  return blocoStr ? `${blocoStr} • Ap. ${u}` : `Ap. ${u}`;
+}
+
+/**
+ * Formata a menção de unidade/bloco para mensagens de WhatsApp enviadas aos moradores
+ */
+export function formatarTextoWhatsUnidade(
+  unidade: string | number | null | undefined, 
+  bloco?: string | null | undefined, 
+  tipoEstrutura?: string
+): string {
+  const u = String(unidade || '').trim();
+  const b = String(bloco || '').trim();
+  const tipo = tipoEstrutura || 'casas';
+
+  if (isEstruturaCasas(tipo)) {
+    return `Casa ${u}`;
+  }
+
+  if (isEstruturaNumeralDireto(tipo)) {
+    return `Unidade ${u}`;
+  }
+
+  if (isEstruturaTorres(tipo)) {
+    const torreStr = b ? (b.toLowerCase().startsWith('torre') ? b : `Torre ${b}`) : '';
+    return torreStr ? `Ap. ${u} - ${torreStr}` : `Ap. ${u}`;
+  }
+
+  const blocoStr = b && b.toLowerCase() !== 'casa' ? (b.toLowerCase().startsWith('bloco') ? b : `Bloco ${b}`) : '';
+  return blocoStr ? `Ap. ${u} - ${blocoStr}` : `Ap. ${u}`;
 }
 
 /**
