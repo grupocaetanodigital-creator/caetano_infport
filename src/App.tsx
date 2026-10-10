@@ -737,6 +737,8 @@ export default function App() {
               onNavegarRondas={() => mudarModulo('rondas')} 
               onNavegarModulo={(mod) => mudarModulo(mod)}
               usuarioLogado={operadorContextoGlobal} 
+              condominioId={condominioAtivoId || operador?.condominio_id}
+              moduloRondaHabilitado={Boolean(featureFlags.mod07_gestao_ronda)}
             />
           )}
 
