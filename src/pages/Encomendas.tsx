@@ -203,6 +203,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const fimDia = new Date();
       fimDia.setHours(23, 59, 59, 999);
 
+      // Mapa auxiliar de condomínios para exibição de tags sem joins arriscados
+      const mapaCondos = new Map<string, string>();
+      try {
+        const { data: conds } = await supabase.from('condominios').select('id, nome');
+        if (conds) {
+          conds.forEach((c: any) => mapaCondos.set(c.id, c.nome));
+        }
+      } catch (errC) {
+        console.warn('Aviso ao carregar condominios:', errC);
+      }
+
       let entQuery = supabase
         .from('entregadores')
         .select('*')
@@ -215,14 +226,32 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       let lotesQuery = supabase
         .from('lotes_re')
-        .select('*, entregadores(nome, empresa, documento), condominios(nome)')
+        .select('*, entregadores(nome, empresa, documento)')
         .in('status', ['aguardando_triagem', 'em_triagem'])
         .order('created_at', { ascending: false });
       if (!isGlobal) {
         lotesQuery = lotesQuery.eq('condominio_id', idCondominioAtivo);
       }
-      const { data: lotesData } = await lotesQuery;
-      setLotesPendentes(lotesData || []);
+      let { data: lotesData, error: lotesErr } = await lotesQuery;
+      if (lotesErr || !lotesData) {
+        console.warn('Fallback simples para lotes_re:', lotesErr?.message);
+        let fbLotesQuery = supabase
+          .from('lotes_re')
+          .select('*')
+          .in('status', ['aguardando_triagem', 'em_triagem'])
+          .order('created_at', { ascending: false });
+        if (!isGlobal) {
+          fbLotesQuery = fbLotesQuery.eq('condominio_id', idCondominioAtivo);
+        }
+        const { data: fbLData } = await fbLotesQuery;
+        lotesData = fbLData || [];
+      }
+
+      const lotesFormatados = (lotesData || []).map((l: any) => ({
+        ...l,
+        condominios: { nome: mapaCondos.get(l.condominio_id) || '' }
+      }));
+      setLotesPendentes(lotesFormatados);
 
       let moradQuery = supabase
         .from('moradores')
@@ -236,14 +265,32 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       let retidosQuery = supabase
         .from('encomendas_itens')
-        .select('*, moradores(nome, telefone), condominios(nome)')
+        .select('*, moradores(nome, telefone)')
         .eq('status', 'retido')
         .order('created_at', { ascending: false });
       if (!isGlobal) {
         retidosQuery = retidosQuery.eq('condominio_id', idCondominioAtivo);
       }
-      const { data: retidosData } = await retidosQuery;
-      setTodosItensRetidos(retidosData || []);
+      let { data: retidosData, error: retidosErr } = await retidosQuery;
+      if (retidosErr || !retidosData) {
+        console.warn('Fallback simples para encomendas_itens retidos:', retidosErr?.message);
+        let fbRetidosQuery = supabase
+          .from('encomendas_itens')
+          .select('*')
+          .eq('status', 'retido')
+          .order('created_at', { ascending: false });
+        if (!isGlobal) {
+          fbRetidosQuery = fbRetidosQuery.eq('condominio_id', idCondominioAtivo);
+        }
+        const { data: fbRetData } = await fbRetidosQuery;
+        retidosData = fbRetData || [];
+      }
+
+      const retidosFormatados = (retidosData || []).map((r: any) => ({
+        ...r,
+        condominios: { nome: mapaCondos.get(r.condominio_id) || '' }
+      }));
+      setTodosItensRetidos(retidosFormatados);
 
       let lotesHojeQuery = supabase
         .from('lotes_re')
@@ -291,7 +338,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const carregarDossie = async () => {
     setLoadingDossie(true);
-    const idCondo = usuarioLogado?.condominio_id;
+    const idCondo = isGlobal ? '' : idCondominioAtivo;
     try {
       // 1. Tenta carregar os itens de encomendas com moradores
       let query = supabase
@@ -580,6 +627,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setEntregadorSelecionado(null);
       setBuscaEntregador('');
       setQtdDeclarada(1);
+      setLoteAtivo(data);
+      if (data?.condominio_id) {
+        carregarLocais(data.condominio_id);
+      }
       carregarDadosBase();
       setMensagem({ tipo: 'sucesso', texto: `Lote ${codigoRE} gerado com sucesso!` });
     } catch (err: any) {

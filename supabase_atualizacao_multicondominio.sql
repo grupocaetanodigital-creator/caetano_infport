@@ -30,7 +30,31 @@ CREATE INDEX IF NOT EXISTS idx_prestadores_acessos_condominio ON prestadores_ace
 
 CREATE INDEX IF NOT EXISTS idx_auditoria_condominio ON auditoria(condominio_id);
 
--- 2. Recarrega o cache do PostgREST
+-- 2. Garante constraints de Chaves Estrangeiras (FK) para relacionamentos do PostgREST
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'fk_lotes_re_condominio' AND table_name = 'lotes_re'
+  ) THEN
+    ALTER TABLE lotes_re 
+    ADD CONSTRAINT fk_lotes_re_condominio 
+    FOREIGN KEY (condominio_id) REFERENCES condominios(id) ON DELETE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'fk_encomendas_itens_condominio' AND table_name = 'encomendas_itens'
+  ) THEN
+    ALTER TABLE encomendas_itens 
+    ADD CONSTRAINT fk_encomendas_itens_condominio 
+    FOREIGN KEY (condominio_id) REFERENCES condominios(id) ON DELETE CASCADE;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+-- 3. Recarrega o cache do PostgREST
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
