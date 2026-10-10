@@ -12,8 +12,21 @@ import {
   MessageCircle, 
   ExternalLink, 
   Check,
-  Pencil
+  Pencil,
+  Home
 } from 'lucide-react';
+import { 
+  carregarCondominioConfig, 
+  isEstruturaCasas, 
+  isEstruturaTorres, 
+  isEstruturaBlocos,
+  getNomeRotuloBloco, 
+  getNomeRotuloUnidade, 
+  obterListaBlocosOuTorres, 
+  formatarIdentificacaoUnidade, 
+  saoUnidadesEquivalentes,
+  CondominioConfig 
+} from '../services/condominioService';
 
 interface ChavesProps {
   usuarioLogado?: any;
@@ -56,11 +69,16 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const [prazoHorasCustom, setPrazoHorasCustom] = useState<number | string>(2);
 
   const [fotoRetiradaUrl, setFotoRetiradaUrl] = useState('');
-  const [whatsEmprestimo, setWhatsEmprestimo] = useState<any | null>(null);
+  const [condoConfig, setCondoConfig] = useState<CondominioConfig | null>(null);
 
   const condId = usuarioLogado?.condominio_id || '';
   const isGlobal = !condId || condId === 'global';
   const [fotoDevolucaoUrl, setFotoDevolucaoUrl] = useState('');
+
+  const eEstruturaCasas = isEstruturaCasas(condoConfig?.tipo_estrutura);
+  const eEstruturaTorres = isEstruturaTorres(condoConfig?.tipo_estrutura);
+  const rotuloBloco = getNomeRotuloBloco(condoConfig?.tipo_estrutura);
+  const rotuloUnidade = getNomeRotuloUnidade(condoConfig?.tipo_estrutura);
 
   useEffect(() => {
     carregarQuadroChaves();
@@ -70,6 +88,12 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id;
+      if (targetCondo) {
+        const cfg = await carregarCondominioConfig(targetCondo);
+        setCondoConfig(cfg);
+      }
+
       let chavesQuery = supabase
         .from('chaves')
         .select('*')
@@ -105,9 +129,8 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
       const mList = morData || [];
       setMoradores(mList);
-      const blocos = Array.from(new Set(mList.map((m: any) => m.bloco?.trim()).filter(Boolean))) as string[];
-      blocos.sort();
-      setBlocosDisponiveis(blocos.length > 0 ? blocos : ['A', 'B', 'C', 'D']);
+      const listaBlocosFinal = obterListaBlocosOuTorres(condoConfig, mList);
+      setBlocosDisponiveis(listaBlocosFinal);
 
       let colabQuery = supabase
         .from('operadores')
@@ -171,7 +194,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     setIdEdicao(null);
     setCodigoChave('');
     setNomeChave('');
-    setBloco('');
+    setBloco(eEstruturaCasas ? 'Casa' : '');
     setUnidade('');
     setTempoLimiteHoras(2);
     setModalNovaChave(false);
@@ -182,7 +205,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     setIdEdicao(chave.id);
     setCodigoChave(chave.codigo_chave || '');
     setNomeChave(chave.nome_chave || '');
-    setBloco(chave.bloco || '');
+    setBloco(eEstruturaCasas ? 'Casa' : (chave.bloco || ''));
     setUnidade(chave.unidade || '');
     setTempoLimiteHoras(chave.tempo_limite_horas || 2);
     setModalNovaChave(true);
@@ -198,11 +221,12 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
     try {
       const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
+      const blocoFinal = eEstruturaCasas ? 'Casa' : bloco.trim().toUpperCase();
       const payload = {
         condominio_id: targetCondo,
         codigo_chave: codigoChave.trim().toUpperCase(),
         nome_chave: nomeChave.trim(),
-        bloco: bloco.trim().toUpperCase(),
+        bloco: blocoFinal,
         unidade: unidade.trim(),
         tempo_limite_horas: parseInt(String(tempoLimiteHoras)) || 2
       };
@@ -439,7 +463,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 <h4 className="font-bold text-slate-900 text-xs mt-1 truncate" title={chave.nome_chave}>{chave.nome_chave}</h4>
                 {chave.unidade && (
                   <p className="text-[10px] text-slate-500 truncate">
-                    Ap. {chave.unidade} {chave.bloco ? `• Bl. ${chave.bloco}` : ''}
+                    {formatarIdentificacaoUnidade(chave.unidade, chave.bloco, condoConfig?.tipo_estrutura)}
                   </p>
                 )}
               </div>
@@ -531,28 +555,38 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Unidade / Ap.</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">
+                    {rotuloUnidade}
+                  </label>
                   <input
                     type="text"
-                    inputMode="numeric"
                     value={unidade}
-                    onChange={(e) => setUnidade(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Ex: 101"
+                    onChange={(e) => setUnidade(e.target.value)}
+                    placeholder={eEstruturaCasas ? "Ex: 01, 02, 10A" : "Ex: 101"}
                     className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">Bloco</label>
-                  <select
-                    value={bloco}
-                    onChange={(e) => setBloco(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
-                  >
-                    <option value="">Área Comum / Sem Bloco</option>
-                    {blocosDisponiveis.map((b) => (
-                      <option key={b} value={b}>Bloco {b}</option>
-                    ))}
-                  </select>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-0.5">
+                    {rotuloBloco}
+                  </label>
+                  {eEstruturaCasas ? (
+                    <div className="w-full p-2 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 text-xs font-black flex items-center justify-between">
+                      <span>🏠 Casa</span>
+                      <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-bold uppercase">Automático</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={bloco}
+                      onChange={(e) => setBloco(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    >
+                      <option value="">{eEstruturaTorres ? 'Área Comum / Sem Torre' : 'Área Comum / Sem Bloco'}</option>
+                      {blocosDisponiveis.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -580,9 +614,8 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       {modalRetirada && (() => {
         const moradoresDaUnidade = moradores.filter(
           (m) => m.unidade && (
-            String(m.unidade).trim().toLowerCase() === String(retiranteUnidade).trim().toLowerCase() ||
-            (!isNaN(parseInt(m.unidade, 10)) && !isNaN(parseInt(retiranteUnidade, 10)) && parseInt(m.unidade, 10) === parseInt(retiranteUnidade, 10))
-          ) && (!retiranteBloco || m.bloco === retiranteBloco)
+            saoUnidadesEquivalentes(m.unidade, retiranteUnidade)
+          ) && (eEstruturaCasas || !retiranteBloco || (m.bloco || '').toLowerCase() === retiranteBloco.toLowerCase())
         );
 
         return (
@@ -596,7 +629,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 <Key className="w-4 h-4 text-emerald-600" /> Retirada da Chave {modalRetirada.codigo_chave}
               </h3>
               <p className="text-[11px] text-slate-500 font-medium">
-                {modalRetirada.nome_chave} {modalRetirada.unidade ? `(Ap. ${modalRetirada.unidade}${modalRetirada.bloco ? ` Bl.${modalRetirada.bloco}` : ''})` : ''}
+                {modalRetirada.nome_chave} {modalRetirada.unidade ? `(${formatarIdentificacaoUnidade(modalRetirada.unidade, modalRetirada.bloco, condoConfig?.tipo_estrutura)})` : ''}
               </p>
 
               <form onSubmit={efetivarRetirada} className="space-y-2.5">
@@ -630,29 +663,39 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                   <div className="space-y-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Unidade / Ap. *</label>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                          {rotuloUnidade} *
+                        </label>
                         <input
                           type="text"
-                          inputMode="numeric"
                           value={retiranteUnidade}
-                          onChange={(e) => setRetiranteUnidade(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Ex: 101"
+                          onChange={(e) => setRetiranteUnidade(e.target.value)}
+                          placeholder={eEstruturaCasas ? "Ex: 01, 02, 12A" : "Ex: 101"}
                           required
                           className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Bloco</label>
-                        <select
-                          value={retiranteBloco}
-                          onChange={(e) => setRetiranteBloco(e.target.value)}
-                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
-                        >
-                          <option value="">Selecione...</option>
-                          {blocosDisponiveis.map((b) => (
-                            <option key={b} value={b}>Bloco {b}</option>
-                          ))}
-                        </select>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                          {rotuloBloco}
+                        </label>
+                        {eEstruturaCasas ? (
+                          <div className="w-full p-2 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 text-xs font-black flex items-center justify-between">
+                            <span>🏠 Casa</span>
+                            <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-bold uppercase">Automático</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={retiranteBloco}
+                            onChange={(e) => setRetiranteBloco(e.target.value)}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                          >
+                            <option value="">Selecione...</option>
+                            {blocosDisponiveis.map((b) => (
+                              <option key={b} value={b}>{b}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </div>
 
