@@ -25,6 +25,18 @@ import {
   Check,
   FileText
 } from 'lucide-react';
+import { 
+  carregarCondominioConfig, 
+  isEstruturaCasas, 
+  isEstruturaTorres, 
+  getNomeRotuloBloco, 
+  getNomeRotuloUnidade, 
+  obterListaBlocosOuTorres, 
+  formatarIdentificacaoUnidade, 
+  formatarTextoWhatsUnidade,
+  saoUnidadesEquivalentes,
+  CondominioConfig 
+} from '../services/condominioService';
 
 interface CustodiaProps {
   usuarioLogado?: any;
@@ -36,6 +48,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
+  const [condoConfig, setCondoConfig] = useState<CondominioConfig | null>(null);
   const [moradores, setMoradores] = useState<any[]>([]);
   const [itensGuardados, setItensGuardados] = useState<any[]>([]);
   const [historicoCompleto, setHistoricoCompleto] = useState<any[]>([]);
@@ -84,6 +97,16 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id;
+      if (targetCondo) {
+        const cfg = await carregarCondominioConfig(targetCondo);
+        setCondoConfig(cfg);
+        if (isEstruturaCasas(cfg?.tipo_estrutura)) {
+          setOrigemBloco('Casa');
+          setDestinoBloco('Casa');
+        }
+      }
+
       let moradQuery = supabase
         .from('moradores')
         .select('*')
@@ -120,6 +143,13 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
     }
   };
 
+  const eEstruturaCasas = isEstruturaCasas(condoConfig?.tipo_estrutura);
+  const eEstruturaTorres = isEstruturaTorres(condoConfig?.tipo_estrutura);
+  const rotuloBloco = getNomeRotuloBloco(condoConfig?.tipo_estrutura);
+  const rotuloUnidade = getNomeRotuloUnidade(condoConfig?.tipo_estrutura);
+
+  const listaBlocos = obterListaBlocosOuTorres(condoConfig, moradores);
+
   const uploadFotoStorage = async (file: File | null, pasta: string, setUrlCallback: (url: string) => void) => {
     if (!file) return;
     setUploadingFoto(true);
@@ -149,11 +179,12 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
   };
 
   const selecionarOrigemMorador = (unid: string, bloc: string) => {
+    const blocoEfetivo = eEstruturaCasas ? 'Casa' : bloc;
     setOrigemUnidade(unid);
-    setOrigemBloco(bloc);
+    setOrigemBloco(blocoEfetivo);
     const m = moradores.find(x => 
-      x.unidade?.toString().toLowerCase() === unid.trim().toLowerCase() &&
-      (!bloc.trim() || x.bloco?.toString().toLowerCase() === bloc.trim().toLowerCase())
+      saoUnidadesEquivalentes(x.unidade, unid) &&
+      (eEstruturaCasas || !blocoEfetivo.trim() || (x.bloco || '').toLowerCase() === blocoEfetivo.trim().toLowerCase())
     );
     if (m) {
       setOrigemNome(m.nome);
@@ -162,11 +193,12 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
   };
 
   const selecionarDestinoMorador = (unid: string, bloc: string) => {
+    const blocoEfetivo = eEstruturaCasas ? 'Casa' : bloc;
     setDestinoUnidade(unid);
-    setDestinoBloco(bloc);
+    setDestinoBloco(blocoEfetivo);
     const m = moradores.find(x => 
-      x.unidade?.toString().toLowerCase() === unid.trim().toLowerCase() &&
-      (!bloc.trim() || x.bloco?.toString().toLowerCase() === bloc.trim().toLowerCase())
+      saoUnidadesEquivalentes(x.unidade, unid) &&
+      (eEstruturaCasas || !blocoEfetivo.trim() || (x.bloco || '').toLowerCase() === blocoEfetivo.trim().toLowerCase())
     );
     if (m) {
       setDestinoNome(m.nome);
@@ -174,14 +206,11 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
     }
   };
 
-  const blocosDisponiveis = Array.from(new Set(moradores.map((m: any) => m.bloco?.trim()).filter(Boolean))).sort() as string[];
-  const listaBlocos = blocosDisponiveis.length > 0 ? blocosDisponiveis : ['A', 'B', 'C', 'D'];
-
   const moradoresOrigemFiltrados = moradores.filter(
-    (m) => origemUnidade && m.unidade && String(m.unidade) === String(origemUnidade) && (!origemBloco || m.bloco === origemBloco)
+    (m) => origemUnidade && m.unidade && saoUnidadesEquivalentes(m.unidade, origemUnidade) && (eEstruturaCasas || !origemBloco || (m.bloco || '').toLowerCase() === origemBloco.toLowerCase())
   );
   const moradoresDestinoFiltrados = moradores.filter(
-    (m) => destinoUnidade && m.unidade && String(m.unidade) === String(destinoUnidade) && (!destinoBloco || m.bloco === destinoBloco)
+    (m) => destinoUnidade && m.unidade && saoUnidadesEquivalentes(m.unidade, destinoUnidade) && (eEstruturaCasas || !destinoBloco || (m.bloco || '').toLowerCase() === destinoBloco.toLowerCase())
   );
 
   const salvarEntradaCustodia = async (e: React.FormEvent) => {
@@ -203,12 +232,12 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
         fluxo,
         origem_tipo: fluxo.startsWith('M') ? 'Morador' : 'Terceiro',
         origem_unidade: origemUnidade.trim(),
-        origem_bloco: origemBloco.trim(),
+        origem_bloco: eEstruturaCasas ? 'Casa' : origemBloco.trim(),
         origem_nome_doc: origemNome.trim(),
         origem_whats: origemWhats.trim(),
         destino_tipo: fluxo.endsWith('M') ? 'Morador' : 'Terceiro',
         destino_unidade: destinoUnidade.trim(),
-        destino_bloco: destinoBloco.trim(),
+        destino_bloco: eEstruturaCasas ? 'Casa' : destinoBloco.trim(),
         destino_nome_doc: destinoNome.trim(),
         destino_whats: destinoWhats.trim(),
         descricao: descricaoItem.trim(),
@@ -556,42 +585,51 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 uppercase">Unidade / Ap. *</label>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase">
+                          {rotuloUnidade} *
+                        </label>
                         <input
                           type="text"
-                          inputMode="numeric"
                           required
                           value={origemUnidade}
                           onChange={(e) => {
-                            const v = e.target.value.replace(/\D/g, '');
-                            selecionarOrigemMorador(v, origemBloco);
+                            selecionarOrigemMorador(e.target.value, origemBloco);
                           }}
-                          placeholder="Ex: 24"
+                          placeholder={eEstruturaCasas ? "Ex: 01 ou 24" : "Ex: 101"}
                           className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 uppercase">Bloco</label>
-                        <select
-                          value={origemBloco}
-                          onChange={(e) => {
-                            setOrigemBloco(e.target.value);
-                            selecionarOrigemMorador(origemUnidade, e.target.value);
-                          }}
-                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
-                        >
-                          <option value="">Todos / Sem Bloco</option>
-                          {listaBlocos.map((b) => (
-                            <option key={b} value={b}>Bloco {b}</option>
-                          ))}
-                        </select>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase">
+                          {rotuloBloco}
+                        </label>
+                        {eEstruturaCasas ? (
+                          <div className="w-full p-2 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 text-xs font-black flex items-center justify-between">
+                            <span>🏠 Casa</span>
+                            <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-bold uppercase">Automático</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={origemBloco}
+                            onChange={(e) => {
+                              setOrigemBloco(e.target.value);
+                              selecionarOrigemMorador(origemUnidade, e.target.value);
+                            }}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                          >
+                            <option value="">{eEstruturaTorres ? 'Todas / Sem Torre' : 'Todos / Sem Bloco'}</option>
+                            {listaBlocos.map((b) => (
+                              <option key={b} value={b}>{b}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </div>
 
                     {moradoresOrigemFiltrados.length > 0 && (
                       <div className="space-y-1">
                         <label className="block text-[10px] font-bold text-emerald-800 uppercase">
-                          Moradores do Ap. {origemUnidade}:
+                          Moradores da {eEstruturaCasas ? 'Casa' : 'Unidade'} {origemUnidade}:
                         </label>
                         <div className="flex flex-wrap gap-1">
                           {moradoresOrigemFiltrados.map((m) => (
@@ -658,35 +696,44 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Unidade / Ap. *</label>
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase">
+                          {rotuloUnidade} *
+                        </label>
                         <input
                           type="text"
-                          inputMode="numeric"
                           required
                           value={destinoUnidade}
                           onChange={(e) => {
-                            const v = e.target.value.replace(/\D/g, '');
-                            selecionarDestinoMorador(v, destinoBloco);
+                            selecionarDestinoMorador(e.target.value, destinoBloco);
                           }}
-                          placeholder="Ex: 24"
+                          placeholder={eEstruturaCasas ? "Ex: 01 ou 24" : "Ex: 101"}
                           className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Bloco</label>
-                        <select
-                          value={destinoBloco}
-                          onChange={(e) => {
-                            setDestinoBloco(e.target.value);
-                            selecionarDestinoMorador(destinoUnidade, e.target.value);
-                          }}
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
-                        >
-                          <option value="">Todos / Sem Bloco</option>
-                          {listaBlocos.map((b) => (
-                            <option key={b} value={b}>Bloco {b}</option>
-                          ))}
-                        </select>
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase">
+                          {rotuloBloco}
+                        </label>
+                        {eEstruturaCasas ? (
+                          <div className="w-full p-2 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 text-xs font-black flex items-center justify-between">
+                            <span>🏠 Casa</span>
+                            <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-bold uppercase">Automático</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={destinoBloco}
+                            onChange={(e) => {
+                              setDestinoBloco(e.target.value);
+                              selecionarDestinoMorador(destinoUnidade, e.target.value);
+                            }}
+                            className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                          >
+                            <option value="">{eEstruturaTorres ? 'Todas / Sem Torre' : 'Todos / Sem Bloco'}</option>
+                            {listaBlocos.map((b) => (
+                              <option key={b} value={b}>{b}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </div>
 
@@ -1235,7 +1282,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                             {item.origem_nome_doc || 'Não informado'}
                           </p>
                           <p className="text-[11px] text-slate-600">
-                            {item.origem_unidade ? `Ap. ${item.origem_unidade} ${item.origem_bloco ? '• Bl ' + item.origem_bloco : ''}` : item.origem_tipo || 'Externo'}
+                            {item.origem_unidade ? formatarIdentificacaoUnidade(item.origem_unidade, item.origem_bloco, condoConfig?.tipo_estrutura) : item.origem_tipo || 'Externo'}
                           </p>
                           {item.origem_whats && (
                             <p className="text-[10px] text-slate-500 font-mono">
@@ -1257,7 +1304,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                             {item.destino_nome_doc || 'Não informado'}
                           </p>
                           <p className="text-[11px] text-slate-600">
-                            {item.destino_unidade ? `Ap. ${item.destino_unidade} ${item.destino_bloco ? '• Bl ' + item.destino_bloco : ''}` : item.destino_tipo || 'Terceiro'}
+                            {item.destino_unidade ? formatarIdentificacaoUnidade(item.destino_unidade, item.destino_bloco, condoConfig?.tipo_estrutura) : item.destino_tipo || 'Terceiro'}
                           </p>
                           {item.destino_whats && (
                             <p className="text-[10px] text-slate-500 font-mono">
@@ -1437,8 +1484,8 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                       {new Date(itemDossieModal.created_at || itemDossieModal.data_hora_entrada).toLocaleString('pt-BR')}
                     </span>
                   </div>
-                  <p><strong>Entregue por:</strong> {itemDossieModal.origem_nome_doc} {itemDossieModal.origem_unidade ? `(Ap. ${itemDossieModal.origem_unidade} ${itemDossieModal.origem_bloco ? 'Bl ' + itemDossieModal.origem_bloco : ''})` : ''}</p>
-                  <p><strong>Destinatário Previsto:</strong> {itemDossieModal.destino_nome_doc} {itemDossieModal.destino_unidade ? `(Ap. ${itemDossieModal.destino_unidade})` : ''}</p>
+                  <p><strong>Entregue por:</strong> {itemDossieModal.origem_nome_doc} {itemDossieModal.origem_unidade ? `(${formatarIdentificacaoUnidade(itemDossieModal.origem_unidade, itemDossieModal.origem_bloco, condoConfig?.tipo_estrutura)})` : ''}</p>
+                  <p><strong>Destinatário Previsto:</strong> {itemDossieModal.destino_nome_doc} {itemDossieModal.destino_unidade ? `(${formatarIdentificacaoUnidade(itemDossieModal.destino_unidade, itemDossieModal.destino_bloco, condoConfig?.tipo_estrutura)})` : ''}</p>
                   <p className="text-[10px] text-slate-500">Operador Responsável: <strong>{itemDossieModal.operador_entrada || 'Portaria'}</strong></p>
                 </div>
               </div>
