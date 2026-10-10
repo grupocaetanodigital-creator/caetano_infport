@@ -26,6 +26,7 @@ interface AlertaRondaGlobalProps {
   usuarioLogado?: any;
   condominioId?: string;
   condominioAtivo?: any;
+  moduloRondaHabilitado?: boolean;
 }
 
 const CHAVE_MUTE_ADM = 'infport_mute_alerta_global_adm_v1';
@@ -35,12 +36,16 @@ export default function AlertaRondaGlobal({
   onNavegarModulo,
   usuarioLogado, 
   condominioId, 
-  condominioAtivo 
+  condominioAtivo,
+  moduloRondaHabilitado
 }: AlertaRondaGlobalProps) {
   const idCondominioAtivo = condominioId || condominioAtivo?.id || usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id;
   const eAdmin = usuarioLogado?.perfil === 'admin' || usuarioLogado?.nivel_acesso === 0 || usuarioLogado?.perfil === 'master' || usuarioLogado?.nivel_acesso === 1;
 
-  const [moduloRondaAtivo, setModuloRondaAtivo] = useState(true);
+  const [moduloRondaAtivo, setModuloRondaAtivo] = useState(
+    moduloRondaHabilitado !== undefined ? moduloRondaHabilitado : false
+  );
+  const [temPontosRonda, setTemPontosRonda] = useState(false);
   const [tempoRestante, setTempoRestante] = useState(15 * 60);
   const [tempoAtrasado, setTempoAtrasado] = useState(0);
   const [statusRonda, setStatusRonda] = useState<'aguardando' | 'atrasada' | 'em_andamento'>('aguardando');
@@ -73,8 +78,16 @@ export default function AlertaRondaGlobal({
   const minutosRestantesMute = muteAdmTimestamp ? Math.max(0, Math.ceil((muteAdmTimestamp - Date.now()) / 60000)) : 0;
 
   useEffect(() => {
+    if (moduloRondaHabilitado !== undefined) {
+      setModuloRondaAtivo(moduloRondaHabilitado);
+      if (!moduloRondaHabilitado) {
+        setAlertaDisparado(false);
+      }
+      return;
+    }
+
     if (!idCondominioAtivo) {
-      setModuloRondaAtivo(true);
+      setModuloRondaAtivo(false);
       return;
     }
 
@@ -88,14 +101,14 @@ export default function AlertaRondaGlobal({
           .eq('condominio_id', idCondominioAtivo)
           .maybeSingle();
 
-        let estaAtivo = true;
+        let estaAtivo = false;
 
         if (!configError && configData) {
           if (configData.mod07_gestao_ronda !== undefined && configData.mod07_gestao_ronda !== null) {
             estaAtivo = Boolean(configData.mod07_gestao_ronda);
           } else if (configData.feature_flags && typeof configData.feature_flags === 'object') {
             const flags = configData.feature_flags as Record<string, any>;
-            estaAtivo = Boolean(flags.mod07_gestao_ronda ?? true);
+            estaAtivo = Boolean(flags.mod07_gestao_ronda ?? false);
           }
         }
 
@@ -118,7 +131,7 @@ export default function AlertaRondaGlobal({
       isMounted = false;
       clearInterval(intervalConfig);
     };
-  }, [idCondominioAtivo]);
+  }, [idCondominioAtivo, moduloRondaHabilitado]);
 
   // Monitoramento contínuo: Rondas + Permanência de Prestadores + Chaves Atrasadas
   useEffect(() => {
@@ -132,36 +145,57 @@ export default function AlertaRondaGlobal({
 
         // 1. Checa Rondas
         if (moduloRondaAtivo) {
-          const { data: emAndamento } = await supabase
-            .from('rondas_execucao')
-            .select('id, hora_inicio')
-            .eq('condominio_id', idCondominioAtivo)
-            .is('hora_fim', null)
-            .order('hora_inicio', { ascending: false })
-            .limit(1);
+          // Checa primeiro se o condomínio possui pontos de ronda cadastrados
+          const { count: totalPontos } = await supabase
+            .from('rondas_pontos')
+            .select('id', { count: 'exact', head: true })
+            .eq('condominio_id', idCondominioAtivo);
 
           if (!isMounted) return;
 
-          if (emAndamento && emAndamento.length > 0) {
-            rondaEmAndamentoRef.current = true;
-            setStatusRonda('em_andamento');
+          const temPontos = (totalPontos || 0) > 0;
+          setTemPontosRonda(temPontos);
+
+          if (!temPontos) {
+            setStatusRonda('aguardando');
             setAlertaDisparado(false);
           } else {
-            rondaEmAndamentoRef.current = false;
-            const { data: ultimaRonda } = await supabase
+            const { data: emAndamento } = await supabase
               .from('rondas_execucao')
-              .select('id, hora_fim')
+              .select('id, hora_inicio')
               .eq('condominio_id', idCondominioAtivo)
-              .not('hora_fim', 'is', null)
-              .order('hora_fim', { ascending: false })
+              .is('hora_fim', null)
+              .order('hora_inicio', { ascending: false })
               .limit(1);
 
-            let baseTimestamp = agora;
-            if (ultimaRonda && ultimaRonda.length > 0 && ultimaRonda[0].hora_fim) {
-              baseTimestamp = new Date(ultimaRonda[0].hora_fim).getTime();
+            if (!isMounted) return;
+
+            if (emAndamento && emAndamento.length > 0) {
+              rondaEmAndamentoRef.current = true;
+              setStatusRonda('em_andamento');
+              setAlertaDisparado(false);
+            } else {
+              rondaEmAndamentoRef.current = false;
+              const { data: ultimaRonda } = await supabase
+                .from('rondas_execucao')
+                .select('id, hora_fim')
+                .eq('condominio_id', idCondominioAtivo)
+                .not('hora_fim', 'is', null)
+                .order('hora_fim', { ascending: false })
+                .limit(1);
+
+              let baseTimestamp = agora;
+              if (ultimaRonda && ultimaRonda.length > 0 && ultimaRonda[0].hora_fim) {
+                baseTimestamp = new Date(ultimaRonda[0].hora_fim).getTime();
+                proximaRondaTimestampRef.current = baseTimestamp + 15 * 60 * 1000;
+              } else {
+                // Se nunca foi executada nenhuma ronda no condomínio, não gera atraso automático agressivo
+                proximaRondaTimestampRef.current = agora + 60 * 60 * 1000;
+              }
             }
-            proximaRondaTimestampRef.current = baseTimestamp + 15 * 60 * 1000;
           }
+        } else {
+          setTemPontosRonda(false);
         }
 
         // 2. Checa Prestadores com permanência interna estourada
@@ -359,33 +393,44 @@ export default function AlertaRondaGlobal({
     });
   };
 
+  const rondaAtiva = Boolean(idCondominioAtivo) && temPontosRonda && (moduloRondaHabilitado !== undefined ? moduloRondaHabilitado : moduloRondaAtivo);
+
+  // Se o módulo de ronda estiver desativado e não houver prestadores nem chaves estouradas, não renderiza nada
+  if (!rondaAtiva && prestadoresEstourados.length === 0 && chavesAtrasadas.length === 0) {
+    return null;
+  }
+
   return (
     <>
       {/* BARRA SUPERIOR DE ALERTAS GLOBAIS (Ronda, Prestadores, Chaves e Mute) */}
       <div className={`w-full px-3 py-1 flex items-center justify-between text-[11px] font-bold shadow-xs sticky top-0 z-40 transition-colors flex-wrap gap-2 ${
-        prestadoresEstourados.length > 0 || chavesAtrasadas.length > 0 || statusRonda === 'atrasada'
+        prestadoresEstourados.length > 0 || chavesAtrasadas.length > 0 || (rondaAtiva && statusRonda === 'atrasada')
           ? 'bg-red-600 text-white'
-          : statusRonda === 'em_andamento'
+          : rondaAtiva && statusRonda === 'em_andamento'
           ? 'bg-emerald-600 text-white'
-          : 'bg-amber-500 text-slate-950'
+          : rondaAtiva
+          ? 'bg-amber-500 text-slate-950'
+          : 'bg-slate-900 text-white'
       }`}>
         <div className="flex items-center gap-2 truncate flex-wrap">
-          {/* Status da Ronda */}
-          {statusRonda === 'em_andamento' ? (
-            <div className="flex items-center gap-1.5 truncate">
-              <PlayCircle className="w-3.5 h-3.5 animate-spin text-emerald-200 shrink-0" />
-              <span className="truncate">Ronda em Andamento</span>
-            </div>
-          ) : statusRonda === 'atrasada' ? (
-            <div className="flex items-center gap-1.5 truncate">
-              <ShieldAlert className="w-3.5 h-3.5 text-white shrink-0 animate-bounce" />
-              <span className="truncate font-black">Ronda Atrasada / Pendente</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 truncate">
-              <Timer className="w-3.5 h-3.5 text-slate-900 shrink-0" />
-              <span className="truncate">Próxima Ronda</span>
-            </div>
+          {/* Status da Ronda (Apenas se o módulo de ronda estiver ativo) */}
+          {rondaAtiva && (
+            statusRonda === 'em_andamento' ? (
+              <div className="flex items-center gap-1.5 truncate">
+                <PlayCircle className="w-3.5 h-3.5 animate-spin text-emerald-200 shrink-0" />
+                <span className="truncate">Ronda em Andamento</span>
+              </div>
+            ) : statusRonda === 'atrasada' ? (
+              <div className="flex items-center gap-1.5 truncate">
+                <ShieldAlert className="w-3.5 h-3.5 text-white shrink-0 animate-bounce" />
+                <span className="truncate font-black">Ronda Atrasada / Pendente</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 truncate">
+                <Timer className="w-3.5 h-3.5 text-slate-900 shrink-0" />
+                <span className="truncate">Próxima Ronda</span>
+              </div>
+            )
           )}
 
           {/* Badge: Prestador Estourado */}
@@ -427,13 +472,15 @@ export default function AlertaRondaGlobal({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="bg-slate-950 text-white font-mono px-2 py-0.5 rounded text-[10px] sm:text-xs border border-slate-700">
-            {statusRonda === 'em_andamento'
-              ? 'EM MARCHA'
-              : statusRonda === 'atrasada'
-              ? `+${formatarTempo(tempoAtrasado)}`
-              : formatarTempo(tempoRestante)}
-          </div>
+          {rondaAtiva && (
+            <div className="bg-slate-950 text-white font-mono px-2 py-0.5 rounded text-[10px] sm:text-xs border border-slate-700">
+              {statusRonda === 'em_andamento'
+                ? 'EM MARCHA'
+                : statusRonda === 'atrasada'
+                ? `+${formatarTempo(tempoAtrasado)}`
+                : formatarTempo(tempoRestante)}
+            </div>
+          )}
 
           {/* BOTÃO EXCLUSIVO DE MUTE PARA ADMINISTRADOR (ADM) */}
           {eAdmin && (
@@ -452,17 +499,19 @@ export default function AlertaRondaGlobal({
             </button>
           )}
 
-          <button
-            onClick={handleIrParaRondas}
-            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase transition flex items-center gap-1 shadow-xs cursor-pointer ${
-              statusRonda === 'atrasada'
-                ? 'bg-white text-red-700 hover:bg-slate-100'
-                : 'bg-slate-900 text-white hover:bg-slate-800'
-            }`}
-          >
-            <QrCode className="w-3 h-3" />
-            <span>Rondas</span>
-          </button>
+          {rondaAtiva && (
+            <button
+              onClick={handleIrParaRondas}
+              className={`px-2 py-0.5 rounded text-[10px] font-black uppercase transition flex items-center gap-1 shadow-xs cursor-pointer ${
+                statusRonda === 'atrasada'
+                  ? 'bg-white text-red-700 hover:bg-slate-100'
+                  : 'bg-slate-900 text-white hover:bg-slate-800'
+              }`}
+            >
+              <QrCode className="w-3 h-3" />
+              <span>Rondas</span>
+            </button>
+          )}
         </div>
       </div>
 
