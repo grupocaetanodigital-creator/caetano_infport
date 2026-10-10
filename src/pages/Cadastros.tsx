@@ -227,10 +227,29 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const carregarDados = async () => {
     setLoading(true);
     try {
+      // 0. Garante que a lista de condomínios esteja disponível desde o primeiro carregamento
+      let listaCondos = condominios;
+      if (listaCondos.length === 0) {
+        const { data: condoData } = await supabase.from('condominios').select('*').order('nome');
+        if (condoData && condoData.length > 0) {
+          listaCondos = condoData;
+          setCondominios(condoData);
+          if (!condominioFiltroAdmin) {
+            const initialId = usuarioLogado?.condominio_id || condoData[0].id;
+            setCondominioFiltroAdmin(initialId);
+          }
+        }
+      }
+
+      const activeCondoId = eAdmin
+        ? (condominioFiltroAdmin || listaCondos[0]?.id || '')
+        : (usuarioLogado?.condominio_id || listaCondos[0]?.id || '');
+
       if (abaAtiva === 'condominios' && eAdmin) {
         const { data, error } = await supabase.from('condominios').select('*').order('nome');
         if (error) throw error;
         setCondominios(data || []);
+        listaCondos = data || [];
 
         const configs: Record<string, CondominioConfig> = {};
         for (const c of (data || [])) {
@@ -240,22 +259,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         setMapaConfigsCondos(configs);
       } else if (abaAtiva === 'operadores' && !eOperador) {
         let query = supabase.from('operadores').select('*').order('nome');
-        if (eAdmin && condominioFiltroAdmin) {
-          query = query.eq('condominio_id', condominioFiltroAdmin);
+        if (eAdmin && activeCondoId) {
+          query = query.eq('condominio_id', activeCondoId);
         } else if (!eAdmin && usuarioLogado?.condominio_id) {
           query = query.eq('condominio_id', usuarioLogado.condominio_id);
         }
         const { data, error } = await query;
         if (error) throw error;
         setOperadores(data || []);
-
-        if (condominios.length === 0) {
-          const { data: condoData } = await supabase.from('condominios').select('id, nome');
-          setCondominios(condoData || []);
-        }
       } else if (abaAtiva === 'moradores') {
         let query = supabase.from('moradores').select('*').order('unidade');
-        const targetCondo = condoAtivoId;
+        const targetCondo = activeCondoId;
         if (targetCondo) {
           query = query.eq('condominio_id', targetCondo);
         }
@@ -264,15 +278,6 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         if (error) throw error;
         setMoradores(data || []);
 
-        let listaCondos = condominios;
-        if (listaCondos.length === 0) {
-          const { data: condoData } = await supabase.from('condominios').select('*');
-          if (condoData) {
-            listaCondos = condoData;
-            setCondominios(condoData);
-          }
-        }
-
         const configs = { ...mapaConfigsCondos };
         for (const c of listaCondos) {
           configs[c.id] = await carregarCondominioConfig(c.id);
@@ -280,8 +285,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         setMapaConfigsCondos(configs);
       } else if (abaAtiva === 'niveis' && !eOperador) {
         let query = supabase.from('operadores').select('*').order('nome');
-        if (eAdmin && condominioFiltroAdmin) {
-          query = query.eq('condominio_id', condominioFiltroAdmin);
+        if (eAdmin && activeCondoId) {
+          query = query.eq('condominio_id', activeCondoId);
         } else if (!eAdmin && usuarioLogado?.condominio_id) {
           query = query.eq('condominio_id', usuarioLogado.condominio_id);
         }
@@ -426,7 +431,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       return;
     }
 
-    const targetCondominioId = eAdmin ? (condominioIdOperador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
+    const targetCondominioId = (eAdmin ? (condominioIdOperador || condominioFiltroAdmin || condoAtivoId) : usuarioLogado?.condominio_id) || condoAtivoId || condominios[0]?.id;
 
     if (!nomeOperador.trim() || !loginOperador.trim() || !targetCondominioId) {
       setMensagem({ tipo: 'erro', texto: 'Preencha o nome, login e selecione um condomínio.' });
@@ -469,10 +474,24 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           dadosAtualizacao.senha = senhaOperador.trim();
         }
 
-        const { error } = await supabase
+        let { error } = await supabase
           .from('operadores')
           .update(dadosAtualizacao)
           .eq('id', idEdicao);
+
+        if (error && (error.message?.includes('nivel_acesso_custom_id') || error.message?.includes('perfil') || (error as any).code === '42703')) {
+          console.warn('Fallback: salvando operador sem colunas extras de RBAC...');
+          const fallback: any = {
+            nome: nomeOperador.trim(),
+            login: loginOperador.trim().toLowerCase(),
+            nivel_acesso: nivelNum,
+            condominio_id: targetCondominioId
+          };
+          if (dadosAtualizacao.senha) fallback.senha = dadosAtualizacao.senha;
+          const retry = await supabase.from('operadores').update(fallback).eq('id', idEdicao);
+          error = retry.error;
+        }
+
         if (error) throw error;
         setMensagem({ tipo: 'sucesso', texto: 'Operador atualizado com sucesso!' });
       } else {
@@ -482,18 +501,27 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           return;
         }
 
-        const { error } = await supabase.from('operadores').insert([
-          {
-            nome: nomeOperador.trim(),
-            login: loginOperador.trim().toLowerCase(),
-            senha: senhaOperador.trim(),
-            nivel_acesso: nivelNum,
-            nivel_acesso_custom_id: customId,
-            perfil: perfilStr,
-            condominio_id: targetCondominioId,
-            ativo: true
-          }
-        ]);
+        const novoOp: any = {
+          nome: nomeOperador.trim(),
+          login: loginOperador.trim().toLowerCase(),
+          senha: senhaOperador.trim(),
+          nivel_acesso: nivelNum,
+          nivel_acesso_custom_id: customId,
+          perfil: perfilStr,
+          condominio_id: targetCondominioId,
+          ativo: true
+        };
+
+        let { error } = await supabase.from('operadores').insert([novoOp]);
+
+        if (error && (error.message?.includes('nivel_acesso_custom_id') || error.message?.includes('perfil') || (error as any).code === '42703')) {
+          console.warn('Fallback: cadastrando operador sem colunas extras de RBAC...');
+          delete novoOp.nivel_acesso_custom_id;
+          delete novoOp.perfil;
+          const retry = await supabase.from('operadores').insert([novoOp]);
+          error = retry.error;
+        }
+
         if (error) throw error;
         setMensagem({ tipo: 'sucesso', texto: 'Operador cadastrado com sucesso!' });
       }
@@ -526,7 +554,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const salvarMorador = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const targetCondominioId = eAdmin ? (condominioIdMorador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
+    const targetCondominioId = (eAdmin ? (condominioIdMorador || condominioFiltroAdmin || condoAtivoId) : usuarioLogado?.condominio_id) || condoAtivoId || condominios[0]?.id;
 
     if (!nomeMorador.trim() || !unidadeMorador.trim() || !targetCondominioId) {
       setMensagem({ tipo: 'erro', texto: 'Nome, Unidade e Condomínio são obrigatórios.' });

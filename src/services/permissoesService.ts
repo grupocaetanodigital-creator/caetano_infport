@@ -402,10 +402,13 @@ export async function salvarNivelAcesso(nivel: NivelAcessoItem, condominioId?: s
   if (targetCondo) {
     try {
       const customizadosDoCondo = atualizados.filter(n => n.condominio_id === targetCondo || !n.padrao_sistema);
-      await supabase
+      const { error } = await supabase
         .from('configuracoes')
         .update({ niveis_acesso: customizadosDoCondo } as any)
         .eq('condominio_id', targetCondo);
+      if (error) {
+        console.warn('Persistência remota de nível no Supabase (coluna niveis_acesso requer migração SQL):', error.message);
+      }
     } catch (e) {
       console.warn('Persistência remota de nível de acesso (graceful fallback):', e);
     }
@@ -420,10 +423,13 @@ export async function excluirNivelAcesso(id: string, condominioId?: string): Pro
   if (condominioId) {
     try {
       const customizadosDoCondo = atualizados.filter(n => n.condominio_id === condominioId || !n.padrao_sistema);
-      await supabase
+      const { error } = await supabase
         .from('configuracoes')
         .update({ niveis_acesso: customizadosDoCondo } as any)
         .eq('condominio_id', condominioId);
+      if (error) {
+        console.warn('Exclusão remota de nível no Supabase:', error.message);
+      }
     } catch (e) {
       console.warn('Erro ao atualizar exclusão de nível remoto:', e);
     }

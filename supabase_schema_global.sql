@@ -1,28 +1,28 @@
 -- ==============================================================================
--- INFPORT 1.0 - SCRIPT SQL GLOBAL DEFINITIVO PARA O SUPABASE
+-- INFPORT 1.0 - SCRIPT SQL DEFINITIVO DE ATUALIZAÇÃO E CORREÇÃO DO SUPABASE
 -- Execute este script no SQL Editor do seu projeto Supabase:
--- https://supabase.com/dashboard/project/_/sql
+-- https://supabase.com/dashboard/project/juafrepntyksgqiqzyes/sql/new
 --
--- Este script:
--- 1. Cria ou garante todas as 20 tabelas oficiais do sistema.
--- 2. Adiciona todas as colunas necessárias (incluindo local_armazenamento e fotos OCR).
--- 3. Remove com segurança tabelas antigas duplicadas/fantasmas sem perder dados.
--- 4. Habilita Row Level Security (RLS) permissivo para a portaria.
--- 5. Recarrega o cache do PostgREST (NOTIFY pgrst, 'reload schema').
+-- O que este script faz:
+-- 1. Cria ou garante todas as 25 tabelas oficiais do INFPORT 1.0.
+-- 2. Adiciona todas as colunas novas requeridas (RBAC, Chaves, Custódia, Manutenção, Rondas, etc).
+-- 3. Garante constraint UNIQUE em configuracoes(condominio_id) para salvar preferências.
+-- 4. Habilita Row Level Security (RLS) permissivo com políticas de acesso total para a portaria.
+-- 5. Garante o Bucket de Armazenamento 'encomendas' para fotos e comprovantes.
+-- 6. Recarrega o cache do PostgREST imediatamente (NOTIFY pgrst, 'reload schema').
 -- ==============================================================================
 
 BEGIN;
 
--- ==============================================================================
 -- 1. EXTENSÕES BÁSICAS
--- ==============================================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ==============================================================================
 -- 2. TABELA: condominios (Cadastro Multi-Tenant e Estrutura Física)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS condominios (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nome TEXT NOT NULL,
   cnpj TEXT,
   endereco TEXT,
@@ -36,9 +36,9 @@ CREATE TABLE IF NOT EXISTS condominios (
   horario_diurno_inicio TEXT DEFAULT '06:00',
   horario_noturno_inicio TEXT DEFAULT '18:00',
   intervalo_ronda INTEGER DEFAULT 15,
-  tipo_estrutura TEXT DEFAULT 'Blocos (Edifícios Baixos / Conjuntos)',
-  qtd_blocos INTEGER DEFAULT 10,
-  unidades_por_bloco INTEGER DEFAULT 20,
+  tipo_estrutura TEXT DEFAULT 'casas',
+  qtd_blocos INTEGER DEFAULT 1,
+  unidades_por_bloco INTEGER DEFAULT 117,
   nomes_blocos TEXT,
   locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
   turnos_plantao JSONB DEFAULT '{}'::jsonb,
@@ -46,11 +46,85 @@ CREATE TABLE IF NOT EXISTS condominios (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE condominios
+  ADD COLUMN IF NOT EXISTS cnpj TEXT,
+  ADD COLUMN IF NOT EXISTS endereco TEXT,
+  ADD COLUMN IF NOT EXISTS cidade TEXT DEFAULT 'São Paulo',
+  ADD COLUMN IF NOT EXISTS uf TEXT DEFAULT 'SP',
+  ADD COLUMN IF NOT EXISTS telefone_portaria TEXT,
+  ADD COLUMN IF NOT EXISTS sindico_nome TEXT,
+  ADD COLUMN IF NOT EXISTS sindico_whatsapp TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_grupo_url TEXT,
+  ADD COLUMN IF NOT EXISTS escala_plantao TEXT DEFAULT '06_18',
+  ADD COLUMN IF NOT EXISTS horario_diurno_inicio TEXT DEFAULT '06:00',
+  ADD COLUMN IF NOT EXISTS horario_noturno_inicio TEXT DEFAULT '18:00',
+  ADD COLUMN IF NOT EXISTS intervalo_ronda INTEGER DEFAULT 15,
+  ADD COLUMN IF NOT EXISTS tipo_estrutura TEXT DEFAULT 'casas',
+  ADD COLUMN IF NOT EXISTS qtd_blocos INTEGER DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS unidades_por_bloco INTEGER DEFAULT 117,
+  ADD COLUMN IF NOT EXISTS nomes_blocos TEXT,
+  ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 -- ==============================================================================
--- 3. TABELA: operadores (Porteiros, Vigilantes, Supervisores)
+-- 3. TABELA: configuracoes (Feature Flags, Locais e Gestão RBAC de Níveis de Acesso)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS configuracoes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  niveis_acesso JSONB DEFAULT '[]'::jsonb,
+  feature_flags JSONB DEFAULT '{}'::jsonb,
+  locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  setores_ronda JSONB DEFAULT '[]'::jsonb,
+  turnos_plantao JSONB DEFAULT '{}'::jsonb,
+  dados_tenant JSONB DEFAULT '{}'::jsonb,
+  mod02_gestao_encomendas BOOLEAN DEFAULT true,
+  mod03_custodia_itens BOOLEAN DEFAULT true,
+  mod04_materiais_posto BOOLEAN DEFAULT true,
+  mod05_quadro_chaves BOOLEAN DEFAULT true,
+  mod06_gestao_manutencao BOOLEAN DEFAULT true,
+  mod07_gestao_ronda BOOLEAN DEFAULT true,
+  mod08_livro_ocorrencias BOOLEAN DEFAULT true,
+  mod09_passagem_posto BOOLEAN DEFAULT true,
+  mod10_prestadores_servico BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE configuracoes
+  ADD COLUMN IF NOT EXISTS niveis_acesso JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
+  ADD COLUMN IF NOT EXISTS setores_ronda JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS dados_tenant JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS mod02_gestao_encomendas BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod03_custodia_itens BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod04_materiais_posto BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod05_quadro_chaves BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod06_gestao_manutencao BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod07_gestao_ronda BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod08_livro_ocorrencias BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
+
+-- Garante constraint UNIQUE em condominio_id para upserts funcionarem
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'configuracoes_condominio_id_key'
+  ) THEN
+    ALTER TABLE configuracoes ADD CONSTRAINT configuracoes_condominio_id_key UNIQUE (condominio_id);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+-- ==============================================================================
+-- 4. TABELA: operadores (Porteiros, Supervisores, Síndicos, Administradores)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS operadores (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   nome TEXT NOT NULL,
   login TEXT NOT NULL,
@@ -58,15 +132,29 @@ CREATE TABLE IF NOT EXISTS operadores (
   funcao TEXT DEFAULT 'Porteiro',
   telefone TEXT,
   turno_padrao TEXT DEFAULT 'Diurno',
+  nivel_acesso INTEGER DEFAULT 3,
+  nivel_acesso_custom_id TEXT DEFAULT 'nivel_3',
+  perfil TEXT DEFAULT 'operador',
+  foto_url TEXT,
   ativo BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE operadores
+  ADD COLUMN IF NOT EXISTS nivel_acesso INTEGER DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS nivel_acesso_custom_id TEXT DEFAULT 'nivel_3',
+  ADD COLUMN IF NOT EXISTS perfil TEXT DEFAULT 'operador',
+  ADD COLUMN IF NOT EXISTS funcao TEXT DEFAULT 'Porteiro',
+  ADD COLUMN IF NOT EXISTS telefone TEXT,
+  ADD COLUMN IF NOT EXISTS turno_padrao TEXT DEFAULT 'Diurno',
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+
 -- ==============================================================================
--- 4. TABELA: moradores (Moradores, Inquilinos e Proprietários)
+-- 5. TABELA: moradores (Moradores, Inquilinos, Proprietários)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS moradores (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   nome TEXT NOT NULL,
   bloco TEXT,
@@ -78,11 +166,16 @@ CREATE TABLE IF NOT EXISTS moradores (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE moradores
+  ADD COLUMN IF NOT EXISTS bloco TEXT,
+  ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'Morador',
+  ADD COLUMN IF NOT EXISTS observacoes TEXT;
+
 -- ==============================================================================
--- 5. TABELA: entregadores (Empresas de Entrega, Correios, Mercado Livre)
+-- 6. TABELA: entregadores & lotes_re & encomendas_itens
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS entregadores (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   nome TEXT NOT NULL,
   documento TEXT,
@@ -90,11 +183,8 @@ CREATE TABLE IF NOT EXISTS entregadores (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==============================================================================
--- 6. TABELA: lotes_re (Lotes de Recebimento de Encomendas - RE)
--- ==============================================================================
 CREATE TABLE IF NOT EXISTS lotes_re (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   codigo_re TEXT NOT NULL,
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   entregador_id UUID REFERENCES entregadores(id) ON DELETE SET NULL,
@@ -105,12 +195,8 @@ CREATE TABLE IF NOT EXISTS lotes_re (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==============================================================================
--- 7. TABELA: encomendas_itens (Itens Individuais de Encomenda)
--- ATENÇÃO: Garante a coluna local_armazenamento requerida na portaria!
--- ==============================================================================
 CREATE TABLE IF NOT EXISTS encomendas_itens (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lote_re_id UUID REFERENCES lotes_re(id) ON DELETE SET NULL,
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   bloco TEXT,
@@ -120,25 +206,30 @@ CREATE TABLE IF NOT EXISTS encomendas_itens (
   foto_etiqueta_url TEXT,
   observacoes TEXT,
   local_armazenamento TEXT DEFAULT 'Bancada Principal',
-  status TEXT DEFAULT 'retido', -- retido, entregue
+  status TEXT DEFAULT 'retido',
   retirado_por TEXT,
+  foto_retirada_url TEXT,
   foto_comprovante_url TEXT,
+  data_retirada TIMESTAMPTZ,
   data_hora_retirada TIMESTAMPTZ,
+  operador_baixa_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Garante que a coluna local_armazenamento exista caso a tabela já estivesse criada
-ALTER TABLE encomendas_itens 
+ALTER TABLE encomendas_itens
   ADD COLUMN IF NOT EXISTS local_armazenamento TEXT DEFAULT 'Bancada Principal',
   ADD COLUMN IF NOT EXISTS retirado_por TEXT,
+  ADD COLUMN IF NOT EXISTS foto_retirada_url TEXT,
   ADD COLUMN IF NOT EXISTS foto_comprovante_url TEXT,
-  ADD COLUMN IF NOT EXISTS data_hora_retirada TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS data_retirada TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS data_hora_retirada TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS operador_baixa_id TEXT;
 
 -- ==============================================================================
--- 8. TABELA: locais_armazenamento (Gestão dos Locais Físicos de Guarda)
+-- 7. TABELA: locais_armazenamento
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS locais_armazenamento (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   codigo TEXT NOT NULL,
   nome TEXT NOT NULL,
@@ -150,133 +241,213 @@ CREATE TABLE IF NOT EXISTS locais_armazenamento (
 );
 
 -- ==============================================================================
--- 9. TABELA: custodia (Pertences e Envelopes Guardados na Guarita)
+-- 8. TABELA: custodia (Guarda e Retirada de Pertences)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS custodia (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  codigo_custodia TEXT,
+  fluxo TEXT DEFAULT 'ENTRADA',
+  origem_tipo TEXT DEFAULT 'Morador',
+  origem_unidade TEXT,
+  origem_bloco TEXT,
+  origem_nome_doc TEXT,
+  origem_whats TEXT,
+  destino_tipo TEXT DEFAULT 'Morador',
+  destino_unidade TEXT,
+  destino_bloco TEXT,
+  destino_nome_doc TEXT,
+  destino_whats TEXT,
   descricao TEXT NOT NULL,
   categoria TEXT DEFAULT 'Pertence / Objeto',
-  deixado_por TEXT,
-  bloco TEXT,
-  unidade TEXT,
-  destinatario_nome TEXT,
-  destinatario_tipo TEXT DEFAULT 'Morador',
-  morador_id UUID REFERENCES moradores(id) ON DELETE SET NULL,
-  observacoes TEXT,
+  foto_entrada_url TEXT,
   foto_url TEXT,
-  status TEXT DEFAULT 'GUARDADO', -- GUARDADO, RETIRADO
+  status TEXT DEFAULT 'Aguardando Retirada',
   data_hora_entrada TIMESTAMPTZ DEFAULT NOW(),
+  operador_entrada TEXT,
+  recebedor_nome TEXT,
+  recebedor_doc TEXT,
+  foto_saida_url TEXT,
+  operador_saida TEXT,
   data_hora_saida TIMESTAMPTZ,
-  retirado_por_nome TEXT,
-  retirado_por_doc TEXT,
+  observacoes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE custodia
+  ADD COLUMN IF NOT EXISTS codigo_custodia TEXT,
+  ADD COLUMN IF NOT EXISTS fluxo TEXT DEFAULT 'ENTRADA',
+  ADD COLUMN IF NOT EXISTS origem_tipo TEXT DEFAULT 'Morador',
+  ADD COLUMN IF NOT EXISTS origem_unidade TEXT,
+  ADD COLUMN IF NOT EXISTS origem_bloco TEXT,
+  ADD COLUMN IF NOT EXISTS origem_nome_doc TEXT,
+  ADD COLUMN IF NOT EXISTS origem_whats TEXT,
+  ADD COLUMN IF NOT EXISTS destino_tipo TEXT DEFAULT 'Morador',
+  ADD COLUMN IF NOT EXISTS destino_unidade TEXT,
+  ADD COLUMN IF NOT EXISTS destino_bloco TEXT,
+  ADD COLUMN IF NOT EXISTS destino_nome_doc TEXT,
+  ADD COLUMN IF NOT EXISTS destino_whats TEXT,
+  ADD COLUMN IF NOT EXISTS foto_entrada_url TEXT,
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_entrada TEXT,
+  ADD COLUMN IF NOT EXISTS recebedor_nome TEXT,
+  ADD COLUMN IF NOT EXISTS recebedor_doc TEXT,
+  ADD COLUMN IF NOT EXISTS foto_saida_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_saida TEXT,
+  ADD COLUMN IF NOT EXISTS data_hora_saida TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS observacoes TEXT;
+
 -- ==============================================================================
--- 10. TABELA: materiais_posto (Inventário de Rádios, Lanternas, Controles)
+-- 9. TABELA: materiais_posto (Inventário dos Equipamentos do Posto)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS materiais_posto (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   nome TEXT NOT NULL,
   categoria TEXT DEFAULT 'Equipamento',
   codigo_patrimonio TEXT,
-  estado TEXT DEFAULT 'Perfeito', -- Perfeito, Com Avaria, Em Manutenção
+  estado TEXT DEFAULT 'Perfeito',
   observacao_avaria TEXT,
   foto_avaria_url TEXT,
+  operador_atualizacao TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE materiais_posto
+  ADD COLUMN IF NOT EXISTS operador_atualizacao TEXT,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 -- ==============================================================================
--- 11. TABELA: chaves (Claviculário Digital de Chaves)
+-- 10. TABELA: chaves & movimentacao_chaves
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS chaves (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   codigo_chave TEXT NOT NULL,
-  identificacao_sala TEXT NOT NULL,
+  nome_chave TEXT NOT NULL,
+  bloco TEXT,
+  unidade TEXT,
+  tempo_limite_horas INTEGER DEFAULT 2,
+  status TEXT DEFAULT 'Disponível',
+  identificacao_sala TEXT,
   setor TEXT DEFAULT 'Área Comum',
-  status TEXT DEFAULT 'DISPONIVEL', -- DISPONIVEL, RETIRADA
   posse_atual TEXT,
   contato_posse TEXT,
   retirado_as TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE chaves
+  ADD COLUMN IF NOT EXISTS nome_chave TEXT,
+  ADD COLUMN IF NOT EXISTS bloco TEXT,
+  ADD COLUMN IF NOT EXISTS unidade TEXT,
+  ADD COLUMN IF NOT EXISTS tempo_limite_horas INTEGER DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Disponível';
+
 CREATE TABLE IF NOT EXISTS movimentacao_chaves (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   chave_id UUID REFERENCES chaves(id) ON DELETE CASCADE,
-  tipo_movimento TEXT NOT NULL, -- RETIRADA, DEVOLUCAO
-  responsavel_nome TEXT NOT NULL,
+  retirante_nome TEXT NOT NULL,
+  retirante_doc TEXT,
+  retirante_telefone TEXT,
+  foto_retirada_url TEXT,
+  data_hora_retirada TIMESTAMPTZ DEFAULT NOW(),
+  previsao_devolucao TIMESTAMPTZ,
+  status TEXT DEFAULT 'Em Andamento',
+  operador_retirada TEXT,
+  data_hora_devolucao TIMESTAMPTZ,
+  foto_devolucao_url TEXT,
+  operador_devolucao TEXT,
+  tipo_movimento TEXT,
+  responsavel_nome TEXT,
   responsavel_doc TEXT,
-  data_hora TIMESTAMPTZ DEFAULT NOW(),
-  operador_id TEXT
+  data_hora TIMESTAMPTZ,
+  operador_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE movimentacao_chaves
+  ADD COLUMN IF NOT EXISTS retirante_nome TEXT,
+  ADD COLUMN IF NOT EXISTS retirante_doc TEXT,
+  ADD COLUMN IF NOT EXISTS retirante_telefone TEXT,
+  ADD COLUMN IF NOT EXISTS foto_retirada_url TEXT,
+  ADD COLUMN IF NOT EXISTS data_hora_retirada TIMESTAMPTZ DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS previsao_devolucao TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Em Andamento',
+  ADD COLUMN IF NOT EXISTS operador_retirada TEXT,
+  ADD COLUMN IF NOT EXISTS data_hora_devolucao TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS foto_devolucao_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_devolucao TEXT;
+
 -- ==============================================================================
--- 12. TABELA: chamados_manutencao (OS e Manutenção Preventiva/Corretiva)
+-- 11. TABELAS: chamados_manutencao & checklist_manutencao
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS chamados_manutencao (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   titulo TEXT NOT NULL,
+  localizacao TEXT,
+  categoria TEXT DEFAULT 'Geral',
+  prioridade TEXT DEFAULT 'Média',
   descricao TEXT,
-  categoria TEXT DEFAULT 'Elétrica',
-  prioridade TEXT DEFAULT 'Média', -- Baixa, Média, Alta, Urgente
-  status TEXT DEFAULT 'PENDENTE', -- PENDENTE, EM_EXECUCAO, CONCLUIDO
-  local_especifico TEXT,
-  solicitante TEXT,
   foto_antes_url TEXT,
+  status TEXT DEFAULT 'Aberto',
+  operador_abertura TEXT,
+  observacao_conclusao TEXT,
   foto_depois_url TEXT,
+  operador_conclusao TEXT,
+  data_conclusao TIMESTAMPTZ,
+  solicitante TEXT,
+  local_especifico TEXT,
   concluido_em TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE chamados_manutencao
+  ADD COLUMN IF NOT EXISTS localizacao TEXT,
+  ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT 'Geral',
+  ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'Média',
+  ADD COLUMN IF NOT EXISTS operador_abertura TEXT,
+  ADD COLUMN IF NOT EXISTS observacao_conclusao TEXT,
+  ADD COLUMN IF NOT EXISTS foto_depois_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_conclusao TEXT,
+  ADD COLUMN IF NOT EXISTS data_conclusao TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS solicitante TEXT,
+  ADD COLUMN IF NOT EXISTS local_especifico TEXT,
+  ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS checklist_manutencao (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  periodicidade TEXT DEFAULT 'Diário',
+  frequencia TEXT DEFAULT 'Diário',
+  prioridade TEXT DEFAULT 'Média',
+  status TEXT DEFAULT 'Pendente',
+  operador_criacao TEXT,
+  observacao_execucao TEXT,
+  foto_url TEXT,
+  operador_conclusao TEXT,
+  data_conclusao TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE checklist_manutencao
+  ADD COLUMN IF NOT EXISTS periodicidade TEXT DEFAULT 'Diário',
+  ADD COLUMN IF NOT EXISTS frequencia TEXT DEFAULT 'Diário',
+  ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'Média',
+  ADD COLUMN IF NOT EXISTS operador_criacao TEXT,
+  ADD COLUMN IF NOT EXISTS observacao_execucao TEXT,
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_conclusao TEXT,
+  ADD COLUMN IF NOT EXISTS data_conclusao TIMESTAMPTZ;
+
 -- ==============================================================================
--- 13. TABELAS: rondas_pontos, rondas_execucao e rondas_registros (Módulo 07)
+-- 12. TABELAS: rondas_setores, rondas_pontos, rondas_execucao, rondas_registros
 -- ==============================================================================
-CREATE TABLE IF NOT EXISTS rondas_pontos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  nome_ponto TEXT NOT NULL,
-  codigo_tag TEXT NOT NULL,
-  localizacao_descricao TEXT,
-  setor_id TEXT DEFAULT 'Geral',
-  latitude NUMERIC,
-  longitude NUMERIC,
-  ativo BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS rondas_execucao (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  operador_nome TEXT NOT NULL,
-  status TEXT DEFAULT 'EM_ANDAMENTO', -- EM_ANDAMENTO, FINALIZADA, CANCELADA
-  horario_inicio TIMESTAMPTZ DEFAULT NOW(),
-  horario_fim TIMESTAMPTZ,
-  pontos_esperados INTEGER DEFAULT 0,
-  pontos_concluidos INTEGER DEFAULT 0,
-  observacao_geral TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS rondas_registros (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  ronda_id UUID REFERENCES rondas_execucao(id) ON DELETE CASCADE,
-  ponto_id UUID REFERENCES rondas_pontos(id) ON DELETE CASCADE,
-  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  data_hora TIMESTAMPTZ DEFAULT NOW(),
-  latitude NUMERIC,
-  longitude NUMERIC,
-  foto_evidencia_url TEXT,
-  observacao TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Tabela dedicada de setores de ronda e checklists de inspeção
 CREATE TABLE IF NOT EXISTS rondas_setores (
   id TEXT NOT NULL,
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
@@ -290,81 +461,143 @@ CREATE TABLE IF NOT EXISTS rondas_setores (
   PRIMARY KEY (id, condominio_id)
 );
 
--- ==============================================================================
--- 14. TABELA: passagens_posto (Troca de Turno da Portaria)
--- ==============================================================================
-CREATE TABLE IF NOT EXISTS passagens_posto (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS rondas_pontos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  turno TEXT NOT NULL, -- Diurno, Noturno
-  operador_sai_nome TEXT NOT NULL,
-  operador_sai_doc TEXT,
-  operador_entra_nome TEXT NOT NULL,
-  operador_entra_doc TEXT,
-  data_hora_troca TIMESTAMPTZ DEFAULT NOW(),
-  resumo_encomendas_retidas INTEGER DEFAULT 0,
-  resumo_custodia_ativa INTEGER DEFAULT 0,
-  resumo_materiais_avaria INTEGER DEFAULT 0,
-  resumo_chaves_retiradas INTEGER DEFAULT 0,
-  resumo_rondas_cumpridas INTEGER DEFAULT 0,
-  resumo_prestadores_em_andamento INTEGER DEFAULT 0,
-  observacao_passagem TEXT,
-  assinatura_sai_status BOOLEAN DEFAULT true,
-  assinatura_entra_status BOOLEAN DEFAULT true,
+  nome_ponto TEXT NOT NULL,
+  codigo_tag TEXT NOT NULL,
+  localizacao_descricao TEXT,
+  setor_id TEXT DEFAULT 'Geral',
+  latitude NUMERIC,
+  longitude NUMERIC,
+  ativo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE rondas_pontos
+  ADD COLUMN IF NOT EXISTS setor_id TEXT DEFAULT 'Geral',
+  ADD COLUMN IF NOT EXISTS latitude NUMERIC,
+  ADD COLUMN IF NOT EXISTS longitude NUMERIC,
+  ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS rondas_execucao (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  operador_nome TEXT NOT NULL,
+  status TEXT DEFAULT 'Em Andamento',
+  data_inicio TIMESTAMPTZ DEFAULT NOW(),
+  data_fim TIMESTAMPTZ,
+  pontos_totais INTEGER DEFAULT 0,
+  pontos_lidos INTEGER DEFAULT 0,
+  resumo_detalhado TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE rondas_execucao
+  ADD COLUMN IF NOT EXISTS pontos_totais INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS pontos_lidos INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS resumo_detalhado TEXT;
+
+CREATE TABLE IF NOT EXISTS rondas_registros (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ronda_id UUID REFERENCES rondas_execucao(id) ON DELETE CASCADE,
+  ponto_id UUID REFERENCES rondas_pontos(id) ON DELETE CASCADE,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  data_hora TIMESTAMPTZ DEFAULT NOW(),
+  latitude NUMERIC,
+  longitude NUMERIC,
+  foto_evidencia_url TEXT,
+  observacao TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==============================================================================
--- 15. TABELA: ocorrencias (Livro Negro Digital de Ocorrências)
+-- 13. TABELA: passagens_posto
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS passagens_posto (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  codigo TEXT NOT NULL,
+  operador_sainte_nome TEXT NOT NULL,
+  operador_entrante_nome TEXT NOT NULL,
+  checklist JSONB DEFAULT '{}'::jsonb,
+  pendencias JSONB DEFAULT '{}'::jsonb,
+  observacoes TEXT,
+  divergencia TEXT,
+  status TEXT DEFAULT 'Concluída',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE passagens_posto
+  ADD COLUMN IF NOT EXISTS checklist JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS pendencias JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS codigo TEXT,
+  ADD COLUMN IF NOT EXISTS divergencia TEXT,
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Concluída',
+  ADD COLUMN IF NOT EXISTS operador_sainte_nome TEXT,
+  ADD COLUMN IF NOT EXISTS operador_entrante_nome TEXT;
+
+-- ==============================================================================
+-- 14. TABELA: ocorrencias (Livro Digital de Ocorrências)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS ocorrencias (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   titulo TEXT NOT NULL,
   descricao TEXT NOT NULL,
-  categoria TEXT DEFAULT 'Geral',
-  prioridade TEXT DEFAULT 'Normal',
-  bloco TEXT,
-  unidade TEXT,
-  envolvidos TEXT,
-  fotos JSONB DEFAULT '[]'::jsonb,
-  notificar_sindico BOOLEAN DEFAULT true,
-  registrado_por TEXT,
+  tipo TEXT DEFAULT 'Interna',
+  prioridade TEXT DEFAULT 'Média',
+  status TEXT DEFAULT 'Pendente',
+  foto_url TEXT,
+  operador_nome TEXT,
+  unidade_bloco TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE ocorrencias
+  ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'Interna',
+  ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'Média',
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pendente',
+  ADD COLUMN IF NOT EXISTS operador_nome TEXT,
+  ADD COLUMN IF NOT EXISTS unidade_bloco TEXT;
+
 -- ==============================================================================
--- 16. TABELA: prestadores (Obras, Prestadores e Leitura OCR de Documentos)
+-- 15. TABELAS: prestadores & prestadores_acessos
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS prestadores (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  nome_profissional TEXT NOT NULL,
-  empresa TEXT,
-  documento TEXT NOT NULL,
+  perfil_acesso TEXT DEFAULT 'prestador_unidade',
+  nome_profissional TEXT,
+  nome_completo TEXT,
+  documento TEXT,
   tipo_documento TEXT DEFAULT 'CPF',
-  foto_documento TEXT,
+  empresa TEXT,
+  parentesco_vinculo TEXT,
+  telefone TEXT,
+  placa_veiculo TEXT,
   foto_rosto TEXT,
-  tipo_servico TEXT DEFAULT 'Manutenção / Reforma',
+  foto_documento TEXT,
+  tipo_servico TEXT,
   atende_condominio BOOLEAN DEFAULT false,
   unidade TEXT,
   bloco TEXT,
   observacoes TEXT,
-  cracha_atribuido TEXT,
-  status_acesso TEXT DEFAULT 'AUTORIZADO', -- AUTORIZADO, EM_ANDAMENTO, CONCLUIDO
+  tipo_validade TEXT DEFAULT 'hoje',
+  data_validade_inicio TIMESTAMPTZ DEFAULT NOW(),
+  data_validade_fim TIMESTAMPTZ,
+  status_acesso TEXT DEFAULT 'AUTORIZADO',
+  operador_entrada_nome TEXT,
   data_hora_entrada TIMESTAMPTZ,
   data_hora_saida TIMESTAMPTZ,
+  cracha_atribuido TEXT,
+  tempo_maximo_minutos INTEGER DEFAULT 240,
+  limite_permanencia_ate TIMESTAMPTZ,
+  operador_saida_nome TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Garante as colunas de OCR, fotos, perfis e validade caso a tabela já existisse
 ALTER TABLE prestadores
-  ADD COLUMN IF NOT EXISTS foto_documento TEXT,
-  ADD COLUMN IF NOT EXISTS foto_rosto TEXT,
-  ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'CPF',
-  ADD COLUMN IF NOT EXISTS cracha_atribuido TEXT,
-  ADD COLUMN IF NOT EXISTS data_hora_entrada TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS data_hora_saida TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS perfil_acesso TEXT DEFAULT 'prestador_unidade',
   ADD COLUMN IF NOT EXISTS parentesco_vinculo TEXT,
   ADD COLUMN IF NOT EXISTS telefone TEXT,
@@ -375,11 +608,14 @@ ALTER TABLE prestadores
   ADD COLUMN IF NOT EXISTS tempo_maximo_minutos INTEGER DEFAULT 240,
   ADD COLUMN IF NOT EXISTS limite_permanencia_ate TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS operador_entrada_nome TEXT,
-  ADD COLUMN IF NOT EXISTS operador_saida_nome TEXT;
+  ADD COLUMN IF NOT EXISTS operador_saida_nome TEXT,
+  ADD COLUMN IF NOT EXISTS foto_documento TEXT,
+  ADD COLUMN IF NOT EXISTS foto_rosto TEXT,
+  ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'CPF',
+  ADD COLUMN IF NOT EXISTS cracha_atribuido TEXT;
 
--- Tabela de Histórico e Auditoria de Acessos / Permanência
 CREATE TABLE IF NOT EXISTS prestadores_acessos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   prestador_id UUID REFERENCES prestadores(id) ON DELETE CASCADE,
   perfil_acesso TEXT NOT NULL,
@@ -404,38 +640,10 @@ CREATE TABLE IF NOT EXISTS prestadores_acessos (
 );
 
 -- ==============================================================================
--- 17. TABELA: configuracoes (Feature Flags e Parametrizações dos Módulos)
--- ==============================================================================
-CREATE TABLE IF NOT EXISTS configuracoes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  condominio_id UUID UNIQUE REFERENCES condominios(id) ON DELETE CASCADE,
-  feature_flags JSONB DEFAULT '{}'::jsonb,
-  locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
-  setores_ronda JSONB DEFAULT '[]'::jsonb,
-  turnos_plantao JSONB DEFAULT '{}'::jsonb,
-  dados_tenant JSONB DEFAULT '{}'::jsonb,
-  mod02_gestao_encomendas BOOLEAN DEFAULT true,
-  mod03_custodia_itens BOOLEAN DEFAULT true,
-  mod04_materiais_posto BOOLEAN DEFAULT true,
-  mod05_quadro_chaves BOOLEAN DEFAULT true,
-  mod06_gestao_manutencao BOOLEAN DEFAULT true,
-  mod07_gestao_ronda BOOLEAN DEFAULT true,
-  mod08_livro_ocorrencias BOOLEAN DEFAULT true,
-  mod09_passagem_posto BOOLEAN DEFAULT true,
-  mod10_prestadores_servico BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Garante as colunas JSONB de locais e setores na tabela configuracoes caso já existisse
-ALTER TABLE configuracoes
-  ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
-  ADD COLUMN IF NOT EXISTS setores_ronda JSONB DEFAULT '[]'::jsonb;
-
--- ==============================================================================
--- 18. TABELAS: templates_whatsapp e agenda_emergencia
+-- 16. TABELAS: templates_whatsapp & agenda_emergencia
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS templates_whatsapp (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   codigo_evento TEXT NOT NULL,
   canal_destino TEXT DEFAULT 'Morador Direct',
@@ -444,7 +652,7 @@ CREATE TABLE IF NOT EXISTS templates_whatsapp (
 );
 
 CREATE TABLE IF NOT EXISTS agenda_emergencia (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
   categoria TEXT DEFAULT 'Órgão Público',
   nome_descricao TEXT NOT NULL,
@@ -455,7 +663,7 @@ CREATE TABLE IF NOT EXISTS agenda_emergencia (
 );
 
 -- ==============================================================================
--- 18.1. TABELA: historico_absoluto (Auditoria Global do Sistema em Tempo Real)
+-- 17. TABELA: historico_absoluto (Auditoria Global do Sistema em Tempo Real)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS historico_absoluto (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -471,64 +679,35 @@ CREATE TABLE IF NOT EXISTS historico_absoluto (
   criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ==============================================================================
+-- 18. ÍNDICES DE ALTA PERFORMANCE
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_condominios_nome ON condominios(nome);
+CREATE INDEX IF NOT EXISTS idx_operadores_condominio ON operadores(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_operadores_login ON operadores(login);
+CREATE INDEX IF NOT EXISTS idx_moradores_condominio ON moradores(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_moradores_unidade ON moradores(condominio_id, unidade);
+CREATE INDEX IF NOT EXISTS idx_lotes_re_condominio ON lotes_re(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_encomendas_itens_condominio ON encomendas_itens(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_encomendas_itens_status ON encomendas_itens(status);
+CREATE INDEX IF NOT EXISTS idx_chaves_condominio ON chaves(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_movimentacao_chaves_condominio ON movimentacao_chaves(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_custodia_condominio ON custodia(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_materiais_condominio ON materiais_posto(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_chamados_condominio ON chamados_manutencao(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_checklist_condominio ON checklist_manutencao(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_ocorrencias_condominio ON ocorrencias(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_prestadores_condominio ON prestadores(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_prestadores_acessos_condominio ON prestadores_acessos(condominio_id);
 CREATE INDEX IF NOT EXISTS idx_hist_abs_condominio ON historico_absoluto(condominio_id);
 CREATE INDEX IF NOT EXISTS idx_hist_abs_modulo ON historico_absoluto(modulo);
-CREATE INDEX IF NOT EXISTS idx_hist_abs_acao ON historico_absoluto(acao);
-CREATE INDEX IF NOT EXISTS idx_hist_abs_operador ON historico_absoluto(operador_id);
 CREATE INDEX IF NOT EXISTS idx_hist_abs_criado_em ON historico_absoluto(criado_em DESC);
 
 -- ==============================================================================
--- 19. SANEAMENTO SEGURO: MIGRAÇÃO E LIMPEZA DE TABELAS DUPLICADAS / FANTASMAS
--- ==============================================================================
--- Copia materiais antigos para materiais_posto caso a tabela antiga exista
-DO $$
-BEGIN
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'materiais') THEN
-    INSERT INTO materiais_posto (condominio_id, nome, categoria, codigo_patrimonio, estado, created_at)
-    SELECT m.condominio_id, COALESCE(m.nome, 'Material'), 'Outros', '', 'Perfeito', COALESCE(m.created_at, NOW())
-    FROM materiais m
-    WHERE NOT EXISTS (
-      SELECT 1 FROM materiais_posto mp WHERE mp.condominio_id = m.condominio_id AND mp.nome = m.nome
-    );
-  END IF;
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'Migração de materiais ignorada com segurança.';
-END $$;
-
--- Copia pontos_ronda antigos para rondas_pontos
-DO $$
-BEGIN
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pontos_ronda') THEN
-    INSERT INTO rondas_pontos (id, condominio_id, nome_ponto, codigo_tag, localizacao_descricao, created_at)
-    SELECT pr.id, pr.condominio_id, pr.nome_ponto, pr.codigo_tag, pr.localizacao_descricao, pr.created_at
-    FROM pontos_ronda pr
-    WHERE NOT EXISTS (
-      SELECT 1 FROM rondas_pontos rp WHERE rp.id = pr.id
-    );
-  END IF;
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'Migração de pontos_ronda ignorada com segurança.';
-END $$;
-
--- Remoção das 13 tabelas antigas duplicadas
-DROP TABLE IF EXISTS rondas_execucoes CASCADE;
-DROP TABLE IF EXISTS registros_ronda CASCADE;
-DROP TABLE IF EXISTS pontos_ronda CASCADE;
-DROP TABLE IF EXISTS movimentacoes_chaves CASCADE;
-DROP TABLE IF EXISTS rondas_passagem_posto CASCADE;
-DROP TABLE IF EXISTS custodia_itens CASCADE;
-DROP TABLE IF EXISTS inspecoes_materiais CASCADE;
-DROP TABLE IF EXISTS visitas_prestadores CASCADE;
-DROP TABLE IF EXISTS usuarios_sistema CASCADE;
-DROP TABLE IF EXISTS blocos CASCADE;
-DROP TABLE IF EXISTS unidades CASCADE;
-DROP TABLE IF EXISTS encomendas CASCADE;
-DROP TABLE IF EXISTS materiais CASCADE;
-
--- ==============================================================================
--- 20. HABILITAR RLS PERMISSIVO (Para a portaria operar com chave anon/service)
+-- 19. HABILITAÇÃO DE ROW LEVEL SECURITY (RLS) E POLÍTICAS PERMISSIVAS
 -- ==============================================================================
 ALTER TABLE condominios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE configuracoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE operadores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE moradores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entregadores ENABLE ROW LEVEL SECURITY;
@@ -540,18 +719,19 @@ ALTER TABLE materiais_posto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chaves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movimentacao_chaves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chamados_manutencao ENABLE ROW LEVEL SECURITY;
+ALTER TABLE checklist_manutencao ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rondas_setores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rondas_pontos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rondas_execucao ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rondas_registros ENABLE ROW LEVEL SECURITY;
 ALTER TABLE passagens_posto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ocorrencias ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prestadores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE configuracoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prestadores_acessos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE templates_whatsapp ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agenda_emergencia ENABLE ROW LEVEL SECURITY;
 ALTER TABLE historico_absoluto ENABLE ROW LEVEL SECURITY;
 
--- Políticas de acesso total para as operações do sistema da portaria
 DO $$
 DECLARE
   tbl RECORD;
@@ -567,10 +747,80 @@ BEGIN
   END LOOP;
 END $$;
 
-COMMIT;
+-- ==============================================================================
+-- 20. BUCKET DE ARMAZENAMENTO PARA FOTOS (encomendas, chaves, comprovantes)
+-- ==============================================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('encomendas', 'encomendas', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public Storage Encomendas" ON storage.objects;
+  CREATE POLICY "Public Storage Encomendas" ON storage.objects
+    FOR ALL USING (bucket_id = 'encomendas') WITH CHECK (bucket_id = 'encomendas');
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
 
 -- ==============================================================================
--- 21. RECARREGAR O SCHEMA CACHE DO POSTGREST IMEDIATAMENTE
--- Isso limpa o erro: "Could not find the 'local_armazenamento' column of 'encomendas_itens' in the schema cache"
+-- 21. DADOS INICIAIS SEED (Garante Condomínio Padrão e Usuário Admin)
 -- ==============================================================================
+-- Garante o condomínio padrão 'aa205bfb-55cc-42fe-ab25-9c16ac943851' se tabela estiver vazia
+INSERT INTO condominios (id, nome, endereco, tipo_estrutura, qtd_blocos, unidades_por_bloco)
+VALUES (
+  'aa205bfb-55cc-42fe-ab25-9c16ac943851',
+  'Residencial Parque das Flores',
+  'Av. Principal, 1000',
+  'casas',
+  1,
+  117
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Garante configuração inicial para o condomínio padrão
+INSERT INTO configuracoes (condominio_id, feature_flags, niveis_acesso)
+VALUES (
+  'aa205bfb-55cc-42fe-ab25-9c16ac943851',
+  '{"mod02_gestao_encomendas":true,"mod03_custodia_itens":true,"mod04_materiais_posto":true,"mod05_quadro_chaves":true,"mod06_gestao_manutencao":true,"mod07_gestao_ronda":true,"mod08_livro_ocorrencias":true,"mod09_passagem_posto":true,"mod10_prestadores_servico":true}'::jsonb,
+  '[]'::jsonb
+)
+ON CONFLICT (condominio_id) DO NOTHING;
+
+-- Garante operador Administrador Geral inicial (admin / admin123)
+INSERT INTO operadores (condominio_id, nome, login, senha, nivel_acesso, nivel_acesso_custom_id, perfil, funcao, ativo)
+SELECT 
+  'aa205bfb-55cc-42fe-ab25-9c16ac943851',
+  'Administrador Geral',
+  'admin',
+  'admin123',
+  0,
+  'nivel_0',
+  'admin',
+  'Administrador',
+  true
+WHERE NOT EXISTS (
+  SELECT 1 FROM operadores WHERE login = 'admin'
+);
+
+-- ==============================================================================
+-- 22. REALTIME & RECARREGAR O SCHEMA CACHE DO POSTGREST
+-- ==============================================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'historico_absoluto'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE historico_absoluto;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+COMMIT;
+
+-- Recarrega o cache do PostgREST imediatamente para aplicar as novas colunas
 NOTIFY pgrst, 'reload schema';

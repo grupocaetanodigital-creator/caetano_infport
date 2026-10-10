@@ -157,7 +157,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
 
     try {
       const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
-      const payload = {
+      const payload: any = {
         condominio_id: targetCondo,
         titulo: tituloRotina.trim(),
         frequencia,
@@ -167,9 +167,21 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
         operador_criacao: usuarioLogado?.login || usuarioLogado?.nome || 'Portaria'
       };
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from('checklist_manutencao')
         .insert([payload]);
+
+      if (error && ((error as any).code === '42703' || error.message?.includes('prioridade') || error.message?.includes('operador_criacao'))) {
+        const payloadCompat = {
+          condominio_id: targetCondo,
+          titulo: tituloRotina.trim(),
+          frequencia,
+          status: 'Pendente',
+          descricao: descricaoRotina.trim() || ''
+        };
+        const retry = await supabase.from('checklist_manutencao').insert([payloadCompat]);
+        error = retry.error;
+      }
 
       if (error) throw error;
 
@@ -225,7 +237,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
 
     try {
       const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
-      const payload = {
+      const payload: any = {
         condominio_id: targetCondo,
         titulo: tituloOS.trim(),
         localizacao: localizacaoOS.trim(),
@@ -237,7 +249,21 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
         operador_abertura: usuarioLogado?.login || usuarioLogado?.nome || 'Portaria'
       };
 
-      const { error } = await supabase.from('chamados_manutencao').insert([payload]);
+      let { error } = await supabase.from('chamados_manutencao').insert([payload]);
+
+      if (error && ((error as any).code === '42703' || error.message?.includes('localizacao') || error.message?.includes('categoria') || error.message?.includes('operador_abertura'))) {
+        console.warn('Fallback: abrindo chamado com esquema básico...');
+        const payloadCompat = {
+          condominio_id: targetCondo,
+          titulo: tituloOS.trim(),
+          descricao: `[${categoriaOS} | ${prioridadeOS} | Local: ${localizacaoOS.trim()}] ${descricaoOS.trim()}`,
+          foto_antes_url: fotoAntesUrl.trim() || '',
+          status: 'Aberto'
+        };
+        const retry = await supabase.from('chamados_manutencao').insert([payloadCompat]);
+        error = retry.error;
+      }
+
       if (error) throw error;
 
       setTituloOS(''); setLocalizacaoOS(''); setDescricaoOS(''); setFotoAntesUrl('');
@@ -257,7 +283,7 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
     setLoading(true);
 
     try {
-      const payload = {
+      const payload: any = {
         status: 'Concluído',
         observacao_conclusao: obsConclusaoOS.trim() || 'Serviço finalizado',
         foto_depois_url: fotoDepoisUrl.trim() || '',
@@ -265,7 +291,18 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
         data_conclusao: new Date().toISOString()
       };
 
-      const { error } = await supabase.from('chamados_manutencao').update(payload).eq('id', modalConclusaoOS.id);
+      let { error } = await supabase.from('chamados_manutencao').update(payload).eq('id', modalConclusaoOS.id);
+
+      if (error && ((error as any).code === '42703' || error.message?.includes('observacao_conclusao') || error.message?.includes('operador_conclusao') || error.message?.includes('data_conclusao'))) {
+        console.warn('Fallback: concluindo chamado com esquema básico...');
+        const payloadCompat = {
+          status: 'Concluído',
+          foto_depois_url: fotoDepoisUrl.trim() || ''
+        };
+        const retry = await supabase.from('chamados_manutencao').update(payloadCompat).eq('id', modalConclusaoOS.id);
+        error = retry.error;
+      }
+
       if (error) throw error;
 
       setModalConclusaoOS(null); setObsConclusaoOS(''); setFotoDepoisUrl('');

@@ -261,8 +261,9 @@ export function generateMigrationSql(): string {
 
 BEGIN;
 
--- 0. Garantir colunas de parametrização e JSONB na tabela configuracoes
+-- 0. Garantir colunas de parametrização e JSONB na tabela configuracoes (incluindo RBAC)
 ALTER TABLE IF EXISTS configuracoes 
+  ADD COLUMN IF NOT EXISTS niveis_acesso JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
   ADD COLUMN IF NOT EXISTS setores_ronda JSONB DEFAULT '[]'::jsonb,
@@ -277,6 +278,86 @@ ALTER TABLE IF EXISTS configuracoes
   ADD COLUMN IF NOT EXISTS mod08_livro_ocorrencias BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
+
+-- 0.01 Garantir colunas na tabela operadores (RBAC e perfis personalizados)
+ALTER TABLE IF EXISTS operadores
+  ADD COLUMN IF NOT EXISTS nivel_acesso INTEGER DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS nivel_acesso_custom_id TEXT DEFAULT 'nivel_3',
+  ADD COLUMN IF NOT EXISTS perfil TEXT DEFAULT 'operador',
+  ADD COLUMN IF NOT EXISTS funcao TEXT DEFAULT 'Porteiro',
+  ADD COLUMN IF NOT EXISTS telefone TEXT,
+  ADD COLUMN IF NOT EXISTS turno_padrao TEXT DEFAULT 'Diurno',
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+
+-- 0.02 Garantir colunas na tabela chamados_manutencao
+ALTER TABLE IF EXISTS chamados_manutencao
+  ADD COLUMN IF NOT EXISTS localizacao TEXT,
+  ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT 'Geral',
+  ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'Média',
+  ADD COLUMN IF NOT EXISTS operador_abertura TEXT,
+  ADD COLUMN IF NOT EXISTS observacao_conclusao TEXT,
+  ADD COLUMN IF NOT EXISTS foto_depois_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_conclusao TEXT,
+  ADD COLUMN IF NOT EXISTS data_conclusao TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS solicitante TEXT,
+  ADD COLUMN IF NOT EXISTS local_especifico TEXT,
+  ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMPTZ;
+
+-- 0.03 Garantir colunas na tabela checklist_manutencao
+ALTER TABLE IF EXISTS checklist_manutencao
+  ADD COLUMN IF NOT EXISTS periodicidade TEXT DEFAULT 'Diário',
+  ADD COLUMN IF NOT EXISTS frequencia TEXT DEFAULT 'Diário',
+  ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'Média',
+  ADD COLUMN IF NOT EXISTS operador_criacao TEXT,
+  ADD COLUMN IF NOT EXISTS observacao_execucao TEXT,
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_conclusao TEXT,
+  ADD COLUMN IF NOT EXISTS data_conclusao TIMESTAMPTZ;
+
+-- 0.04 Garantir colunas nas tabelas de chaves e custódia
+ALTER TABLE IF EXISTS chaves
+  ADD COLUMN IF NOT EXISTS nome_chave TEXT,
+  ADD COLUMN IF NOT EXISTS bloco TEXT,
+  ADD COLUMN IF NOT EXISTS unidade TEXT,
+  ADD COLUMN IF NOT EXISTS tempo_limite_horas INTEGER DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Disponível';
+
+ALTER TABLE IF EXISTS movimentacao_chaves
+  ADD COLUMN IF NOT EXISTS retirante_nome TEXT,
+  ADD COLUMN IF NOT EXISTS retirante_doc TEXT,
+  ADD COLUMN IF NOT EXISTS retirante_telefone TEXT,
+  ADD COLUMN IF NOT EXISTS foto_retirada_url TEXT,
+  ADD COLUMN IF NOT EXISTS data_hora_retirada TIMESTAMPTZ DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS previsao_devolucao TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Em Andamento',
+  ADD COLUMN IF NOT EXISTS operador_retirada TEXT,
+  ADD COLUMN IF NOT EXISTS data_hora_devolucao TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS foto_devolucao_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_devolucao TEXT;
+
+ALTER TABLE IF EXISTS custodia
+  ADD COLUMN IF NOT EXISTS codigo_custodia TEXT,
+  ADD COLUMN IF NOT EXISTS fluxo TEXT DEFAULT 'ENTRADA',
+  ADD COLUMN IF NOT EXISTS origem_tipo TEXT DEFAULT 'Morador',
+  ADD COLUMN IF NOT EXISTS origem_unidade TEXT,
+  ADD COLUMN IF NOT EXISTS origem_bloco TEXT,
+  ADD COLUMN IF NOT EXISTS origem_nome_doc TEXT,
+  ADD COLUMN IF NOT EXISTS origem_whats TEXT,
+  ADD COLUMN IF NOT EXISTS destino_tipo TEXT DEFAULT 'Morador',
+  ADD COLUMN IF NOT EXISTS destino_unidade TEXT,
+  ADD COLUMN IF NOT EXISTS destino_bloco TEXT,
+  ADD COLUMN IF NOT EXISTS destino_nome_doc TEXT,
+  ADD COLUMN IF NOT EXISTS destino_whats TEXT,
+  ADD COLUMN IF NOT EXISTS foto_entrada_url TEXT,
+  ADD COLUMN IF NOT EXISTS foto_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_entrada TEXT,
+  ADD COLUMN IF NOT EXISTS recebedor_nome TEXT,
+  ADD COLUMN IF NOT EXISTS recebedor_doc TEXT,
+  ADD COLUMN IF NOT EXISTS foto_saida_url TEXT,
+  ADD COLUMN IF NOT EXISTS operador_saida TEXT,
+  ADD COLUMN IF NOT EXISTS data_hora_saida TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS observacoes TEXT;
 
 -- 0.1 Garantir colunas na tabela condominios (Painel Tenant & Estrutura Física & WhatsApp)
 ALTER TABLE IF EXISTS condominios
@@ -296,9 +377,15 @@ ALTER TABLE IF EXISTS condominios
   ADD COLUMN IF NOT EXISTS locais_armazenamento JSONB DEFAULT '["Bancada Principal", "Chão / Caixas Grandes"]'::jsonb,
   ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb;
 
--- 0.2 Garantir coluna de local_armazenamento na tabela encomendas_itens
+-- 0.2 Garantir coluna de local_armazenamento e saída na tabela encomendas_itens
 ALTER TABLE IF EXISTS encomendas_itens
-  ADD COLUMN IF NOT EXISTS local_armazenamento TEXT DEFAULT 'Bancada Principal';
+  ADD COLUMN IF NOT EXISTS local_armazenamento TEXT DEFAULT 'Bancada Principal',
+  ADD COLUMN IF NOT EXISTS retirado_por TEXT,
+  ADD COLUMN IF NOT EXISTS foto_retirada_url TEXT,
+  ADD COLUMN IF NOT EXISTS foto_comprovante_url TEXT,
+  ADD COLUMN IF NOT EXISTS data_retirada TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS data_hora_retirada TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS operador_baixa_id TEXT;
 
 -- 0.3 Garantir colunas de OCR, fotos de documentos e faces na tabela prestadores
 ALTER TABLE IF EXISTS prestadores
@@ -306,9 +393,22 @@ ALTER TABLE IF EXISTS prestadores
   ADD COLUMN IF NOT EXISTS foto_rosto TEXT,
   ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'CPF';
 
--- 0.4 Garantir tabela dedicada de rondas_setores e coluna setor_id em rondas_pontos
+-- 0.4 Garantir tabela dedicada de rondas_setores e coluna setor_id e ativo em rondas_pontos
 ALTER TABLE IF EXISTS rondas_pontos
-  ADD COLUMN IF NOT EXISTS setor_id TEXT DEFAULT 'SETOR_A';
+  ADD COLUMN IF NOT EXISTS setor_id TEXT DEFAULT 'SETOR_A',
+  ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+
+-- Garante constraint UNIQUE em configuracoes(condominio_id) para upserts
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'configuracoes_condominio_id_key'
+  ) THEN
+    ALTER TABLE configuracoes ADD CONSTRAINT configuracoes_condominio_id_key UNIQUE (condominio_id);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS rondas_setores (
   id TEXT NOT NULL,

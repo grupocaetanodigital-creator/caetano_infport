@@ -74,6 +74,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const condId = usuarioLogado?.condominio_id || '';
   const isGlobal = !condId || condId === 'global';
   const [fotoDevolucaoUrl, setFotoDevolucaoUrl] = useState('');
+  const [whatsEmprestimo, setWhatsEmprestimo] = useState<{ link: string } | null>(null);
 
   const eEstruturaCasas = isEstruturaCasas(condoConfig?.tipo_estrutura);
   const eEstruturaTorres = isEstruturaTorres(condoConfig?.tipo_estrutura);
