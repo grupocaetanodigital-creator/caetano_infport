@@ -579,7 +579,10 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
       {modalRetirada && (() => {
         const moradoresDaUnidade = moradores.filter(
-          (m) => m.unidade && String(m.unidade) === String(retiranteUnidade) && (!retiranteBloco || m.bloco === retiranteBloco)
+          (m) => m.unidade && (
+            String(m.unidade).trim().toLowerCase() === String(retiranteUnidade).trim().toLowerCase() ||
+            (!isNaN(parseInt(m.unidade, 10)) && !isNaN(parseInt(retiranteUnidade, 10)) && parseInt(m.unidade, 10) === parseInt(retiranteUnidade, 10))
+          ) && (!retiranteBloco || m.bloco === retiranteBloco)
         );
 
         return (

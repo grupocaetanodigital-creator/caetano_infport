@@ -27,7 +27,8 @@ import {
   UserCheck,
   Layers,
   ChevronRight,
-  Info
+  Info,
+  Hash
 } from 'lucide-react';
 import { 
   carregarCondominioConfig, 
@@ -38,6 +39,9 @@ import {
   getNomeRotuloBloco,
   getNomeRotuloUnidade,
   gerarCardsUnidadesCondominio,
+  saoUnidadesEquivalentes,
+  normalizarNumeroUnidade,
+  formatarComZeroEsquerda,
   UnidadeEstruturada,
   CondominioConfig 
 } from '../services/condominioService';
@@ -90,6 +94,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [telefonePortaria, setTelefonePortaria] = useState('');
   const [sindicoNome, setSindicoNome] = useState('');
   const [sindicoWhatsapp, setSindicoWhatsapp] = useState('');
+  const [zerosEsquerdaCondominio, setZerosEsquerdaCondominio] = useState<boolean>(true);
 
   // Formulário Operador
   const [nomeOperador, setNomeOperador] = useState('');
@@ -112,6 +117,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const configCondoAtivo = mapaConfigsCondos[condoAtivoId];
   const eEstruturaCasasAtivo = isEstruturaCasas(configCondoAtivo?.tipo_estrutura);
 
+  // Estados para edição dos números das unidades/casas nos cards (ex: "Casa 1" -> "Casa 12A")
+  const [unidadeEditandoId, setUnidadeEditandoId] = useState<string | null>(null);
+  const [novoNumeroUnidade, setNovoNumeroUnidade] = useState<string>('');
+  const [salvandoNumeroUnidade, setSalvandoNumeroUnidade] = useState<boolean>(false);
+
+  // Estados para Modal de Personalização em Lote e Adição de Casas Avulsas
+  const [modalRenumeracaoAberto, setModalRenumeracaoAberto] = useState<boolean>(false);
+  const [textoListaUnidades, setTextoListaUnidades] = useState<string>('');
+  const [modalAddUnidadeAvulsaAberto, setModalAddUnidadeAvulsaAberto] = useState<boolean>(false);
+  const [novaUnidadeAvulsaNumero, setNovaUnidadeAvulsaNumero] = useState<string>('');
+
   useEffect(() => {
     carregarDados();
   }, [abaAtiva, condominioFiltroAdmin]);
@@ -131,6 +147,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setTelefonePortaria('');
     setSindicoNome('');
     setSindicoWhatsapp('');
+    setZerosEsquerdaCondominio(true);
     setNomeOperador('');
     setLoginOperador('');
     setSenhaOperador('');
@@ -235,9 +252,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
         const configs = { ...mapaConfigsCondos };
         for (const c of listaCondos) {
-          if (!configs[c.id]) {
-            configs[c.id] = await carregarCondominioConfig(c.id);
-          }
+          configs[c.id] = await carregarCondominioConfig(c.id);
         }
         setMapaConfigsCondos(configs);
       }
@@ -274,6 +289,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         unidades_por_bloco: Number(unidadesPorBlocoCondominio) || 117,
         qtd_blocos: Number(qtdBlocosCondominio) || 1,
         nomes_blocos: nomesBlocosCondominio.trim(),
+        zeros_esquerda: zerosEsquerdaCondominio,
         escala_plantao: escalaPlantao,
         horario_diurno_inicio: horarioDiurnoInicio,
         horario_noturno_inicio: horarioNoturnoInicio,
@@ -341,6 +357,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       setUnidadesPorBlocoCondominio(cfg.unidades_por_bloco !== undefined ? Number(cfg.unidades_por_bloco) : 117);
       setQtdBlocosCondominio(cfg.qtd_blocos !== undefined ? Number(cfg.qtd_blocos) : 1);
       setNomesBlocosCondominio(cfg.nomes_blocos || '');
+      setZerosEsquerdaCondominio(cfg.zeros_esquerda !== false);
       setEscalaPlantao(cfg.escala_plantao || '06_18');
       setHorarioDiurnoInicio(cfg.horario_diurno_inicio || '06:00');
       setHorarioNoturnoInicio(cfg.horario_noturno_inicio || '18:00');
@@ -353,6 +370,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       setUnidadesPorBlocoCondominio(c.unidades_por_bloco ? Number(c.unidades_por_bloco) : 117);
       setQtdBlocosCondominio(c.qtd_blocos ? Number(c.qtd_blocos) : 1);
       setNomesBlocosCondominio(c.nomes_blocos || '');
+      setZerosEsquerdaCondominio(true);
       setEscalaPlantao('06_18');
       setHorarioDiurnoInicio('06:00');
       setHorarioNoturnoInicio('18:00');
@@ -528,16 +546,281 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     }
   };
 
+  // Métodos para edição individual ou em lote do número das unidades (ex: "Casa 1" -> "Casa 12A")
+  const iniciarEdicaoNumero = (u: UnidadeEstruturada) => {
+    setUnidadeEditandoId(u.id);
+    setNovoNumeroUnidade(u.numero);
+  };
+
+  const salvarEdicaoNumeroUnidade = async (u: UnidadeEstruturada, novoNumInput: string) => {
+    const numLimpo = novoNumInput.trim();
+    if (!numLimpo) {
+      setMensagem({ tipo: 'erro', texto: 'O número da casa/unidade não pode ficar vazio.' });
+      return;
+    }
+
+    if (numLimpo === u.numero) {
+      setUnidadeEditandoId(null);
+      return;
+    }
+
+    setSalvandoNumeroUnidade(true);
+    setLoading(true);
+
+    try {
+      const targetCondoId = condoAtivoId;
+      if (!targetCondoId) throw new Error('Condomínio não identificado.');
+
+      // 1. Atualizar no banco os moradores que pertencem a essa unidade (respeitando zeros à esquerda)
+      const moradoresAfetados = moradores.filter(m => 
+        (m.condominio_id === targetCondoId || !m.condominio_id) && 
+        saoUnidadesEquivalentes(m.unidade, u.numero)
+      );
+
+      for (const mor of moradoresAfetados) {
+        await supabase
+          .from('moradores')
+          .update({ 
+            unidade: numLimpo,
+            bloco: eEstruturaCasasAtivo ? 'Casa' : (mor.bloco || '')
+          })
+          .eq('id', mor.id);
+      }
+
+      // Fallback direto por query caso algum morador não estivesse no cache de estado
+      await supabase
+        .from('moradores')
+        .update({ unidade: numLimpo })
+        .eq('condominio_id', targetCondoId)
+        .eq('unidade', u.numero);
+
+      // 2. Atualizar a lista de unidades customizadas da configuração
+      const totalQtd = configCondoAtivo?.unidades_por_bloco ? Number(configCondoAtivo.unidades_por_bloco) : 117;
+      let listaBase: string[] = [];
+      if (Array.isArray(configCondoAtivo?.unidades_customizadas) && configCondoAtivo.unidades_customizadas.length > 0) {
+        listaBase = [...configCondoAtivo.unidades_customizadas];
+      } else {
+        listaBase = Array.from({ length: totalQtd }, (_, i) => {
+          const n = i + 1;
+          return (configCondoAtivo?.zeros_esquerda !== false && n < 10) ? String(n).padStart(2, '0') : String(n);
+        });
+      }
+
+      // Garantir tamanho
+      while (listaBase.length < totalQtd) {
+        const n = listaBase.length + 1;
+        listaBase.push((configCondoAtivo?.zeros_esquerda !== false && n < 10) ? String(n).padStart(2, '0') : String(n));
+      }
+
+      if (u.indiceOriginal !== undefined && u.indiceOriginal >= 0 && u.indiceOriginal < listaBase.length) {
+        listaBase[u.indiceOriginal] = numLimpo;
+      } else {
+        const idx = listaBase.findIndex(val => saoUnidadesEquivalentes(val, u.numero));
+        if (idx !== -1) {
+          listaBase[idx] = numLimpo;
+        } else {
+          listaBase.push(numLimpo);
+        }
+      }
+
+      // 3. Salvar no Supabase (turnos_plantao.unidades_customizadas) e LocalStorage
+      const configSalva = await salvarCondominioConfig(targetCondoId, {
+        unidades_customizadas: listaBase
+      });
+
+      // 4. Atualizar o estado em memória
+      setMapaConfigsCondos(prev => ({
+        ...prev,
+        [targetCondoId]: configSalva
+      }));
+
+      setMensagem({ 
+        tipo: 'sucesso', 
+        texto: `Identificação alterada de "${u.bloco ? `${u.bloco} ` : ''}${u.numero}" para "${u.bloco ? `${u.bloco} ` : ''}${numLimpo}" com sucesso!` 
+      });
+
+      setUnidadeEditandoId(null);
+      await carregarDados();
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao salvar novo número: ${err.message}` });
+    } finally {
+      setSalvandoNumeroUnidade(false);
+      setLoading(false);
+    }
+  };
+
+  const abrirModalRenumeracao = () => {
+    const numsAtuais = listaCardsGerados.map(c => c.numero).join('\n');
+    setTextoListaUnidades(numsAtuais);
+    setModalRenumeracaoAberto(true);
+  };
+
+  const salvarRenumeracaoEmLote = async () => {
+    // Suportar quebra de linha (\n), vírgula (,), ponto e vírgula (;) e espaços
+    const linhas = textoListaUnidades
+      .split(/[\n,;]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (linhas.length === 0) {
+      setMensagem({ tipo: 'erro', texto: 'Informe ao menos um número de unidade/casa.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const targetCondoId = condoAtivoId;
+
+      // Sincronizar moradores existentes com o novo formato de unidade correspondente
+      for (const m of moradores) {
+        if (!m.unidade) continue;
+        const novoEquiv = linhas.find(n => saoUnidadesEquivalentes(n, m.unidade));
+        if (novoEquiv && novoEquiv !== m.unidade) {
+          await supabase
+            .from('moradores')
+            .update({ unidade: novoEquiv })
+            .eq('id', m.id);
+        }
+      }
+
+      const configSalva = await salvarCondominioConfig(targetCondoId, {
+        unidades_customizadas: linhas,
+        unidades_por_bloco: linhas.length
+      });
+
+      setMapaConfigsCondos(prev => ({
+        ...prev,
+        [targetCondoId]: configSalva
+      }));
+
+      setMensagem({ 
+        tipo: 'sucesso', 
+        texto: `${linhas.length} números de ${eEstruturaCasasAtivo ? 'casas' : 'unidades'} salvos com sucesso!` 
+      });
+
+      setModalRenumeracaoAberto(false);
+      await carregarDados();
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao renumerar unidades: ${err.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatarTodasComZeroEsquerda = async () => {
+    setLoading(true);
+    try {
+      const targetCondoId = condoAtivoId;
+      const totalQtd = configCondoAtivo?.unidades_por_bloco ? Number(configCondoAtivo.unidades_por_bloco) : 117;
+      
+      const listaFormatada: string[] = [];
+      const listaAtual = Array.isArray(configCondoAtivo?.unidades_customizadas) && configCondoAtivo.unidades_customizadas.length > 0
+        ? [...configCondoAtivo.unidades_customizadas]
+        : Array.from({ length: totalQtd }, (_, i) => String(i + 1));
+
+      for (let i = 0; i < Math.max(totalQtd, listaAtual.length); i++) {
+        const val = listaAtual[i] || String(i + 1);
+        listaFormatada.push(formatarComZeroEsquerda(val, 2));
+      }
+
+      // Sincronizar moradores existentes no banco para 2 dígitos (01..09)
+      for (const m of moradores) {
+        if (!m.unidade) continue;
+        const formatada = formatarComZeroEsquerda(normalizarNumeroUnidade(m.unidade), 2);
+        if (formatada && formatada !== m.unidade) {
+          await supabase
+            .from('moradores')
+            .update({ unidade: formatada })
+            .eq('id', m.id);
+        }
+      }
+
+      const configSalva = await salvarCondominioConfig(targetCondoId, {
+        unidades_customizadas: listaFormatada,
+        zeros_esquerda: true
+      });
+
+      setMapaConfigsCondos(prev => ({
+        ...prev,
+        [targetCondoId]: configSalva
+      }));
+
+      setMensagem({
+        tipo: 'sucesso',
+        texto: 'Todas as casas 1 a 9 foram formatadas com zero no início (01, 02, 03... 117) com sucesso!'
+      });
+
+      await carregarDados();
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao formatar com zero no início: ${err.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const adicionarCasaAvulsa = async () => {
+    const numLimpo = novaUnidadeAvulsaNumero.trim();
+    if (!numLimpo) {
+      setMensagem({ tipo: 'erro', texto: 'Informe o número da casa/unidade.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const targetCondoId = condoAtivoId;
+      const totalQtd = configCondoAtivo?.unidades_por_bloco ? Number(configCondoAtivo.unidades_por_bloco) : 117;
+      let listaAtual = Array.isArray(configCondoAtivo?.unidades_customizadas) && configCondoAtivo.unidades_customizadas.length > 0
+        ? [...configCondoAtivo.unidades_customizadas]
+        : Array.from({ length: totalQtd }, (_, i) => {
+            const seq = i + 1;
+            return (configCondoAtivo?.zeros_esquerda !== false && seq < 10) 
+              ? String(seq).padStart(2, '0') 
+              : String(seq);
+          });
+
+      if (listaAtual.some(n => saoUnidadesEquivalentes(n, numLimpo))) {
+        setMensagem({ tipo: 'erro', texto: `A casa/unidade "${numLimpo}" já existe na lista!` });
+        setLoading(false);
+        return;
+      }
+      listaAtual.push(numLimpo);
+
+      const configSalva = await salvarCondominioConfig(targetCondoId, {
+        unidades_customizadas: listaAtual,
+        unidades_por_bloco: Math.max(Number(configCondoAtivo?.unidades_por_bloco || 0), listaAtual.length)
+      });
+
+      setMapaConfigsCondos(prev => ({
+        ...prev,
+        [targetCondoId]: configSalva
+      }));
+
+      setMensagem({ tipo: 'sucesso', texto: `Nova ${eEstruturaCasasAtivo ? 'Casa' : 'Unidade'} "${numLimpo}" adicionada!` });
+      setModalAddUnidadeAvulsaAberto(false);
+      setNovaUnidadeAvulsaNumero('');
+      await carregarDados();
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: `Erro ao adicionar unidade: ${err.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Processamento e geração dos cards de unidades para a aba Moradores
   const listaCardsGerados = useMemo(() => {
     const cards = gerarCardsUnidadesCondominio(configCondoAtivo);
-    // Assegura que se houver moradores com unidades fora do range, eles também ganhem card
-    const setNums = new Set(cards.map(c => c.numero.trim()));
+    // Assegura que se houver moradores com unidades fora do range, eles também ganhem card (sem duplicar unidades equivalentes)
     const extras: UnidadeEstruturada[] = [];
     moradores.forEach(m => {
       const num = (m.unidade || '').toString().trim();
-      if (num && !setNums.has(num)) {
-        setNums.add(num);
+      if (!num) return;
+      const jaExiste = cards.some(c => saoUnidadesEquivalentes(c.numero, num)) || 
+                       extras.some(e => saoUnidadesEquivalentes(e.numero, num));
+      if (!jaExiste) {
         extras.push({
           id: `extra-${num}`,
           numero: num,
@@ -552,7 +835,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const unidadesComMoradores = useMemo(() => {
     return listaCardsGerados.map(u => {
       const moradoresDestaUnidade = moradores.filter(m => {
-        const numMatch = (m.unidade || '').toString().trim() === u.numero.trim();
+        const numMatch = saoUnidadesEquivalentes(m.unidade, u.numero);
         if (!numMatch) return false;
         if (eEstruturaCasasAtivo) return true;
         if (u.bloco && m.bloco) {
@@ -1039,14 +1322,54 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 </button>
               </div>
 
-              {/* Botão de Adicionar Novo Morador */}
-              <button
-                type="button"
-                onClick={() => abrirNovoMorador()}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer active:scale-95"
-              >
-                <Plus className="w-4 h-4" /> Cadastrar Novo Morador
-              </button>
+              {/* Botões de Ação da Aba Moradores */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Botão de Personalizar Numeração em Lote */}
+                <button
+                  type="button"
+                  onClick={abrirModalRenumeracao}
+                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer active:scale-95"
+                  title="Editar ou colar sequência personalizada de números das casas"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Personalizar Numeração</span>
+                </button>
+
+                {/* Botão de Formatar com Zero no Início (01, 02, 03...) */}
+                <button
+                  type="button"
+                  onClick={formatarTodasComZeroEsquerda}
+                  disabled={loading}
+                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer active:scale-95"
+                  title="Formatar automaticamente todas as casas 1 a 9 com zero no início (01, 02, 03...)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Salvar 01, 02, 03...</span>
+                </button>
+
+                {/* Botão de Adicionar Casa Avulsa */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNovaUnidadeAvulsaNumero('');
+                    setModalAddUnidadeAvulsaAberto(true);
+                  }}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer active:scale-95"
+                  title="Adicionar uma casa ou unidade avulsa à lista"
+                >
+                  <Plus className="w-3.5 h-3.5 text-slate-600" />
+                  <span>+ {eEstruturaCasasAtivo ? 'Casa Avulsa' : 'Unidade Avulsa'}</span>
+                </button>
+
+                {/* Botão de Adicionar Novo Morador */}
+                <button
+                  type="button"
+                  onClick={() => abrirNovoMorador()}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer active:scale-95"
+                >
+                  <Plus className="w-4 h-4" /> Cadastrar Novo Morador
+                </button>
+              </div>
             </div>
 
             {/* Linha de Busca e Filtros de Status */}
@@ -1171,14 +1494,70 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                         {/* Topo do Card: Número da Casa / Unidade e Status */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-2">
-                            <span className={`px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs ${
-                              eEstruturaCasasAtivo 
-                                ? 'bg-emerald-100 text-emerald-950 border border-emerald-300' 
-                                : 'bg-indigo-100 text-indigo-950 border border-indigo-300'
-                            }`}>
-                              <Home className="w-3.5 h-3.5 text-emerald-700" />
-                              <span>{eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}</span>
-                            </span>
+                            {unidadeEditandoId === item.unidade.id ? (
+                              /* Modo de Edição Inline do Número da Casa */
+                              <div className="flex items-center gap-1 bg-amber-50 border-2 border-amber-400 rounded-xl px-2 py-1 shadow-xs">
+                                <span className="text-[10px] font-black uppercase text-amber-900 flex items-center gap-1">
+                                  <Home className="w-3 h-3 text-amber-700" />
+                                  {eEstruturaCasasAtivo ? 'CASA' : 'UND'}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={novoNumeroUnidade}
+                                  onChange={(e) => setNovoNumeroUnidade(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      salvarEdicaoNumeroUnidade(item.unidade, novoNumeroUnidade);
+                                    } else if (e.key === 'Escape') {
+                                      setUnidadeEditandoId(null);
+                                    }
+                                  }}
+                                  placeholder="Ex: 12A"
+                                  autoFocus
+                                  disabled={salvandoNumeroUnidade}
+                                  className="w-16 px-1.5 py-0.5 text-xs font-black bg-white border border-amber-400 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => salvarEdicaoNumeroUnidade(item.unidade, novoNumeroUnidade)}
+                                  disabled={salvandoNumeroUnidade}
+                                  className="p-1 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100 rounded-md transition cursor-pointer font-bold"
+                                  title="Salvar novo número da casa (Enter)"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setUnidadeEditandoId(null)}
+                                  disabled={salvandoNumeroUnidade}
+                                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-md transition cursor-pointer"
+                                  title="Cancelar (Esc)"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              /* Badge Interativo Editável (Destacado em Amarelo como solicitado) */
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => iniciarEdicaoNumero(item.unidade)}
+                                  title="Clique para editar o número ou identificação desta casa (ex: 12A, 102...)"
+                                  className={`group px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs transition hover:scale-102 cursor-pointer border ${
+                                    eEstruturaCasasAtivo 
+                                      ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300 ring-1 ring-amber-300/60' 
+                                      : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-950 border-indigo-300'
+                                  }`}
+                                >
+                                  <Home className="w-3.5 h-3.5 text-amber-800" />
+                                  <span>{eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}</span>
+                                  <span className="p-0.5 bg-amber-200/90 group-hover:bg-amber-300 text-amber-900 rounded-md transition ml-0.5" title="Editar número">
+                                    <Pencil className="w-2.5 h-2.5" />
+                                  </span>
+                                </button>
+                              </div>
+                            )}
 
                             {item.ocupada ? (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
@@ -1539,8 +1918,25 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                           className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
                         />
                         <p className="text-[10px] text-emerald-700 mt-1 font-semibold">
-                          ✓ Serão criados {unidadesPorBlocoCondominio || 117} cards editáveis (Casa 1 a Casa {unidadesPorBlocoCondominio || 117}) em Moradores para adicionar todos os residentes!
+                          ✓ Serão criados {unidadesPorBlocoCondominio || 117} cards editáveis ({zerosEsquerdaCondominio ? 'Casa 01 a Casa ' : 'Casa 1 a Casa '}{unidadesPorBlocoCondominio || 117}) em Moradores para adicionar todos os residentes!
                         </p>
+
+                        <label className="flex items-start gap-2.5 cursor-pointer pt-2 mt-2 border-t border-emerald-200/80 bg-white/80 p-2.5 rounded-xl border border-emerald-200 shadow-2xs">
+                          <input
+                            type="checkbox"
+                            checked={zerosEsquerdaCondominio}
+                            onChange={(e) => setZerosEsquerdaCondominio(e.target.checked)}
+                            className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer mt-0.5"
+                          />
+                          <div className="text-xs">
+                            <span className="font-bold text-emerald-950 flex items-center gap-1">
+                              🔢 Numeração com zero no início (01, 02, 03...)
+                            </span>
+                            <p className="text-[11px] text-emerald-800 leading-snug">
+                              Gera e salva casas de 1 a 9 com zero no início ("01", "02", "03"... "09", "10"... "{unidadesPorBlocoCondominio || 117}").
+                            </p>
+                          </div>
+                        </label>
                       </div>
                     </div>
                   )}
@@ -1924,6 +2320,186 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Personalização / Renumeração em Lote das Unidades */}
+      {modalRenumeracaoAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-amber-100 text-amber-900 rounded-xl">
+                  <Pencil className="w-5 h-5 text-amber-700" />
+                </span>
+                <div>
+                  <h4 className="text-base font-black text-slate-900">
+                    Personalizar Numeração das Casas / Unidades
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Condomínio: {getNomeCondominioPorId(condoAtivoId)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalRenumeracaoAberto(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              <p className="text-xs text-slate-600">
+                Digite ou cole os números das casas (um por linha ou separados por vírgula). Se as identificações forem <strong>01, 02, 03</strong> ou personalizadas (ex: <strong>12A, 14, Lote 3</strong>), ajuste livremente abaixo:
+              </p>
+
+              <div className="flex flex-wrap gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const total = configCondoAtivo?.unidades_por_bloco ? Number(configCondoAtivo.unidades_por_bloco) : 117;
+                    const seq = Array.from({ length: total }, (_, i) => {
+                      const n = i + 1;
+                      return n < 10 ? String(n).padStart(2, '0') : String(n);
+                    }).join('\n');
+                    setTextoListaUnidades(seq);
+                  }}
+                  className="px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-950 rounded-lg font-black transition cursor-pointer flex items-center gap-1 border border-emerald-300 shadow-2xs"
+                  title="Gera sequência 01, 02, 03... com zero à esquerda nos números de 1 dígito"
+                >
+                  <Sparkles className="w-3 h-3 text-emerald-700" />
+                  ✨ Gerar 01 a {configCondoAtivo?.unidades_por_bloco || 117} (com zero: 01, 02, 03...)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const total = configCondoAtivo?.unidades_por_bloco ? Number(configCondoAtivo.unidades_por_bloco) : 117;
+                    const seq = Array.from({ length: total }, (_, i) => String(i + 1)).join('\n');
+                    setTextoListaUnidades(seq);
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold transition cursor-pointer"
+                >
+                  🔢 Gerar 1 a {configCondoAtivo?.unidades_por_bloco || 117} (sem zero)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const itens = textoListaUnidades.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+                    const convertidos = itens.map(s => formatarComZeroEsquerda(s, 2));
+                    setTextoListaUnidades(convertidos.join('\n'));
+                  }}
+                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-950 rounded-lg font-bold transition cursor-pointer border border-amber-300"
+                  title="Converte 1 -> 01, 2 -> 02, etc."
+                >
+                  0️⃣ Adicionar zero aos números 1..9 (01, 02...)
+                </button>
+              </div>
+
+              <textarea
+                value={textoListaUnidades}
+                onChange={(e) => setTextoListaUnidades(e.target.value)}
+                rows={10}
+                placeholder="Exemplo:&#10;01&#10;02&#10;03&#10;... ou separados por vírgula: 01, 02, 03"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:border-amber-500 focus:outline-none"
+              />
+              <p className="text-[11px] text-slate-500 flex items-center justify-between">
+                <span>Total de casas/unidades informadas: <strong>{textoListaUnidades.split(/[\n,;]+/).filter(s => s.trim()).length}</strong></span>
+                <span className="text-[10px] text-emerald-700 font-semibold">✓ Suporta quebra de linha ou vírgulas (01,02,03)</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModalRenumeracaoAberto(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={salvarRenumeracaoEmLote}
+                disabled={loading}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs transition shadow-md shadow-amber-500/20 cursor-pointer"
+              >
+                {loading ? 'Salvando...' : 'Salvar Lista de Unidades'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Adição de Casa / Unidade Avulsa */}
+      {modalAddUnidadeAvulsaAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-emerald-100 text-emerald-900 rounded-xl">
+                  <Home className="w-5 h-5 text-emerald-700" />
+                </span>
+                <div>
+                  <h4 className="text-base font-black text-slate-900">
+                    Adicionar {eEstruturaCasasAtivo ? 'Casa Avulsa' : 'Unidade Avulsa'}
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    {getNomeCondominioPorId(condoAtivoId)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalAddUnidadeAvulsaAberto(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Número ou Identificação da {eEstruturaCasasAtivo ? 'Casa' : 'Unidade'} *
+                </label>
+                <input
+                  type="text"
+                  value={novaUnidadeAvulsaNumero}
+                  onChange={(e) => setNovaUnidadeAvulsaNumero(e.target.value)}
+                  placeholder={eEstruturaCasasAtivo ? "Ex: 118 ou 12A" : "Ex: 105"}
+                  autoFocus
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      adicionarCasaAvulsa();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModalAddUnidadeAvulsaAberto(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={adicionarCasaAvulsa}
+                disabled={loading}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition shadow-md shadow-emerald-600/20 cursor-pointer"
+              >
+                {loading ? 'Adicionando...' : 'Adicionar Casa'}
+              </button>
+            </div>
           </div>
         </div>
       )}

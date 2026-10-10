@@ -16,6 +16,9 @@ export interface CondominioConfig {
   qtd_blocos?: number;
   unidades_por_bloco?: number;
   nomes_blocos?: string;
+  unidades_customizadas?: string[];
+  zeros_esquerda?: boolean; // Se true, gera sequências como 01, 02, 03... (padrão true para casas)
+  turnos_plantao?: any;
 }
 
 export type TipoEstruturaCondominio = 'casas' | 'blocos' | 'torres' | 'numeral_direto';
@@ -80,11 +83,57 @@ export function getNomeRotuloUnidade(tipo?: string): string {
   return 'Apartamento';
 }
 
+/**
+ * Normaliza uma identificação de unidade, removendo prefixos redundantes como "Casa", "Ap." etc.
+ */
+export function normalizarNumeroUnidade(val: string | null | undefined): string {
+  if (!val) return '';
+  let str = String(val).trim();
+  str = str.replace(/^(casa|apto|ap|unidade|und|lote)\.?\s+/i, '').trim();
+  return str;
+}
+
+/**
+ * Verifica se duas identificações de unidades são equivalentes, respeitando números com zero no início:
+ * Ex: "01" equivale a "1" ou "01"; "Casa 07" equivale a "07" ou "7"; "12A" equivale a "12A".
+ */
+export function saoUnidadesEquivalentes(numA: string | null | undefined, numB: string | null | undefined): boolean {
+  if (!numA || !numB) return false;
+  const aNorm = normalizarNumeroUnidade(numA);
+  const bNorm = normalizarNumeroUnidade(numB);
+  
+  if (aNorm.toLowerCase() === bNorm.toLowerCase()) return true;
+  
+  const numAInt = parseInt(aNorm, 10);
+  const numBInt = parseInt(bNorm, 10);
+  if (!isNaN(numAInt) && !isNaN(numBInt) && numAInt === numBInt) {
+    if (/^\d+$/.test(aNorm) && /^\d+$/.test(bNorm)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Formata um número com zero à esquerda de forma segura:
+ * Ex: 1 -> "01", 7 -> "07", "03" -> "03", "12A" -> "12A"
+ */
+export function formatarComZeroEsquerda(num: string | number, digitos: number = 2): string {
+  const str = String(num).trim();
+  const n = parseInt(str, 10);
+  if (!isNaN(n) && /^\d+$/.test(str) && str.length < digitos) {
+    return String(n).padStart(digitos, '0');
+  }
+  return str;
+}
+
 export interface UnidadeEstruturada {
   id: string; // Ex: "casa-1" ou "bloco-A-ap-101"
-  numero: string; // Ex: "1", "101"
+  numero: string; // Ex: "01", "1", "101", "12A"
   bloco: string; // Ex: "Casa", "A"
-  label: string; // Ex: "Casa 1" ou "Bloco A - Ap. 101"
+  label: string; // Ex: "Casa 01" ou "Casa 12A"
+  indiceOriginal?: number; // Índice na lista de unidades para permitir edição direta
 }
 
 export function gerarCardsUnidadesCondominio(config?: CondominioConfig | null): UnidadeEstruturada[] {
@@ -94,26 +143,84 @@ export function gerarCardsUnidadesCondominio(config?: CondominioConfig | null): 
   const tipo = config.tipo_estrutura || 'casas';
   const eCasas = isEstruturaCasas(tipo);
   const totalCasas = config.unidades_por_bloco ? Number(config.unidades_por_bloco) : 117;
+  const customList = Array.isArray(config.unidades_customizadas) ? config.unidades_customizadas : [];
+  // Por padrão em condomínio de casas ou quando não desligado explicitamente, zeros_esquerda é true (01, 02, 03...)
+  const usarZeros = config.zeros_esquerda !== false;
 
   if (eCasas) {
     const qtd = Math.max(1, Math.min(totalCasas, 1000));
-    for (let i = 1; i <= qtd; i++) {
+    for (let i = 0; i < qtd; i++) {
+      const numSequencial = i + 1;
+      const numPadrao = (usarZeros && numSequencial < 10) 
+        ? String(numSequencial).padStart(2, '0') 
+        : String(numSequencial);
+      const customVal = customList[i];
+      const numFinal = (customVal !== undefined && customVal !== null && String(customVal).trim() !== '')
+        ? String(customVal).trim()
+        : numPadrao;
+
       lista.push({
-        id: `casa-${i}`,
-        numero: String(i),
+        id: `casa-${i + 1}`,
+        numero: numFinal,
         bloco: 'Casa',
-        label: `Casa ${i}`
+        label: `Casa ${numFinal}`,
+        indiceOriginal: i
       });
+    }
+
+    // Se houver unidades extras cadastradas na lista customizada além de qtd (evitando duplicar equivalentes)
+    for (let i = qtd; i < customList.length; i++) {
+      const customVal = customList[i];
+      if (customVal && String(customVal).trim() !== '') {
+        const numFinal = String(customVal).trim();
+        const jaExiste = lista.some(u => saoUnidadesEquivalentes(u.numero, numFinal));
+        if (!jaExiste) {
+          lista.push({
+            id: `casa-extra-${i + 1}`,
+            numero: numFinal,
+            bloco: 'Casa',
+            label: `Casa ${numFinal}`,
+            indiceOriginal: i
+          });
+        }
+      }
     }
   } else if (tipo === 'numeral_direto') {
     const qtd = Math.max(1, Math.min(totalCasas, 1000));
-    for (let i = 1; i <= qtd; i++) {
+    for (let i = 0; i < qtd; i++) {
+      const numSequencial = i + 1;
+      const numPadrao = (usarZeros && numSequencial < 10) 
+        ? String(numSequencial).padStart(2, '0') 
+        : String(numSequencial);
+      const customVal = customList[i];
+      const numFinal = (customVal !== undefined && customVal !== null && String(customVal).trim() !== '')
+        ? String(customVal).trim()
+        : numPadrao;
+
       lista.push({
-        id: `und-${i}`,
-        numero: String(i),
+        id: `und-${i + 1}`,
+        numero: numFinal,
         bloco: '',
-        label: `Unidade ${i}`
+        label: `Unidade ${numFinal}`,
+        indiceOriginal: i
       });
+    }
+
+    for (let i = qtd; i < customList.length; i++) {
+      const customVal = customList[i];
+      if (customVal && String(customVal).trim() !== '') {
+        const numFinal = String(customVal).trim();
+        const jaExiste = lista.some(u => saoUnidadesEquivalentes(u.numero, numFinal));
+        if (!jaExiste) {
+          lista.push({
+            id: `und-extra-${i + 1}`,
+            numero: numFinal,
+            bloco: '',
+            label: `Unidade ${numFinal}`,
+            indiceOriginal: i
+          });
+        }
+      }
     }
   } else {
     // blocos ou torres
@@ -123,16 +230,24 @@ export function gerarCardsUnidadesCondominio(config?: CondominioConfig | null): 
       : [];
     const undPorBloco = Math.max(1, Math.min(Number(config.unidades_por_bloco) || 20, 200));
 
+    let idxGlobal = 0;
     for (let b = 0; b < qBlocos; b++) {
       const nomeBloco = nomesBlocosCustom[b] || (tipo === 'torres' ? `Torre ${b + 1}` : `Bloco ${String.fromCharCode(65 + b)}`);
       for (let u = 1; u <= undPorBloco; u++) {
         const numFormatado = u < 100 ? (100 + u) : u;
+        const customVal = customList[idxGlobal];
+        const numFinal = (customVal !== undefined && customVal !== null && String(customVal).trim() !== '')
+          ? String(customVal).trim()
+          : String(numFormatado);
+
         lista.push({
-          id: `${nomeBloco}-${numFormatado}`,
-          numero: String(numFormatado),
+          id: `${nomeBloco}-${numFormatado}-${idxGlobal}`,
+          numero: numFinal,
           bloco: nomeBloco,
-          label: `${nomeBloco} • Ap. ${numFormatado}`
+          label: `${nomeBloco} • Ap. ${numFinal}`,
+          indiceOriginal: idxGlobal
         });
+        idxGlobal++;
       }
     }
   }
@@ -272,6 +387,15 @@ export async function carregarCondominioConfig(condominioId: string): Promise<Co
       if (data.sindico_whatsapp) {
         defaultConfig.sindico_whatsapp = data.sindico_whatsapp;
       }
+      if (data.turnos_plantao && typeof data.turnos_plantao === 'object') {
+        defaultConfig.turnos_plantao = data.turnos_plantao;
+        if (Array.isArray(data.turnos_plantao.unidades_customizadas)) {
+          defaultConfig.unidades_customizadas = data.turnos_plantao.unidades_customizadas;
+        }
+        if (data.turnos_plantao.zeros_esquerda !== undefined) {
+          defaultConfig.zeros_esquerda = Boolean(data.turnos_plantao.zeros_esquerda);
+        }
+      }
 
       // Também salvar no cache local para persistência garantida e ultra rápida
       saveCondominioConfigLocal(condominioId, defaultConfig);
@@ -308,6 +432,20 @@ export async function salvarCondominioConfig(
       endereco: atualizada.endereco
     };
 
+    const turnosPlantaoBase = (atual.turnos_plantao && typeof atual.turnos_plantao === 'object')
+      ? atual.turnos_plantao
+      : {};
+    const turnosPlantaoNovo = {
+      ...turnosPlantaoBase,
+      ...(dados.turnos_plantao || {}),
+      unidades_customizadas: dados.unidades_customizadas !== undefined 
+        ? dados.unidades_customizadas 
+        : (atualizada.unidades_customizadas || []),
+      zeros_esquerda: dados.zeros_esquerda !== undefined 
+        ? dados.zeros_esquerda 
+        : (atualizada.zeros_esquerda !== undefined ? atualizada.zeros_esquerda : true)
+    };
+
     // Tentar com as colunas extras
     const updateCompleto: any = {
       ...updateBasico,
@@ -321,7 +459,8 @@ export async function salvarCondominioConfig(
       horario_noturno_inicio: atualizada.horario_noturno_inicio,
       telefone_portaria: atualizada.telefone_portaria,
       sindico_nome: atualizada.sindico_nome,
-      sindico_whatsapp: atualizada.sindico_whatsapp
+      sindico_whatsapp: atualizada.sindico_whatsapp,
+      turnos_plantao: turnosPlantaoNovo
     };
 
     const { error: errCompleto } = await supabase

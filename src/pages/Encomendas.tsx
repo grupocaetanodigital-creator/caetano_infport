@@ -652,7 +652,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     }
 
     const moradoresEncontrados = moradores.filter(m => {
-      const uMatch = m.unidade?.toString().toLowerCase() === unid.trim().toLowerCase();
+      const uTrim = (m.unidade || '').toString().trim().toLowerCase();
+      const inTrim = unid.trim().toLowerCase();
+      const uMatch = uTrim === inTrim || (!isNaN(parseInt(uTrim, 10)) && !isNaN(parseInt(inTrim, 10)) && parseInt(uTrim, 10) === parseInt(inTrim, 10));
       const bMatch = bloc.trim() ? m.bloco?.toString().toLowerCase() === bloc.trim().toLowerCase() : true;
       return uMatch && bMatch;
     });
