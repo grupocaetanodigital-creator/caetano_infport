@@ -50,6 +50,13 @@ import {
   UnidadeEstruturada,
   CondominioConfig 
 } from '../services/condominioService';
+import GerenciamentoPermissoes from '../components/GerenciamentoPermissoes';
+import { 
+  carregarNiveisAcesso, 
+  obterNiveisLocal, 
+  obterNomeNivel, 
+  NivelAcessoItem 
+} from '../services/permissoesService';
 
 interface CadastrosProps {
   usuarioLogado?: any;
@@ -105,8 +112,9 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [nomeOperador, setNomeOperador] = useState('');
   const [loginOperador, setLoginOperador] = useState('');
   const [senhaOperador, setSenhaOperador] = useState('');
-  const [nivelAcesso, setNivelAcesso] = useState('3');
+  const [nivelAcesso, setNivelAcesso] = useState('nivel_3');
   const [condominioIdOperador, setCondominioIdOperador] = useState('');
+  const [listaNiveis, setListaNiveis] = useState<NivelAcessoItem[]>(() => obterNiveisLocal());
 
   // Formulário Morador
   const [nomeMorador, setNomeMorador] = useState('');
@@ -134,6 +142,16 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [novaUnidadeAvulsaNumero, setNovaUnidadeAvulsaNumero] = useState<string>('');
 
   useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setListaNiveis(e.detail);
+      }
+    };
+    window.addEventListener('niveis_acesso_atualizados', handler);
+    return () => window.removeEventListener('niveis_acesso_atualizados', handler);
+  }, []);
+
+  useEffect(() => {
     carregarDados();
   }, [abaAtiva, condominioFiltroAdmin]);
 
@@ -156,7 +174,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setNomeOperador('');
     setLoginOperador('');
     setSenhaOperador('');
-    setNivelAcesso('3');
+    setNivelAcesso('nivel_3');
     setCondominioIdOperador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
     setNomeMorador('');
     setBlocoMorador(eEstruturaCasasAtivo ? 'Casa' : '');
@@ -260,7 +278,20 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           configs[c.id] = await carregarCondominioConfig(c.id);
         }
         setMapaConfigsCondos(configs);
+      } else if (abaAtiva === 'niveis' && !eOperador) {
+        let query = supabase.from('operadores').select('*').order('nome');
+        if (eAdmin && condominioFiltroAdmin) {
+          query = query.eq('condominio_id', condominioFiltroAdmin);
+        } else if (!eAdmin && usuarioLogado?.condominio_id) {
+          query = query.eq('condominio_id', usuarioLogado.condominio_id);
+        }
+        const { data: opsData } = await query;
+        if (opsData) setOperadores(opsData);
       }
+
+      // Sempre atualiza os níveis em segundo plano
+      const niveisCarregados = await carregarNiveisAcesso(condoAtivoId);
+      setListaNiveis(niveisCarregados);
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: `Erro ao carregar dados: ${err.message}` });
     } finally {
@@ -405,14 +436,32 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setLoading(true);
 
     try {
-      const nivelNum = parseInt(nivelAcesso, 10);
-      const perfilStr = nivelNum === 0 ? 'admin' : nivelNum === 1 ? 'master' : nivelNum === 2 ? 'supervisor' : nivelNum === 4 ? 'sindico' : 'operador';
+      let nivelNum = 3;
+      let perfilStr = 'operador';
+      let customId: string | null = null;
+
+      if (nivelAcesso.startsWith('nivel_')) {
+        const parsed = parseInt(nivelAcesso.replace('nivel_', ''), 10);
+        nivelNum = !isNaN(parsed) ? parsed : 3;
+        perfilStr = nivelNum === 0 ? 'admin' : nivelNum === 1 ? 'master' : nivelNum === 2 ? 'supervisor' : nivelNum === 4 ? 'sindico' : 'operador';
+        customId = nivelAcesso;
+      } else if (!isNaN(parseInt(nivelAcesso, 10)) && !nivelAcesso.startsWith('custom_')) {
+        nivelNum = parseInt(nivelAcesso, 10);
+        perfilStr = nivelNum === 0 ? 'admin' : nivelNum === 1 ? 'master' : nivelNum === 2 ? 'supervisor' : nivelNum === 4 ? 'sindico' : 'operador';
+        customId = `nivel_${nivelNum}`;
+      } else {
+        const objCustom = listaNiveis.find(n => n.id === nivelAcesso);
+        customId = nivelAcesso;
+        perfilStr = objCustom?.nome || 'custom';
+        nivelNum = 3;
+      }
 
       if (idEdicao) {
         const dadosAtualizacao: any = {
           nome: nomeOperador.trim(),
           login: loginOperador.trim().toLowerCase(),
           nivel_acesso: nivelNum,
+          nivel_acesso_custom_id: customId,
           perfil: perfilStr,
           condominio_id: targetCondominioId
         };
@@ -439,6 +488,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             login: loginOperador.trim().toLowerCase(),
             senha: senhaOperador.trim(),
             nivel_acesso: nivelNum,
+            nivel_acesso_custom_id: customId,
             perfil: perfilStr,
             condominio_id: targetCondominioId,
             ativo: true
@@ -464,9 +514,9 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setNomeOperador(op.nome || '');
     setLoginOperador(op.login || '');
     setSenhaOperador('');
-    const nivelDefinido = (op.nivel_acesso !== undefined && op.nivel_acesso !== null && !isNaN(Number(op.nivel_acesso)))
-      ? String(op.nivel_acesso)
-      : (op.perfil === 'admin' ? '0' : op.perfil === 'master' ? '1' : op.perfil === 'supervisor' ? '2' : (op.perfil === 'sindico' || op.perfil === 'Síndico') ? '4' : '3');
+    const nivelDefinido = op.nivel_acesso_custom_id ||
+      (op.nivel_acesso !== undefined && op.nivel_acesso !== null && !isNaN(Number(op.nivel_acesso)) ? `nivel_${op.nivel_acesso}` : null) ||
+      (op.perfil === 'admin' ? 'nivel_0' : op.perfil === 'master' ? 'nivel_1' : op.perfil === 'supervisor' ? 'nivel_2' : (op.perfil === 'sindico' || op.perfil === 'Síndico') ? 'nivel_4' : 'nivel_3');
     setNivelAcesso(nivelDefinido);
     setCondominioIdOperador(op.condominio_id || '');
     setTipoModalFlutuante('operador');
@@ -969,6 +1019,25 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             {moradores.length}
           </span>
         </button>
+
+        {!eOperador && (
+          <button
+            onClick={() => setAbaAtiva('niveis')}
+            className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
+              abaAtiva === 'niveis'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'text-slate-700 hover:bg-white/60'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Níveis de Acesso & Permissões</span>
+            <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+              abaAtiva === 'niveis' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-300 text-slate-700'
+            }`}>
+              {listaNiveis.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Alertas e Notificações */}
@@ -1188,23 +1257,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 return (op.nome || '').toLowerCase().includes(termo) || (op.login || '').toLowerCase().includes(termo);
               })
               .map((op) => {
-                const nivelStr = op.nivel_acesso === 0 || op.perfil === 'admin'
-                  ? 'Admin Geral' 
-                  : op.nivel_acesso === 1 || op.perfil === 'master'
-                  ? 'Master (Auditoria)' 
-                  : op.nivel_acesso === 2 || op.perfil === 'supervisor'
-                  ? 'Supervisor' 
-                  : op.nivel_acesso === 4 || op.perfil === 'sindico'
-                  ? 'Síndico'
-                  : 'Operador Guarita';
+                const nivelStr = obterNomeNivel(op.nivel_acesso_custom_id || op.nivel_acesso || op.perfil, listaNiveis);
 
-                const badgeCor = op.nivel_acesso === 0 || op.perfil === 'admin'
+                const badgeCor = (op.nivel_acesso === 0 || op.perfil === 'admin' || op.nivel_acesso_custom_id === 'nivel_0')
                   ? 'bg-purple-100 text-purple-900 border-purple-200' 
-                  : op.nivel_acesso === 1 || op.perfil === 'master'
+                  : (op.nivel_acesso === 1 || op.perfil === 'master' || op.nivel_acesso_custom_id === 'nivel_1')
                   ? 'bg-amber-100 text-amber-900 border-amber-200' 
-                  : op.nivel_acesso === 4 || op.perfil === 'sindico'
+                  : (op.nivel_acesso === 2 || op.perfil === 'supervisor' || op.nivel_acesso_custom_id === 'nivel_2')
+                  ? 'bg-blue-100 text-blue-900 border-blue-200'
+                  : (op.nivel_acesso === 4 || op.perfil === 'sindico' || op.nivel_acesso_custom_id === 'nivel_4')
                   ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
-                  : 'bg-blue-100 text-blue-900 border-blue-200';
+                  : 'bg-teal-100 text-teal-900 border-teal-200';
 
                 return (
                   <div 
@@ -1783,6 +1846,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         </div>
       )}
 
+      {/* 4. ABA GESTÃO DINÂMICA DE NÍVEIS DE ACESSO E PERMISSÕES (RBAC) */}
+      {abaAtiva === 'niveis' && !eOperador && (
+        <div className="space-y-4">
+          <GerenciamentoPermissoes
+            condominioId={condoAtivoId}
+            operadores={operadores}
+            onAtualizacao={carregarDados}
+          />
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* MENU FLUTUANTE / MODAL DE CADASTRO E EDIÇÃO DIRETAMENTE NO CARD           */}
       {/* ========================================================================= */}
@@ -2192,11 +2266,16 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     onChange={(e) => setNivelAcesso(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
                   >
-                    {(eAdmin || nivelAcesso === '0') && <option value="0">Nível 0 — Administrador Geral</option>}
-                    <option value="1">Nível 1 — Master (Auditoria e Controle)</option>
-                    <option value="2">Nível 2 — Supervisor de Segurança</option>
-                    <option value="3">Nível 3 — Operador de Guarita / Portaria</option>
-                    <option value="4">Nível 4 — Síndico (Visualização e Relatórios)</option>
+                    {listaNiveis.map((n) => {
+                      if (n.id === 'nivel_0' && !eAdmin && nivelAcesso !== '0' && nivelAcesso !== 'nivel_0') {
+                        return null;
+                      }
+                      return (
+                        <option key={n.id} value={n.id}>
+                          {n.nome} {n.padrao_sistema ? '' : '★ (Customizado)'}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
