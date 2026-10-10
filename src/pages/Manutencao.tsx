@@ -51,24 +51,29 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
   const [fotoDepoisUrl, setFotoDepoisUrl] = useState('');
   const [obsConclusaoOS, setObsConclusaoOS] = useState('');
 
+  const condId = usuarioLogado?.condominio_id || '';
+  const isGlobal = !condId || condId === 'global';
+
   useEffect(() => {
     if (subAba === 'checklist') {
       carregarChecklist();
     } else {
       carregarChamados();
     }
-  }, [subAba, filtroFrequencia, filtroStatusRotina, filtroStatusOS, usuarioLogado?.condominio_id]);
+  }, [subAba, filtroFrequencia, filtroStatusRotina, filtroStatusOS, condId]);
 
   const carregarChecklist = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
 
     try {
       let query = supabase
         .from('checklist_manutencao')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('created_at', { ascending: false });
+
+      if (!isGlobal) {
+        query = query.eq('condominio_id', condId);
+      }
 
       if (filtroFrequencia !== 'Todos') {
         query = query.eq('frequencia', filtroFrequencia);
@@ -88,15 +93,17 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
   };
 
   const carregarChamados = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
 
     try {
       let query = supabase
         .from('chamados_manutencao')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('created_at', { ascending: false });
+
+      if (!isGlobal) {
+        query = query.eq('condominio_id', condId);
+      }
 
       if (filtroStatusOS !== 'Todos') {
         query = query.eq('status', filtroStatusOS);
@@ -149,8 +156,9 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const payload = {
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: targetCondo,
         titulo: tituloRotina.trim(),
         frequencia,
         prioridade: prioridadeRotina,
@@ -216,8 +224,9 @@ export default function Manutencao({ usuarioLogado }: ManutencaoProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const payload = {
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: targetCondo,
         titulo: tituloOS.trim(),
         localizacao: localizacaoOS.trim(),
         categoria: categoriaOS,

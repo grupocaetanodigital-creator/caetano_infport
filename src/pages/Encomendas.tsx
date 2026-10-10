@@ -42,7 +42,10 @@ interface EncomendasProps {
 }
 
 export default function Encomendas({ usuarioLogado }: EncomendasProps) {
-  const idCondominioAtivo = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id || '';
+  const idCondominioAtivo = usuarioLogado?.condominio_id || '';
+  const isGlobal = !idCondominioAtivo || idCondominioAtivo === 'global';
+  const listaCondominios = usuarioLogado?.listaCondominios || [];
+  const [condominioNovoLoteId, setCondominioNovoLoteId] = useState('');
   const [etapa, setEtapa] = useState<'1' | '2' | '3' | '4'>('1');
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -124,7 +127,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   useEffect(() => {
     carregarDadosBase();
-  }, [etapa, usuarioLogado?.condominio_id]);
+  }, [etapa, idCondominioAtivo]);
 
   useEffect(() => {
     const handleAtualizacaoLocais = (e: any) => {
@@ -138,10 +141,18 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     return () => window.removeEventListener('locais_armazenamento_atualizados', handleAtualizacaoLocais);
   }, []);
 
-  const carregarLocais = async () => {
-    if (!usuarioLogado?.condominio_id) return;
+  const carregarLocais = async (targetCondoId?: string) => {
+    const condoIdFinal = targetCondoId || idCondominioAtivo;
+    if (!condoIdFinal) {
+      setLocaisArmazenamento([
+        { id: '1', codigo: 'B01', nome: 'Bancada Principal', ativo: true },
+        { id: '2', codigo: 'C01', nome: 'Chão / Caixas Grandes', ativo: true }
+      ]);
+      setLocalArmazenamentoTriagem('B01 - Bancada Principal');
+      return;
+    }
     try {
-      const cached = localStorage.getItem(`infport_locais_${usuarioLogado.condominio_id}`);
+      const cached = localStorage.getItem(`infport_locais_${condoIdFinal}`);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -156,7 +167,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const { data, error } = await supabase
         .from('locais_armazenamento')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('condominio_id', condoIdFinal)
         .eq('ativo', true)
         .order('codigo');
 
@@ -170,7 +181,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const { data: configData } = await supabase
         .from('configuracoes')
         .select('locais_armazenamento')
-        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('condominio_id', condoIdFinal)
         .maybeSingle();
 
       if (configData?.locais_armazenamento && Array.isArray(configData.locais_armazenamento)) {
@@ -184,7 +195,6 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   };
 
   const carregarDadosBase = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
     carregarLocais();
     try {
@@ -193,49 +203,67 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const fimDia = new Date();
       fimDia.setHours(23, 59, 59, 999);
 
-      const { data: entData } = await supabase
+      let entQuery = supabase
         .from('entregadores')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
+      if (!isGlobal) {
+        entQuery = entQuery.eq('condominio_id', idCondominioAtivo);
+      }
+      const { data: entData } = await entQuery;
       setEntregadores(entData || []);
 
-      const { data: lotesData } = await supabase
+      let lotesQuery = supabase
         .from('lotes_re')
-        .select('*, entregadores(nome, empresa, documento)')
-        .eq('condominio_id', usuarioLogado.condominio_id)
+        .select('*, entregadores(nome, empresa, documento), condominios(nome)')
         .in('status', ['aguardando_triagem', 'em_triagem'])
         .order('created_at', { ascending: false });
+      if (!isGlobal) {
+        lotesQuery = lotesQuery.eq('condominio_id', idCondominioAtivo);
+      }
+      const { data: lotesData } = await lotesQuery;
       setLotesPendentes(lotesData || []);
 
-      const { data: moradData } = await supabase
+      let moradQuery = supabase
         .from('moradores')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
+      if (!isGlobal) {
+        moradQuery = moradQuery.eq('condominio_id', idCondominioAtivo);
+      }
+      const { data: moradData } = await moradQuery;
       setMoradores(moradData || []);
 
-      const { data: retidosData } = await supabase
+      let retidosQuery = supabase
         .from('encomendas_itens')
-        .select('*, moradores(nome, telefone)')
-        .eq('condominio_id', usuarioLogado.condominio_id)
+        .select('*, moradores(nome, telefone), condominios(nome)')
         .eq('status', 'retido')
         .order('created_at', { ascending: false });
+      if (!isGlobal) {
+        retidosQuery = retidosQuery.eq('condominio_id', idCondominioAtivo);
+      }
+      const { data: retidosData } = await retidosQuery;
       setTodosItensRetidos(retidosData || []);
 
-      const { data: lotesHojeData } = await supabase
+      let lotesHojeQuery = supabase
         .from('lotes_re')
         .select('id, qtd_declarada, qtd_triada')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .gte('created_at', inicioDia.toISOString())
         .lte('created_at', fimDia.toISOString());
+      if (!isGlobal) {
+        lotesHojeQuery = lotesHojeQuery.eq('condominio_id', idCondominioAtivo);
+      }
+      const { data: lotesHojeData } = await lotesHojeQuery;
 
-      const { data: triadosHojeData } = await supabase
+      let triadosHojeQuery = supabase
         .from('encomendas_itens')
         .select('id')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .gte('created_at', inicioDia.toISOString())
         .lte('created_at', fimDia.toISOString());
+      if (!isGlobal) {
+        triadosHojeQuery = triadosHojeQuery.eq('condominio_id', idCondominioAtivo);
+      }
+      const { data: triadosHojeData } = await triadosHojeQuery;
 
       const totalLotesHoje = lotesHojeData?.length || 0;
       const totalTriadasHoje = triadosHojeData?.length || 0;
@@ -470,10 +498,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     if (!novoEntNome.trim()) return;
     setLoading(true);
     try {
+      const targetCondo = (isGlobal ? condominioNovoLoteId : idCondominioAtivo) || (listaCondominios[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851');
       const { data, error } = await supabase
         .from('entregadores')
         .insert([{
-          condominio_id: usuarioLogado.condominio_id,
+          condominio_id: targetCondo,
           nome: novoEntNome.trim(),
           documento: novoEntDoc.trim(),
           empresa: novoEntEmpresa.trim()
@@ -503,6 +532,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     setLoading(true);
 
     try {
+      const targetCondo = (isGlobal ? condominioNovoLoteId : idCondominioAtivo) || (listaCondominios[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851');
+
       const hoje = new Date();
       const inicioDia = new Date(hoje);
       inicioDia.setHours(0, 0, 0, 0);
@@ -512,7 +543,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const { count, error: countError } = await supabase
         .from('lotes_re')
         .select('*', { count: 'exact', head: true })
-        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('condominio_id', targetCondo)
         .gte('created_at', inicioDia.toISOString())
         .lte('created_at', fimDia.toISOString());
 
@@ -531,7 +562,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         .from('lotes_re')
         .insert([{
           codigo_re: codigoRE,
-          condominio_id: usuarioLogado.condominio_id,
+          condominio_id: targetCondo,
           entregador_id: entregadorSelecionado.id,
           qtd_declarada: parseInt(String(qtdDeclarada)),
           qtd_triada: 0,
@@ -582,12 +613,16 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setMoradorSelecionado(null);
     }
 
+    const targetCondo = loteAtivo?.condominio_id || idCondominioAtivo;
     let query = supabase
       .from('encomendas_itens')
       .select('*')
-      .eq('condominio_id', usuarioLogado.condominio_id)
       .eq('unidade', unid.trim())
       .eq('status', 'retido');
+
+    if (targetCondo) {
+      query = query.eq('condominio_id', targetCondo);
+    }
 
     if (bloc.trim()) {
       query = query.eq('bloco', bloc.trim());
@@ -628,10 +663,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     try {
       const localArmazenar = localArmazenamentoTriagem || 'Bancada Principal';
+      const condoAlvo = loteAtivo.condominio_id || idCondominioAtivo || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
 
       let payloadItem: any = {
         lote_re_id: loteAtivo.id,
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: condoAlvo,
         bloco: blocoTriagem.trim(),
         unidade: unidadeTriagem.trim(),
         morador_id: moradorSelecionado?.id || null,
@@ -692,7 +728,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_id: usuarioLogado?.id,
         operador_login: usuarioLogado?.login,
-        condominio_id: usuarioLogado?.condominio_id
+        condominio_id: condoAlvo
       });
 
       const textoWhatsMorador = `Olá, ${nomeDestinatario} (Ap. ${unidadeTriagem}${blocoTriagem ? ' - Bloco ' + blocoTriagem : ''})! 📦\n\nSua encomenda acabou de chegar na Portaria.\n• Destinatário: ${nomeDestinatario}\n• Código/Lote: ${loteAtivo.codigo_re}\n• Cód. Rastreio: ${codigoBarras || 'N/A'}\n• Local Físico de Guarda: ${localArmazenar}\n• Observação: ${observacoes || 'Nenhuma'}\n• Foto do Pacote: ${fotoEtiquetaUrl}\n\nPor favor, retire na portaria informando seu apartamento!`;
@@ -1123,6 +1159,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       if (error) throw error;
 
+      const primeiroItem = todosItensRetidos.find(i => i.id === itensSelecionadosIds[0]);
+
       // Registra baixa / entrega no Histórico Absoluto
       registrarAtividade({
         modulo: 'Encomendas',
@@ -1136,10 +1174,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_id: usuarioLogado?.id,
         operador_login: usuarioLogado?.login,
-        condominio_id: usuarioLogado?.condominio_id
+        condominio_id: primeiroItem?.condominio_id || idCondominioAtivo
       });
 
-      const primeiroItem = todosItensRetidos.find(i => i.id === itensSelecionadosIds[0]);
       const telMorador = primeiroItem?.moradores?.telefone?.replace(/\D/g, '') || '';
       
       const volumesDetalhados = itensSelecionadosObjetos.map((it: any, idx: number) => {
@@ -1292,6 +1329,23 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           </div>
 
           <form onSubmit={criarLoteRE} className="space-y-3 max-w-2xl">
+            {isGlobal && listaCondominios.length > 0 && (
+              <div className="space-y-1 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                <label className="block text-[11px] font-bold text-emerald-800 uppercase flex items-center gap-1">
+                  🏢 Condomínio do Lote (Destino) *
+                </label>
+                <select
+                  value={condominioNovoLoteId || (listaCondominios[0]?.id || '')}
+                  onChange={(e) => setCondominioNovoLoteId(e.target.value)}
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                >
+                  {listaCondominios.map((c: any) => (
+                    <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-slate-700 uppercase">Buscar / Selecionar Entregador *</label>
               
@@ -1409,17 +1463,38 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 value={loteAtivo ? loteAtivo.id : ''}
                 onChange={(e) => {
                   const loteId = e.target.value;
-                  setLoteAtivo(lotesPendentes.find(l => l.id === loteId) || null);
+                  const loteFound = lotesPendentes.find(l => l.id === loteId) || null;
+                  setLoteAtivo(loteFound);
+                  if (loteFound?.condominio_id) {
+                    carregarLocais(loteFound.condominio_id);
+                    supabase
+                      .from('moradores')
+                      .select('*')
+                      .eq('condominio_id', loteFound.condominio_id)
+                      .order('nome')
+                      .then(({ data }) => {
+                        if (data && data.length > 0) setMoradores(data);
+                      });
+                  }
                 }}
               >
                 <option value="">Selecione um lote aberto...</option>
                 {lotesPendentes.map(l => (
                   <option key={l.id} value={l.id}>
-                    {l.codigo_re} - {l.entregadores?.nome} ({l.qtd_triada}/{l.qtd_declarada} pacotes)
+                    {l.codigo_re} - {l.entregadores?.nome || 'Entregador'} ({l.qtd_triada}/{l.qtd_declarada} pacotes){l.condominios?.nome ? ` • [${l.condominios.nome}]` : ''}
                   </option>
                 ))}
               </select>
             </div>
+
+            {loteAtivo && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-xl text-xs font-bold flex items-center justify-between">
+                <span>Lote Ativo: <strong className="text-emerald-950 font-extrabold">{loteAtivo.codigo_re}</strong></span>
+                <span className="text-[11px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-md">
+                  🏢 {loteAtivo.condominios?.nome || 'Condomínio'}
+                </span>
+              </div>
+            )}
 
             {loteAtivo && (
               <form onSubmit={salvarItemTriagem} className="space-y-2.5 pt-2 border-t border-slate-100">

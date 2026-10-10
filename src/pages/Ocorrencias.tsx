@@ -39,20 +39,25 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
   const [fotoUrl, setFotoUrl] = useState('');
   const [ocorrenciaRecente, setOcorrenciaRecente] = useState<any | null>(null);
 
+  const condId = usuarioLogado?.condominio_id || '';
+  const isGlobal = !condId || condId === 'global';
+
   useEffect(() => {
     carregarOcorrencias();
-  }, [filtroTipo, filtroStatus, usuarioLogado?.condominio_id]);
+  }, [filtroTipo, filtroStatus, condId]);
 
   const carregarOcorrencias = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
 
     try {
       let query = supabase
         .from('ocorrencias')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('created_at', { ascending: false });
+
+      if (!isGlobal) {
+        query = query.eq('condominio_id', condId);
+      }
 
       if (filtroTipo !== 'Todos') {
         query = query.eq('tipo', filtroTipo);
@@ -110,8 +115,9 @@ export default function Ocorrencias({ usuarioLogado }: OcorrenciasProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const novaOcorrencia = {
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: targetCondo,
         titulo: titulo.trim(),
         descricao: descricao.trim(),
         tipo: tipo,

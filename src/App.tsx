@@ -253,8 +253,29 @@ export default function App() {
         .select('*')
         .order('nome', { ascending: true });
       if (error) throw error;
-      setListaCondominios(data || []);
-      salvarCacheLocal('condominios', data || [], 'global');
+      const condos = data || [];
+      setListaCondominios(condos);
+      salvarCacheLocal('condominios', condos, 'global');
+
+      // Se for admin e o condomínio ativo atual for vazio ou o de homologação, verifica seleção preferencial
+      if (eAdmin && condos.length > 0) {
+        const savedCondo = localStorage.getItem('infport_condominio_ativo_id');
+        if (savedCondo !== null) {
+          if (savedCondo && condos.some(c => c.id === savedCondo)) {
+            setCondominioAtivoId(savedCondo);
+            const cObj = condos.find(c => c.id === savedCondo);
+            if (cObj) setCondominio(cObj);
+          }
+        } else if (!condominioAtivoId || condominioAtivoId === '00000000-0000-0000-0000-000000000001') {
+          // Prefere o primeiro condomínio real (ex: Village Di Padova)
+          const condoReal = condos.find(c => c.id !== '00000000-0000-0000-0000-000000000001') || condos[0];
+          if (condoReal) {
+            setCondominioAtivoId(condoReal.id);
+            setCondominio(condoReal);
+            localStorage.setItem('infport_condominio_ativo_id', condoReal.id);
+          }
+        }
+      }
     } catch (err) {
       console.warn('Erro ao carregar condomínios (tentando cache offline):', err);
       const cache = obterCacheLocal<any[]>('condominios', 'global', []);
@@ -443,10 +464,12 @@ export default function App() {
     ...operador,
     somenteLeitura: eSindico,
     eSindico: eSindico,
-    condominio_id: eAdmin ? (condominioAtivoId || operador.condominio_id) : operador.condominio_id,
+    condominio_id: eAdmin ? (condominioAtivoId || '') : (operador.condominio_id || ''),
     condominio_nome: eAdmin 
       ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos)'))
-      : (condominio?.nome || 'Condomínio Geral')
+      : (condominio?.nome || 'Condomínio Geral'),
+    isGlobal: eAdmin && !condominioAtivoId,
+    listaCondominios: listaCondominios
   } : null;
 
   const modulosDisponiveis = eSindico ? [
@@ -636,12 +659,13 @@ export default function App() {
                       onChange={(e) => {
                         const novoId = e.target.value;
                         setCondominioAtivoId(novoId);
+                        localStorage.setItem('infport_condominio_ativo_id', novoId);
                         const cObj = listaCondominios.find(c => c.id === novoId);
                         if (cObj) setCondominio(cObj);
                       }}
                       className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-700"
                     >
-                      <option value="">🏢 Todos os Condomínios</option>
+                      <option value="">🏢 Todos os Condomínios (Visão Global)</option>
                       {listaCondominios.map((c) => (
                         <option key={c.id} value={c.id}>🏢 {c.nome}</option>
                       ))}
@@ -721,10 +745,29 @@ export default function App() {
             <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
               <EmblemaInfport tamanho="sm" comBrilho />
               <div className="min-w-0 flex-1">
-                <h1 className="font-extrabold text-xs text-white truncate leading-tight">
-                  {operadorContextoGlobal.condominio_nome || 'Condomínio Homologação INFPORT'}
-                </h1>
-                <p className="text-[11px] text-emerald-400 font-semibold truncate leading-tight mt-0.5">
+                {eAdmin && !eSindico ? (
+                  <select
+                    value={condominioAtivoId}
+                    onChange={(e) => {
+                      const novoId = e.target.value;
+                      setCondominioAtivoId(novoId);
+                      localStorage.setItem('infport_condominio_ativo_id', novoId);
+                      const cObj = listaCondominios.find(c => c.id === novoId);
+                      if (cObj) setCondominio(cObj);
+                    }}
+                    className="bg-slate-800 text-emerald-400 font-extrabold text-[11px] px-1.5 py-0.5 rounded border border-slate-700 focus:outline-none max-w-full truncate"
+                  >
+                    <option value="">🏢 Todos (Global)</option>
+                    {listaCondominios.map((c) => (
+                      <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <h1 className="font-extrabold text-xs text-white truncate leading-tight">
+                    {operadorContextoGlobal.condominio_nome || 'Condomínio'}
+                  </h1>
+                )}
+                <p className="text-[11px] text-slate-300 font-semibold truncate leading-tight mt-0.5">
                   Operador: <span className="text-white font-bold">{operador.nome || 'Caetano'}</span>
                 </p>
               </div>
@@ -792,13 +835,31 @@ export default function App() {
                 <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl shadow-xs flex items-center justify-between gap-2 border border-slate-800">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    <div className="truncate">
-                      <p className="text-xs font-bold text-white truncate">
-                        Posto Ativo: <span className="text-emerald-400 font-extrabold">{operadorContextoGlobal.condominio_nome || 'Condomínio'}</span>
-                      </p>
-                      <p className="text-[11px] text-slate-300 truncate">
-                        Plantão Operacional • Operador: <strong className="text-white">{operador.nome || 'Caetano'}</strong>
-                      </p>
+                    <div className="truncate flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-bold text-white">Posto Ativo:</span>
+                      {eAdmin && !eSindico ? (
+                        <select
+                          value={condominioAtivoId}
+                          onChange={(e) => {
+                            const novoId = e.target.value;
+                            setCondominioAtivoId(novoId);
+                            localStorage.setItem('infport_condominio_ativo_id', novoId);
+                            const cObj = listaCondominios.find(c => c.id === novoId);
+                            if (cObj) setCondominio(cObj);
+                          }}
+                          className="bg-slate-800 text-emerald-400 font-extrabold text-xs px-2 py-0.5 rounded-lg border border-slate-700 hover:border-emerald-500 transition cursor-pointer max-w-[260px] truncate"
+                        >
+                          <option value="">🏢 Todos (Visão Global)</option>
+                          {listaCondominios.map((c) => (
+                            <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-emerald-400 font-extrabold text-xs">{operadorContextoGlobal.condominio_nome || 'Condomínio'}</span>
+                      )}
+                      <span className="text-[11px] text-slate-300 truncate hidden sm:inline">
+                        • Plantão: <strong className="text-white">{operador.nome || 'Caetano'}</strong>
+                      </span>
                     </div>
                   </div>
 

@@ -65,7 +65,8 @@ interface PrestadoresObrasProps {
 }
 
 export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProps) {
-  const idCondominio = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id;
+  const idCondominio = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id || '';
+  const isGlobal = !idCondominio || idCondominio === 'global';
   const operadorNome = usuarioLogado?.nome || usuarioLogado?.login || 'Operador da Portaria';
 
   // Abas principais (Removida aba SQL da tela conforme solicitação)
@@ -144,20 +145,21 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
   // Carrega dados iniciais
   useEffect(() => {
-    if (idCondominio) {
-      carregarTudo();
-      carregarMoradores();
-    }
+    carregarTudo();
+    carregarMoradores();
   }, [idCondominio]);
 
   // Carrega moradores do condomínio para vínculo rápido
   const carregarMoradores = async () => {
     try {
-      const { data } = await supabase
+      let query = supabase
         .from('moradores')
         .select('id, nome, bloco, unidade, telefone')
-        .eq('condominio_id', idCondominio)
         .order('unidade');
+      if (!isGlobal) {
+        query = query.eq('condominio_id', idCondominio);
+      }
+      const { data } = await query;
       if (data) setMoradores(data);
     } catch (e) {
       console.warn('Erro ao carregar moradores:', e);
@@ -168,11 +170,14 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     setLoading(true);
     try {
       // 1. Carrega todos os cadastros mestres de autorizados / prestadores
-      const { data: dadosCadastros, error: erroCad } = await supabase
+      let cadQuery = supabase
         .from('prestadores')
         .select('*')
-        .eq('condominio_id', idCondominio)
         .order('created_at', { ascending: false });
+      if (!isGlobal) {
+        cadQuery = cadQuery.eq('condominio_id', idCondominio);
+      }
+      const { data: dadosCadastros, error: erroCad } = await cadQuery;
 
       if (erroCad) throw erroCad;
       setCadastros(dadosCadastros || []);
@@ -180,12 +185,15 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       // 2. Carrega acessos ativos (Dentro do Condomínio)
       let ativos: any[] = [];
       try {
-        const { data: acessosDb, error: erroAcessos } = await supabase
+        let acessosQuery = supabase
           .from('prestadores_acessos')
           .select('*')
-          .eq('condominio_id', idCondominio)
           .is('data_hora_saida', null)
           .order('data_hora_entrada', { ascending: false });
+        if (!isGlobal) {
+          acessosQuery = acessosQuery.eq('condominio_id', idCondominio);
+        }
+        const { data: acessosDb, error: erroAcessos } = await acessosQuery;
 
         if (!erroAcessos && acessosDb && acessosDb.length > 0) {
           ativos = acessosDb;
@@ -223,13 +231,16 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
       // 3. Carrega histórico de acessos concluídos
       try {
-        const { data: histDb } = await supabase
+        let histQuery = supabase
           .from('prestadores_acessos')
           .select('*')
-          .eq('condominio_id', idCondominio)
           .not('data_hora_saida', 'is', null)
           .order('data_hora_saida', { ascending: false })
           .limit(100);
+        if (!isGlobal) {
+          histQuery = histQuery.eq('condominio_id', idCondominio);
+        }
+        const { data: histDb } = await histQuery;
 
         if (histDb) setHistoricoAcessos(histDb);
       } catch {}

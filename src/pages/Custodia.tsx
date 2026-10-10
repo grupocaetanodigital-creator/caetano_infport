@@ -72,29 +72,36 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
   const [recebedorNome, setRecebedorNome] = useState('');
   const [recebedorDoc, setRecebedorDoc] = useState('');
   const [fotoSaidaUrl, setFotoSaidaUrl] = useState('');
+  const condId = usuarioLogado?.condominio_id || '';
+  const isGlobal = !condId || condId === 'global';
   const [whatsSaidaLink, setWhatsSaidaLink] = useState<any | null>(null);
 
   useEffect(() => {
     carregarDados();
-  }, [aba, usuarioLogado?.condominio_id]);
+  }, [aba, condId]);
 
   const carregarDados = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
 
     try {
-      const { data: moradData } = await supabase
+      let moradQuery = supabase
         .from('moradores')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
+      if (!isGlobal) {
+        moradQuery = moradQuery.eq('condominio_id', condId);
+      }
+      const { data: moradData } = await moradQuery;
       setMoradores(moradData || []);
 
-      const { data: custodiaData, error: errCustodia } = await supabase
+      let custodiaQuery = supabase
         .from('custodia')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('created_at', { ascending: false });
+      if (!isGlobal) {
+        custodiaQuery = custodiaQuery.eq('condominio_id', condId);
+      }
+      const { data: custodiaData, error: errCustodia } = await custodiaQuery;
 
       if (errCustodia) throw errCustodia;
 
@@ -189,8 +196,9 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
       const seq = Math.floor(1000 + Math.random() * 9000);
       const codigoCustodia = `CUST-${new Date().getFullYear()}-${seq}`;
 
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const novoRegistro = {
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: targetCondo,
         codigo_custodia: codigoCustodia,
         fluxo,
         origem_tipo: fluxo.startsWith('M') ? 'Morador' : 'Terceiro',

@@ -58,40 +58,50 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const [fotoRetiradaUrl, setFotoRetiradaUrl] = useState('');
   const [whatsEmprestimo, setWhatsEmprestimo] = useState<any | null>(null);
 
+  const condId = usuarioLogado?.condominio_id || '';
+  const isGlobal = !condId || condId === 'global';
   const [fotoDevolucaoUrl, setFotoDevolucaoUrl] = useState('');
 
   useEffect(() => {
     carregarQuadroChaves();
-  }, [usuarioLogado?.condominio_id]);
+  }, [condId]);
 
   const carregarQuadroChaves = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
 
     try {
-      const { data: chavesData, error: errChaves } = await supabase
+      let chavesQuery = supabase
         .from('chaves')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('codigo_chave');
+      if (!isGlobal) {
+        chavesQuery = chavesQuery.eq('condominio_id', condId);
+      }
+      const { data: chavesData, error: errChaves } = await chavesQuery;
 
       if (errChaves) throw errChaves;
 
-      const { data: movData, error: errMov } = await supabase
+      let movQuery = supabase
         .from('movimentacao_chaves')
         .select('*, chaves(*)')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .eq('status', 'Em Andamento')
         .order('data_hora_retirada', { ascending: false });
+      if (!isGlobal) {
+        movQuery = movQuery.eq('condominio_id', condId);
+      }
+      const { data: movData, error: errMov } = await movQuery;
 
       if (errMov) throw errMov;
 
       // Buscar moradores e colaboradores para agilizar o atendimento
-      const { data: morData } = await supabase
+      let morQuery = supabase
         .from('moradores')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
+      if (!isGlobal) {
+        morQuery = morQuery.eq('condominio_id', condId);
+      }
+      const { data: morData } = await morQuery;
 
       const mList = morData || [];
       setMoradores(mList);
@@ -99,11 +109,14 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       blocos.sort();
       setBlocosDisponiveis(blocos.length > 0 ? blocos : ['A', 'B', 'C', 'D']);
 
-      const { data: colabData } = await supabase
+      let colabQuery = supabase
         .from('operadores')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
+      if (!isGlobal) {
+        colabQuery = colabQuery.eq('condominio_id', condId);
+      }
+      const { data: colabData } = await colabQuery;
       setColaboradores(colabData || []);
 
       const agora = new Date();
@@ -184,8 +197,9 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const payload = {
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: targetCondo,
         codigo_chave: codigoChave.trim().toUpperCase(),
         nome_chave: nomeChave.trim(),
         bloco: bloco.trim().toUpperCase(),
@@ -236,7 +250,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
         .from('movimentacao_chaves')
         .insert([{
           chave_id: modalRetirada.id,
-          condominio_id: usuarioLogado.condominio_id,
+          condominio_id: modalRetirada.condominio_id || condId || 'aa205bfb-55cc-42fe-ab25-9c16ac943851',
           retirante_nome: nomeCompletoComTipo,
           retirante_doc: retiranteDoc.trim() || 'Não informado',
           retirante_telefone: retiranteTel.trim() || '',

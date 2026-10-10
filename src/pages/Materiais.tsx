@@ -37,20 +37,25 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
   const [observacaoAvaria, setObservacaoAvaria] = useState('');
   const [fotoAvariaUrl, setFotoAvariaUrl] = useState('');
 
+  const condId = usuarioLogado?.condominio_id || '';
+  const isGlobal = !condId || condId === 'global';
+
   useEffect(() => {
     carregarMateriais();
-  }, [filtroCategoria, usuarioLogado?.condominio_id]);
+  }, [filtroCategoria, condId]);
 
   const carregarMateriais = async () => {
-    if (!usuarioLogado?.condominio_id) return;
     setLoading(true);
 
     try {
       let query = supabase
         .from('materiais_posto')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
         .order('nome');
+
+      if (!isGlobal) {
+        query = query.eq('condominio_id', condId);
+      }
 
       if (filtroCategoria !== 'Todos') {
         query = query.eq('categoria', filtroCategoria);
@@ -134,8 +139,9 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
     setLoading(true);
 
     try {
+      const targetCondo = condId || usuarioLogado?.listaCondominios?.[0]?.id || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const payload = {
-        condominio_id: usuarioLogado.condominio_id,
+        condominio_id: targetCondo,
         nome: nomeMaterial.trim(),
         categoria,
         codigo_patrimonio: codigoPatrimonio.trim(),
