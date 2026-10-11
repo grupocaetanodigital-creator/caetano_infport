@@ -408,12 +408,23 @@ export async function salvarNivelAcesso(nivel: NivelAcessoItem, condominioId?: s
   if (targetCondo) {
     try {
       const customizadosDoCondo = atualizados.filter(n => n.condominio_id === targetCondo || !n.padrao_sistema);
-      const { error } = await supabase
+      // Tenta upsert primeiro garantindo persistência imediata
+      const { error: upsertErr } = await supabase
         .from('configuracoes')
-        .update({ niveis_acesso: customizadosDoCondo } as any)
-        .eq('condominio_id', targetCondo);
-      if (error) {
-        console.warn('Persistência remota de nível no Supabase (coluna niveis_acesso requer migração SQL):', error.message);
+        .upsert({
+          condominio_id: targetCondo,
+          niveis_acesso: customizadosDoCondo
+        } as any, { onConflict: 'condominio_id' });
+
+      if (upsertErr) {
+        // Fallback para update simples
+        const { error: updErr } = await supabase
+          .from('configuracoes')
+          .update({ niveis_acesso: customizadosDoCondo } as any)
+          .eq('condominio_id', targetCondo);
+        if (updErr) {
+          console.warn('Persistência remota de nível no Supabase:', updErr.message);
+        }
       }
     } catch (e) {
       console.warn('Persistência remota de nível de acesso (graceful fallback):', e);
@@ -519,16 +530,30 @@ export function verificarPermissao(
 ): boolean {
   if (!operador) return false;
 
-  // Administrador Geral (Nível 0 ou perfil 'admin') tem sempre acesso total
-  const ehAdmin = operador.perfil === 'admin' || operador.nivel_acesso === 0 || operador.nivel === 0;
-  if (ehAdmin) {
-    return true;
-  }
-
-  // Identifica o nível do operador
+  const nivelNum = Number(operador.nivel_acesso ?? operador.nivel ?? 3);
+  const perfilStr = String(operador.perfil || '').toLowerCase();
   const idNivel = operador.nivel_acesso_custom_id || 
                   (operador.nivel_acesso !== undefined ? `nivel_${operador.nivel_acesso}` : null) ||
                   (operador.perfil ? `nivel_${operador.perfil}` : 'nivel_3');
+
+  // REGRA ESTRITA DE SEGURANÇA: Nível 3 (Operador/Porteiro) NUNCA pode excluir materiais do posto
+  if (modulo === 'materiais' && (acao === 'excluir' || acao === 'excluir_equipamento')) {
+    if (nivelNum >= 3 || idNivel === 'nivel_3' || perfilStr === 'operador' || perfilStr === 'porteiro') {
+      return false;
+    }
+  }
+
+  // Administrador Geral (Nível 0 sem condomínio fixo) tem acesso total a tudo
+  const ehAdminGeral = (perfilStr === 'admin' || perfilStr === 'admin_geral' || nivelNum === 0) &&
+                       (!operador.condominio_id || operador.condominio_id === 'global');
+  if (ehAdminGeral) {
+    return true;
+  }
+
+  // Se for administrador local de condomínio (Nível 0 com condomínio fixo)
+  if (nivelNum === 0 || perfilStr === 'admin') {
+    return true;
+  }
 
   const todos = obterNiveisLocal();
   let nivelObj = todos.find(n => n.id === idNivel);
@@ -538,19 +563,27 @@ export function verificarPermissao(
   }
 
   if (!nivelObj) {
-    const perfilStr = String(operador.perfil || '').toLowerCase();
-    if (perfilStr.includes('master')) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_1');
-    else if (perfilStr.includes('superv')) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_2');
-    else if (perfilStr.includes('sind')) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_4');
+    if (perfilStr.includes('master') || nivelNum === 1) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_1');
+    else if (perfilStr.includes('superv') || nivelNum === 2) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_2');
+    else if (perfilStr.includes('sind') || nivelNum === 4) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_4');
     else nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_3');
   }
 
+  // Fallback seguro de menor privilégio: se não encontrou o perfil, ações destrutivas são SEMPRE negadas
   if (!nivelObj || !nivelObj.permissoes) {
-    return true; // Fallback seguro
+    if (acao.includes('excluir') || acao.includes('limpar') || acao.includes('delet')) {
+      return false;
+    }
+    return false;
   }
 
   const permissoesModulo: any = (nivelObj.permissoes as any)[modulo];
   if (!permissoesModulo) {
+    return false;
+  }
+
+  // Se for Nível 3 e o módulo for materiais, bloqueia exclusão independentemente de customizações errôneas
+  if (modulo === 'materiais' && acao === 'excluir' && (nivelNum >= 3 || idNivel === 'nivel_3')) {
     return false;
   }
 
@@ -559,10 +592,19 @@ export function verificarPermissao(
   }
 
   // Aliases e fallbacks inteligentes para compatibilidade com perfis anteriores
+  if (modulo === 'chaves') {
+    if (acao === 'excluir') return Boolean(permissoesModulo.excluir ?? false);
+    if (acao === 'cadastrar') return Boolean(permissoesModulo.cadastrar ?? permissoesModulo.criar ?? false);
+    if (acao === 'editar') return Boolean(permissoesModulo.editar ?? permissoesModulo.cadastrar ?? false);
+    if (acao === 'emprestar') return Boolean(permissoesModulo.emprestar ?? permissoesModulo.criar ?? true);
+    if (acao === 'devolver') return Boolean(permissoesModulo.devolver ?? permissoesModulo.editar ?? true);
+    if (acao === 'visualizar') return Boolean(permissoesModulo.visualizar ?? true);
+  }
+
   if (acao === 'criar_lote') return Boolean(permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? true);
-  if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? permissoesModulo.excluir ?? false);
+  if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? (nivelNum < 3 ? permissoesModulo.excluir : false));
   if (acao === 'editar_lotes') return Boolean(permissoesModulo.editar_lotes ?? permissoesModulo.editar ?? false);
-  if (acao === 'limpar_dados') return Boolean(permissoesModulo.limpar_dados ?? permissoesModulo.excluir ?? false);
+  if (acao === 'limpar_dados') return Boolean(permissoesModulo.limpar_dados ?? false);
 
   return Boolean(permissoesModulo[acao]);
 }
