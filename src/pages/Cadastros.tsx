@@ -24,12 +24,25 @@ import {
   Trash2,
   Check,
   ArrowRight,
+  ArrowLeft,
   UserCheck,
   Layers,
   ChevronRight,
   Info,
-  Hash
+  Hash,
+  Key,
+  CreditCard,
+  Car,
+  Shield,
+  ShieldAlert,
+  Eye,
+  Mail,
+  FileText,
+  Tag,
+  AlertTriangle,
+  Camera
 } from 'lucide-react';
+import { comprimirImagemBase64 } from '../services/imageUtils';
 import { 
   carregarCondominioConfig, 
   salvarCondominioConfig, 
@@ -91,6 +104,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   // Estrutura e Visualização de Unidades
   const [modoVisaoMoradores, setModoVisaoMoradores] = useState<'cards_unidades' | 'lista_moradores'>('cards_unidades');
   const [filtroStatusUnidade, setFiltroStatusUnidade] = useState<'todas' | 'ocupadas' | 'vagas'>('todas');
+  const [faixaCasasFiltro, setFaixaCasasFiltro] = useState<string>('todas');
 
   // Formulário Condomínio
   const [nomeCondominio, setNomeCondominio] = useState('');
@@ -112,16 +126,55 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [nomeOperador, setNomeOperador] = useState('');
   const [loginOperador, setLoginOperador] = useState('');
   const [senhaOperador, setSenhaOperador] = useState('');
+  const [fotoOperador, setFotoOperador] = useState('');
   const [nivelAcesso, setNivelAcesso] = useState('nivel_3');
   const [condominioIdOperador, setCondominioIdOperador] = useState('');
   const [listaNiveis, setListaNiveis] = useState<NivelAcessoItem[]>(() => obterNiveisLocal());
 
-  // Formulário Morador
+  // Formulário Morador & Controle de Acesso
   const [nomeMorador, setNomeMorador] = useState('');
   const [blocoMorador, setBlocoMorador] = useState('');
   const [unidadeMorador, setUnidadeMorador] = useState('');
   const [telefoneMorador, setTelefoneMorador] = useState('');
   const [condominioIdMorador, setCondominioIdMorador] = useState('');
+  const [cpfMorador, setCpfMorador] = useState('');
+  const [rgMorador, setRgMorador] = useState('');
+  const [emailMorador, setEmailMorador] = useState('');
+  const [fotoMorador, setFotoMorador] = useState('');
+  const [tipoMorador, setTipoMorador] = useState<string>('Morador');
+
+  const handleFotoMoradorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const b64 = await comprimirImagemBase64(file, 400, 400, 0.82);
+      setFotoMorador(b64);
+    } catch (err) {
+      console.error('Erro ao processar foto do morador:', err);
+    }
+  };
+
+  const handleFotoOperadorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const b64 = await comprimirImagemBase64(file, 400, 400, 0.82);
+      setFotoOperador(b64);
+    } catch (err) {
+      console.error('Erro ao processar foto do operador:', err);
+    }
+  };
+  const [statusAcessoMorador, setStatusAcessoMorador] = useState<'liberado' | 'bloqueado' | 'aviso'>('liberado');
+  const [tagRfidMorador, setTagRfidMorador] = useState('');
+  const [codigoAcessoMorador, setCodigoAcessoMorador] = useState('');
+  const [veiculoPlacaMorador, setVeiculoPlacaMorador] = useState('');
+  const [veiculoModeloMorador, setVeiculoModeloMorador] = useState('');
+  const [contatoEmergenciaMorador, setContatoEmergenciaMorador] = useState('');
+  const [observacoesMorador, setObservacoesMorador] = useState('');
+  const [abaModalMorador, setAbaModalMorador] = useState<'dados' | 'contato' | 'acesso'>('dados');
+  const [moradorDetalheModal, setMoradorDetalheModal] = useState<any | null>(null);
+  const [filtroTipoMorador, setFiltroTipoMorador] = useState<string>('todos');
+  const [filtroStatusAcesso, setFiltroStatusAcesso] = useState<string>('todos');
 
   // Identificação do condomínio ativo em foco
   const condoAtivoId = eAdmin 
@@ -140,7 +193,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [textoListaUnidades, setTextoListaUnidades] = useState<string>('');
   const [modalAddUnidadeAvulsaAberto, setModalAddUnidadeAvulsaAberto] = useState<boolean>(false);
   const [novaUnidadeAvulsaNumero, setNovaUnidadeAvulsaNumero] = useState<string>('');
-  const [unidadeModalAberta, setUnidadeModalAberta] = useState<any | null>(null);
+  const [unidadeSelecionadaParaGerenciar, setUnidadeSelecionadaParaGerenciar] = useState<any | null>(null);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -175,13 +228,27 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setNomeOperador('');
     setLoginOperador('');
     setSenhaOperador('');
+    setFotoOperador('');
     setNivelAcesso('nivel_3');
     setCondominioIdOperador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
     setNomeMorador('');
+    setFotoMorador('');
     setBlocoMorador(eEstruturaCasasAtivo ? 'Casa' : '');
     setUnidadeMorador('');
     setTelefoneMorador('');
     setCondominioIdMorador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
+    setCpfMorador('');
+    setRgMorador('');
+    setEmailMorador('');
+    setTipoMorador('Morador');
+    setStatusAcessoMorador('liberado');
+    setTagRfidMorador('');
+    setCodigoAcessoMorador('');
+    setVeiculoPlacaMorador('');
+    setVeiculoModeloMorador('');
+    setContatoEmergenciaMorador('');
+    setObservacoesMorador('');
+    setAbaModalMorador('dados');
   };
 
   const fecharModalFlutuante = () => {
@@ -469,6 +536,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           nivel_acesso: nivelNum,
           nivel_acesso_custom_id: customId,
           perfil: perfilStr,
+          foto_url: fotoOperador || null,
           condominio_id: targetCondominioId
         };
         if (senhaOperador.trim()) {
@@ -486,6 +554,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             nome: nomeOperador.trim(),
             login: loginOperador.trim().toLowerCase(),
             nivel_acesso: nivelNum,
+            foto_url: fotoOperador || null,
             condominio_id: targetCondominioId
           };
           if (dadosAtualizacao.senha) fallback.senha = dadosAtualizacao.senha;
@@ -509,6 +578,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           nivel_acesso: nivelNum,
           nivel_acesso_custom_id: customId,
           perfil: perfilStr,
+          foto_url: fotoOperador || null,
           condominio_id: targetCondominioId,
           ativo: true
         };
@@ -542,6 +612,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setIdEdicao(op.id);
     setNomeOperador(op.nome || '');
     setLoginOperador(op.login || '');
+    setFotoOperador(op.foto_url || '');
     setSenhaOperador('');
     const nivelDefinido = op.nivel_acesso_custom_id ||
       (op.nivel_acesso !== undefined && op.nivel_acesso !== null && !isNaN(Number(op.nivel_acesso)) ? `nivel_${op.nivel_acesso}` : null) ||
@@ -567,33 +638,69 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     const eCasas = isEstruturaCasas(cfg?.tipo_estrutura);
     const blocoFinal = eCasas ? 'Casa' : (blocoMorador.trim() || '');
 
+    const dadosMorador: any = {
+      nome: nomeMorador.trim(),
+      bloco: blocoFinal,
+      unidade: unidadeMorador.trim(),
+      telefone: telefoneMorador.trim(),
+      condominio_id: targetCondominioId,
+      tipo: tipoMorador || 'Morador',
+      cpf: cpfMorador.trim() || null,
+      rg: rgMorador.trim() || null,
+      email: emailMorador.trim() || null,
+      foto_url: fotoMorador || null,
+      tag_rfid: tagRfidMorador.trim() || null,
+      codigo_acesso: codigoAcessoMorador.trim() || null,
+      status_acesso: statusAcessoMorador || 'liberado',
+      veiculo_placa: veiculoPlacaMorador.trim().toUpperCase() || null,
+      veiculo_modelo: veiculoModeloMorador.trim() || null,
+      contato_emergencia: contatoEmergenciaMorador.trim() || null,
+      observacoes: observacoesMorador.trim() || null
+    };
+
     try {
       if (idEdicao) {
-        const { error } = await supabase
+        let { error } = await supabase
           .from('moradores')
-          .update({
-            nome: nomeMorador.trim(),
-            bloco: blocoFinal,
-            unidade: unidadeMorador.trim(),
-            telefone: telefoneMorador.trim(),
-            condominio_id: targetCondominioId
-          })
+          .update(dadosMorador)
           .eq('id', idEdicao);
+
+        // Fallback resiliente se o banco de dados ainda não tiver as colunas extras de controle de acesso
+        if (error && (error.message?.includes('tag_rfid') || error.message?.includes('status_acesso') || error.message?.includes('cpf') || (error as any).code === '42703')) {
+          console.warn('Fallback: salvando morador em modo compatibilidade com schema legado...');
+          const fallbackBasico = {
+            nome: dadosMorador.nome,
+            bloco: dadosMorador.bloco,
+            unidade: dadosMorador.unidade,
+            telefone: dadosMorador.telefone,
+            condominio_id: dadosMorador.condominio_id,
+            tipo: dadosMorador.tipo
+          };
+          const resRetry = await supabase.from('moradores').update(fallbackBasico).eq('id', idEdicao);
+          error = resRetry.error;
+        }
+
         if (error) throw error;
-        setMensagem({ tipo: 'sucesso', texto: 'Morador atualizado com sucesso!' });
+        setMensagem({ tipo: 'sucesso', texto: `Morador "${dadosMorador.nome}" atualizado com sucesso!` });
       } else {
-        const { error } = await supabase.from('moradores').insert([
-          {
-            nome: nomeMorador.trim(),
-            bloco: blocoFinal,
-            unidade: unidadeMorador.trim(),
-            telefone: telefoneMorador.trim(),
-            condominio_id: targetCondominioId,
-            tipo: 'Morador'
-          }
-        ]);
+        let { error } = await supabase.from('moradores').insert([dadosMorador]);
+
+        if (error && (error.message?.includes('tag_rfid') || error.message?.includes('status_acesso') || error.message?.includes('cpf') || (error as any).code === '42703')) {
+          console.warn('Fallback: inserindo morador em modo compatibilidade com schema legado...');
+          const fallbackBasico = {
+            nome: dadosMorador.nome,
+            bloco: dadosMorador.bloco,
+            unidade: dadosMorador.unidade,
+            telefone: dadosMorador.telefone,
+            condominio_id: dadosMorador.condominio_id,
+            tipo: dadosMorador.tipo
+          };
+          const resRetry = await supabase.from('moradores').insert([fallbackBasico]);
+          error = resRetry.error;
+        }
+
         if (error) throw error;
-        setMensagem({ tipo: 'sucesso', texto: 'Morador cadastrado com sucesso!' });
+        setMensagem({ tipo: 'sucesso', texto: `Morador "${dadosMorador.nome}" cadastrado com sucesso!` });
       }
 
       fecharModalFlutuante();
@@ -608,13 +715,26 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
   const prepararEdicaoMorador = (m: any) => {
     setIdEdicao(m.id);
-    setNomeMorador(m.nome);
+    setNomeMorador(m.nome || '');
     const cfg = mapaConfigsCondos[m.condominio_id || condoAtivoId];
     const eCasas = isEstruturaCasas(cfg?.tipo_estrutura);
     setBlocoMorador(eCasas ? 'Casa' : (m.bloco || ''));
     setUnidadeMorador(m.unidade || '');
     setTelefoneMorador(m.telefone || '');
     setCondominioIdMorador(m.condominio_id || '');
+    setCpfMorador(m.cpf || '');
+    setRgMorador(m.rg || '');
+    setEmailMorador(m.email || '');
+    setFotoMorador(m.foto_url || '');
+    setTipoMorador(m.tipo || 'Morador');
+    setStatusAcessoMorador(m.status_acesso || 'liberado');
+    setTagRfidMorador(m.tag_rfid || '');
+    setCodigoAcessoMorador(m.codigo_acesso || '');
+    setVeiculoPlacaMorador(m.veiculo_placa || '');
+    setVeiculoModeloMorador(m.veiculo_modelo || '');
+    setContatoEmergenciaMorador(m.contato_emergencia || '');
+    setObservacoesMorador(m.observacoes || '');
+    setAbaModalMorador('dados');
     setTipoModalFlutuante('morador');
     setModalFlutuanteAberto(true);
   };
@@ -947,32 +1067,21 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     const total = unidadesComMoradores.length;
     const ocupadas = unidadesComMoradores.filter(u => u.ocupada).length;
     const vagas = total - ocupadas;
-    return { total, ocupadas, vagas, totalMoradores: moradores.length };
+    const totalTags = moradores.filter(m => m.tag_rfid).length;
+    const totalVeiculos = moradores.filter(m => m.veiculo_placa).length;
+    const totalBloqueados = moradores.filter(m => m.status_acesso === 'bloqueado').length;
+    return { total, ocupadas, vagas, totalMoradores: moradores.length, totalTags, totalVeiculos, totalBloqueados };
   }, [unidadesComMoradores, moradores]);
 
   return (
     <div className="space-y-4 pb-12">
-      {/* Header Compacto com Nível e Multi-Tenant */}
-      <div className="bg-slate-900 text-white p-3 sm:p-4 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3 shadow-sm border border-slate-800">
-        <div>
-          <span className="text-[10px] font-black uppercase tracking-wider bg-slate-800 text-emerald-400 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 w-fit">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            Nível: {eAdmin ? 'ADMINISTRADOR GERAL' : eMaster ? 'MASTER (SÍNDICO)' : eSupervisor ? 'SUPERVISOR' : 'OPERADOR (PORTARIA)'}
-          </span>
-          <h3 className="font-bold text-base sm:text-lg mt-1 text-white">
-            Cadastros Base do Sistema
-          </h3>
-          <p className="text-xs text-slate-300">
-            {eAdmin 
-              ? 'Gerenciamento global de condomínios, equipe operacional e moradores.' 
-              : `Condomínio Ativo: ${getNomeCondominioPorId(usuarioLogado?.condominio_id)}`}
-          </p>
-        </div>
-
-        {eAdmin && (
-          <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700 w-full md:w-auto min-w-[260px] space-y-1">
-            <label className="block text-[9px] font-bold text-emerald-400 uppercase flex items-center gap-1">
-              <Filter className="w-3 h-3" /> Filtrar Condomínio em Gerenciamento
+      {/* Painel Escuro de Filtragem e Seleção de Condomínio */}
+      {eAdmin && (
+        <div className="bg-slate-900 text-white p-3 sm:p-3.5 rounded-2xl shadow-sm border border-slate-800 flex flex-col md:flex-row justify-between items-center gap-2">
+          <div className="w-full flex-1 space-y-1">
+            <label className="block text-[10px] font-bold text-emerald-400 uppercase flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5 text-emerald-400" />
+              Filtrar Condomínio em Gerenciamento
             </label>
             <select
               value={condominioFiltroAdmin}
@@ -981,7 +1090,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 setCondominioIdOperador(e.target.value);
                 setCondominioIdMorador(e.target.value);
               }}
-              className="w-full bg-slate-950 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
+              className="w-full bg-slate-950 text-white text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
             >
               <option value="">🏢 Todos os Condomínios (Visão Global)</option>
               {condominios.map((c) => (
@@ -989,23 +1098,23 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
               ))}
             </select>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Navegação de Abas Fluida com Contadores */}
-      <div className="flex bg-slate-200/70 p-1.5 rounded-2xl border border-slate-300 gap-1.5 shadow-2xs">
+      <div className="flex bg-slate-200/70 p-1.5 rounded-2xl border border-slate-300 gap-1.5 shadow-2xs items-center">
         {eAdmin && (
           <button
             onClick={() => setAbaAtiva('condominios')}
-            className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
+            title="Condomínios Cadastrados"
+            className={`py-2 px-3 text-xs font-black flex items-center justify-center gap-1.5 rounded-xl transition cursor-pointer shrink-0 ${
               abaAtiva === 'condominios'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-700 hover:bg-white/60'
             }`}
           >
-            <Building2 className="w-4 h-4 text-emerald-400" />
-            <span>Condomínios</span>
-            <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+            <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'condominios' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-300 text-slate-700'
             }`}>
               {condominios.length}
@@ -1016,15 +1125,15 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         {!eOperador && (
           <button
             onClick={() => setAbaAtiva('operadores')}
-            className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
+            title="Operadores e Equipe de Portaria"
+            className={`py-2 px-3 text-xs font-black flex items-center justify-center gap-1.5 rounded-xl transition cursor-pointer shrink-0 ${
               abaAtiva === 'operadores'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-700 hover:bg-white/60'
             }`}
           >
-            <Users className="w-4 h-4 text-blue-400" />
-            <span>Operadores</span>
-            <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+            <Users className="w-4 h-4 text-blue-400 shrink-0" />
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'operadores' ? 'bg-slate-800 text-blue-300' : 'bg-slate-300 text-slate-700'
             }`}>
               {operadores.length}
@@ -1305,13 +1414,26 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   >
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                        <div>
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${badgeCor}`}>
-                            {nivelStr}
-                          </span>
-                          <h4 className="font-extrabold text-slate-900 text-sm mt-1">{op.nome}</h4>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {op.foto_url ? (
+                            <img 
+                              src={op.foto_url} 
+                              alt={op.nome} 
+                              className="w-10 h-10 rounded-xl object-cover border-2 border-blue-400 shrink-0 shadow-2xs" 
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-slate-800 text-blue-400 font-black text-sm flex items-center justify-center shrink-0 border border-slate-700">
+                              {op.nome ? op.nome.charAt(0).toUpperCase() : 'OP'}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${badgeCor}`}>
+                              {nivelStr}
+                            </span>
+                            <h4 className="font-extrabold text-slate-900 text-sm mt-0.5 truncate">{op.nome}</h4>
+                          </div>
                         </div>
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full shrink-0">
                           Ativo
                         </span>
                       </div>
@@ -1358,53 +1480,67 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       {abaAtiva === 'moradores' && (
         <div className="space-y-4">
           {/* Banner de Identificação do Condomínio e Estrutura */}
-          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-                  <Home className="w-3.5 h-3.5 text-emerald-400" />
-                  {eEstruturaCasasAtivo ? 'Condomínio de Casas (Horizontal)' : 'Condomínio Vertical'}
-                </span>
-                <span className="text-[10px] font-bold text-slate-300">
-                  {eEstruturaCasasAtivo ? '• Bloco FIXO como "Casa"' : `• ${configCondoAtivo?.qtd_blocos || 1} Bloco(s)`}
-                </span>
+          <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                    <Home className="w-3.5 h-3.5 text-emerald-400" />
+                    {eEstruturaCasasAtivo ? 'Condomínio de Casas (Horizontal)' : 'Condomínio Vertical'}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-300">
+                    {eEstruturaCasasAtivo ? '• Bloco FIXO como "Casa"' : `• ${configCondoAtivo?.qtd_blocos || 1} Bloco(s)`}
+                  </span>
+                </div>
+                <h4 className="text-base sm:text-lg font-black text-white mt-1">
+                  {getNomeCondominioPorId(condoAtivoId)}
+                </h4>
+                <p className="text-xs text-slate-300">
+                  {eEstruturaCasasAtivo
+                    ? `Gestão direta por Casas: ${contadoresUnidades.total} cards de casas prontos para cadastro e edição dos moradores.`
+                    : `Gestão de unidades e moradores vinculados ao posto.`}
+                </p>
               </div>
-              <h4 className="text-base sm:text-lg font-black text-white mt-1">
-                {getNomeCondominioPorId(condoAtivoId)}
-              </h4>
-              <p className="text-xs text-slate-300">
-                {eEstruturaCasasAtivo
-                  ? `Gestão direta por Casas: ${contadoresUnidades.total} cards de casas prontos para cadastro e edição dos moradores.`
-                  : `Gestão de unidades e moradores vinculados ao posto.`}
-              </p>
             </div>
 
-            {/* Contadores em Tempo Real */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
-              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
-                <p className="text-[10px] font-bold uppercase text-slate-400">Total Unidades</p>
+            {/* Contadores em Tempo Real com Preparação para Controle de Acesso */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 w-full pt-2 border-t border-slate-700/60">
+              <div className="bg-slate-800/90 border border-slate-700/80 p-2.5 rounded-xl text-center">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Total Casas</p>
                 <p className="text-base font-black text-emerald-400">{contadoresUnidades.total}</p>
               </div>
-              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+              <div className="bg-slate-800/90 border border-slate-700/80 p-2.5 rounded-xl text-center">
                 <p className="text-[10px] font-bold uppercase text-emerald-400">Ocupadas</p>
                 <p className="text-base font-black text-white">{contadoresUnidades.ocupadas}</p>
               </div>
-              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+              <div className="bg-slate-800/90 border border-slate-700/80 p-2.5 rounded-xl text-center">
                 <p className="text-[10px] font-bold uppercase text-slate-400">Disponíveis</p>
                 <p className="text-base font-black text-slate-300">{contadoresUnidades.vagas}</p>
               </div>
-              <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-xl text-center min-w-[85px]">
+              <div className="bg-slate-800/90 border border-slate-700/80 p-2.5 rounded-xl text-center">
                 <p className="text-[10px] font-bold uppercase text-purple-400">Moradores</p>
                 <p className="text-base font-black text-white">{contadoresUnidades.totalMoradores}</p>
+              </div>
+              <div className="bg-slate-800/90 border border-slate-700/80 p-2.5 rounded-xl text-center">
+                <p className="text-[10px] font-bold uppercase text-indigo-400 flex items-center justify-center gap-1">
+                  <CreditCard className="w-3 h-3 text-indigo-400" /> Tags RFID
+                </p>
+                <p className="text-base font-black text-indigo-300">{contadoresUnidades.totalTags || 0}</p>
+              </div>
+              <div className="bg-slate-800/90 border border-slate-700/80 p-2.5 rounded-xl text-center">
+                <p className="text-[10px] font-bold uppercase text-amber-400 flex items-center justify-center gap-1">
+                  <Car className="w-3 h-3 text-amber-400" /> Veículos
+                </p>
+                <p className="text-base font-black text-amber-300">{contadoresUnidades.totalVeiculos || 0}</p>
               </div>
             </div>
           </div>
 
           {/* Barra de Controle: Alternador de Visualização, Filtros e Busca */}
           <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
-            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3">
               {/* Alternador de Modo de Visualização */}
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl shrink-0">
                 <button
                   type="button"
                   onClick={() => setModoVisaoMoradores('cards_unidades')}
@@ -1415,7 +1551,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   }`}
                 >
                   <LayoutGrid className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Cards de Unidades ({contadoresUnidades.total})</span>
+                  <span>Cards das Casas ({contadoresUnidades.total})</span>
                 </button>
                 <button
                   type="button"
@@ -1427,7 +1563,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   }`}
                 >
                   <List className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Lista de Moradores ({moradores.length})</span>
+                  <span>Dossiê / Lista de Moradores ({moradores.length})</span>
                 </button>
               </div>
 
@@ -1481,56 +1617,112 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
               </div>
             </div>
 
-            {/* Linha de Busca e Filtros de Status */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-1 border-t border-slate-100">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            {/* Linha de Busca, Navegador de Faixas de Casas e Filtros */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-2 border-t border-slate-100 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-sm">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={termoBuscaMorador}
                   onChange={(e) => setTermoBuscaMorador(e.target.value)}
-                  placeholder={eEstruturaCasasAtivo ? "Buscar casa (ex: 15, 117), nome ou telefone..." : "Buscar unidade, bloco, nome ou telefone..."}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
+                  placeholder={eEstruturaCasasAtivo ? "Buscar casa (ex: 15), morador, telefone, placa..." : "Buscar unidade, morador, telefone..."}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-purple-500 font-medium"
                 />
               </div>
 
-              {/* Filtro por Status da Unidade */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-                <button
-                  type="button"
-                  onClick={() => setFiltroStatusUnidade('todas')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
-                    filtroStatusUnidade === 'todas'
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+              {/* Navegação Rápida por Faixa de Casas (Ex: 01-30, 31-60, 61-90, 91-117) */}
+              {modoVisaoMoradores === 'cards_unidades' && contadoresUnidades.total > 30 && (
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 px-1 uppercase">Casas:</span>
+                  {[
+                    { id: 'todas', label: 'Todas' },
+                    { id: '1_30', label: '01 - 30' },
+                    { id: '31_60', label: '31 - 60' },
+                    { id: '61_90', label: '61 - 90' },
+                    { id: '91_120', label: `91 - ${contadoresUnidades.total}` }
+                  ].map((fx) => (
+                    <button
+                      key={fx.id}
+                      type="button"
+                      onClick={() => setFaixaCasasFiltro(fx.id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+                        faixaCasasFiltro === fx.id
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      {fx.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Filtros de Ocupação e Acesso */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 flex-wrap">
+                {/* Status da Casa */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroStatusUnidade('todas')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+                      filtroStatusUnidade === 'todas'
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Todas ({contadoresUnidades.total})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroStatusUnidade('ocupadas')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                      filtroStatusUnidade === 'ocupadas'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-emerald-800 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    Ocupadas ({contadoresUnidades.ocupadas})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroStatusUnidade('vagas')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                      filtroStatusUnidade === 'vagas'
+                        ? 'bg-slate-700 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    Disponíveis ({contadoresUnidades.vagas})
+                  </button>
+                </div>
+
+                {/* Filtro de Status de Acesso */}
+                <select
+                  value={filtroStatusAcesso}
+                  onChange={(e) => setFiltroStatusAcesso(e.target.value)}
+                  className="bg-slate-50 text-slate-800 text-xs font-bold p-1.5 rounded-xl border border-slate-200 focus:outline-none"
                 >
-                  Todas ({contadoresUnidades.total})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroStatusUnidade('ocupadas')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                    filtroStatusUnidade === 'ocupadas'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                  }`}
+                  <option value="todos">🛡️ Todos os Acessos</option>
+                  <option value="liberado">🟢 Apenas Liberados</option>
+                  <option value="bloqueado">🔴 Apenas Bloqueados</option>
+                  <option value="aviso">🟡 Apenas com Alerta</option>
+                </select>
+
+                {/* Filtro de Tipo */}
+                <select
+                  value={filtroTipoMorador}
+                  onChange={(e) => setFiltroTipoMorador(e.target.value)}
+                  className="bg-slate-50 text-slate-800 text-xs font-bold p-1.5 rounded-xl border border-slate-200 focus:outline-none"
                 >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  Ocupadas ({contadoresUnidades.ocupadas})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroStatusUnidade('vagas')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                    filtroStatusUnidade === 'vagas'
-                      ? 'bg-slate-700 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                  Disponíveis ({contadoresUnidades.vagas})
-                </button>
+                  <option value="todos">👥 Todos os Tipos</option>
+                  <option value="Morador">Morador</option>
+                  <option value="Proprietário">Proprietário</option>
+                  <option value="Inquilino">Inquilino</option>
+                  <option value="Familiar">Familiar / Dependente</option>
+                  <option value="Prestador Fixo">Prestador Fixo</option>
+                </select>
               </div>
             </div>
           </div>
@@ -1548,6 +1740,15 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     {unidadesComMoradores.filter(item => {
                       if (filtroStatusUnidade === 'ocupadas' && !item.ocupada) return false;
                       if (filtroStatusUnidade === 'vagas' && item.ocupada) return false;
+                      if (faixaCasasFiltro !== 'todas') {
+                        const num = parseInt(item.unidade.numero.replace(/\D/g, ''), 10);
+                        if (!isNaN(num)) {
+                          if (faixaCasasFiltro === '1_30' && (num < 1 || num > 30)) return false;
+                          if (faixaCasasFiltro === '31_60' && (num < 31 || num > 60)) return false;
+                          if (faixaCasasFiltro === '61_90' && (num < 61 || num > 90)) return false;
+                          if (faixaCasasFiltro === '91_120' && num < 91) return false;
+                        }
+                      }
                       if (termoBuscaMorador.trim()) {
                         const t = termoBuscaMorador.trim().toLowerCase();
                         const num = item.unidade.numero.toLowerCase();
@@ -1571,12 +1772,29 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 )}
               </div>
 
-              {/* Grid Responsivo de Cards de Casas */}
+              {/* Grid Responsivo de Cards de Casas com Status de Acesso */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {unidadesComMoradores
                   .filter(item => {
                     if (filtroStatusUnidade === 'ocupadas' && !item.ocupada) return false;
                     if (filtroStatusUnidade === 'vagas' && item.ocupada) return false;
+                    if (faixaCasasFiltro !== 'todas') {
+                      const num = parseInt(item.unidade.numero.replace(/\D/g, ''), 10);
+                      if (!isNaN(num)) {
+                        if (faixaCasasFiltro === '1_30' && (num < 1 || num > 30)) return false;
+                        if (faixaCasasFiltro === '31_60' && (num < 31 || num > 60)) return false;
+                        if (faixaCasasFiltro === '61_90' && (num < 61 || num > 90)) return false;
+                        if (faixaCasasFiltro === '91_120' && num < 91) return false;
+                      }
+                    }
+                    if (filtroStatusAcesso !== 'todos') {
+                      const temAcesso = item.moradores.some(m => (m.status_acesso || 'liberado') === filtroStatusAcesso);
+                      if (!temAcesso) return false;
+                    }
+                    if (filtroTipoMorador !== 'todos') {
+                      const temTipo = item.moradores.some(m => (m.tipo || 'Morador') === filtroTipoMorador);
+                      if (!temTipo) return false;
+                    }
                     if (termoBuscaMorador.trim()) {
                       const t = termoBuscaMorador.trim().toLowerCase();
                       const num = item.unidade.numero.toLowerCase();
@@ -1584,58 +1802,158 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                       const matchNum = num === t || num.includes(t) || lbl.includes(t);
                       const matchMorador = item.moradores.some(m => 
                         (m.nome || '').toLowerCase().includes(t) || 
-                        (m.telefone || '').includes(t)
+                        (m.telefone || '').includes(t) ||
+                        (m.tag_rfid || '').toLowerCase().includes(t) ||
+                        (m.veiculo_placa || '').toLowerCase().includes(t)
                       );
                       return matchNum || matchMorador;
                     }
                     return true;
                   })
                   .map((item) => {
+                    const temBloqueado = item.moradores.some(m => m.status_acesso === 'bloqueado');
+                    const tagsQtd = item.moradores.filter(m => m.tag_rfid).length;
+                    const veiculosQtd = item.moradores.filter(m => m.veiculo_placa).length;
+
                     return (
                       <div
                         key={item.unidade.id}
                         onClick={() => setUnidadeModalAberta(item)}
                         className={`rounded-2xl border p-3.5 shadow-2xs hover:shadow-md transition flex flex-col justify-between gap-3 cursor-pointer group select-none ${
-                          item.ocupada 
+                          temBloqueado
+                            ? 'bg-rose-50/50 hover:bg-rose-50 border-rose-300'
+                            : item.ocupada 
                             ? 'bg-white hover:bg-emerald-50/40 border-slate-200 hover:border-emerald-400' 
-                            : 'bg-slate-50/70 hover:bg-slate-100 border-dashed border-slate-300 hover:border-slate-400'
+                            : 'bg-slate-50/80 hover:bg-emerald-50/30 border-dashed border-slate-300 hover:border-emerald-400'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition ${
-                              item.ocupada ? 'bg-amber-100 text-amber-900 border border-amber-300 group-hover:scale-105' : 'bg-slate-200 text-slate-500'
-                            }`}>
-                              <Home className="w-4 h-4 text-amber-800" />
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition ${
+                                temBloqueado
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  : item.ocupada 
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300 group-hover:scale-105' 
+                                  : 'bg-emerald-100/60 text-emerald-800 border border-emerald-300'
+                              }`}>
+                                <Home className={`w-4 h-4 ${item.ocupada ? 'text-amber-800' : 'text-emerald-700'}`} />
+                              </div>
+
+                              <div className="min-w-0">
+                                <span className="text-xs sm:text-sm font-black text-slate-900 block truncate group-hover:text-emerald-950">
+                                  {eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}
+                                </span>
+                                <span className="text-[10px] text-slate-500 block truncate font-medium">
+                                  {item.ocupada ? `${item.moradores.length} ${item.moradores.length > 1 ? 'moradores cadastrados' : 'morador'}` : 'Casa disponível'}
+                                </span>
+                              </div>
                             </div>
 
-                            <div className="min-w-0">
-                              <span className="text-xs sm:text-sm font-black text-slate-900 block truncate group-hover:text-emerald-950">
-                                {eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}
-                              </span>
-                              <span className="text-[10px] text-slate-500 block truncate">
-                                {item.ocupada ? `${item.moradores.length} ${item.moradores.length > 1 ? 'moradores cadastrados' : 'morador cadastrado'}` : 'Casa disponível'}
-                              </span>
+                            <div className="shrink-0 flex items-center gap-1">
+                              {temBloqueado && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-rose-600 text-white flex items-center gap-0.5" title="Morador com acesso bloqueado">
+                                  <ShieldAlert className="w-3 h-3" /> Bloqueio
+                                </span>
+                              )}
+                              {item.ocupada ? (
+                                <span className="text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  {item.moradores.length} {item.moradores.length > 1 ? 'Habitantes' : 'Habitante'}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-600 border border-slate-300">
+                                  Vaga
+                                </span>
+                              )}
                             </div>
                           </div>
 
-                          <div className="shrink-0">
-                            {item.ocupada ? (
-                              <span className="text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                {item.moradores.length} {item.moradores.length > 1 ? 'Moradores' : 'Morador'}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-600 border border-slate-300">
-                                Disponível
-                              </span>
-                            )}
-                          </div>
+                          {/* Credenciais e Indicadores de Controle de Acesso */}
+                          {item.ocupada && (
+                            <div className="space-y-1.5 pt-1">
+                              <div className="flex flex-wrap gap-1">
+                                {tagsQtd > 0 && (
+                                  <span className="text-[9px] font-extrabold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
+                                    <CreditCard className="w-2.5 h-2.5 text-indigo-600" /> {tagsQtd} {tagsQtd > 1 ? 'Tags' : 'Tag'}
+                                  </span>
+                                )}
+                                {veiculosQtd > 0 && (
+                                  <span className="text-[9px] font-extrabold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                    <Car className="w-2.5 h-2.5 text-amber-700" /> {veiculosQtd} {veiculosQtd > 1 ? 'Veículos' : 'Veículo'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {item.moradores.map((m: any) => {
+                                  const telClean = (m.telefone || '').replace(/\D/g, '');
+                                  return (
+                                    <span 
+                                      key={m.id} 
+                                      className="inline-flex items-center gap-1.5 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2 py-0.5 rounded-full font-semibold truncate max-w-[150px] border border-slate-200"
+                                      title={`${m.nome} (${m.tipo || 'Morador'})`}
+                                    >
+                                      {m.foto_url ? (
+                                        <img src={m.foto_url} alt={m.nome} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                                      ) : (
+                                        <span className="w-3.5 h-3.5 rounded-full bg-purple-200 text-purple-800 text-[8px] flex items-center justify-center font-black shrink-0">
+                                          {m.nome ? m.nome.charAt(0).toUpperCase() : 'M'}
+                                        </span>
+                                      )}
+                                      <span className="truncate">{m.nome.split(' ')[0]}</span>
+                                      {telClean && (
+                                        <a
+                                          href={`https://wa.me/55${telClean}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="text-emerald-600 hover:text-emerald-700 p-0.5"
+                                          title={`Conversar no WhatsApp (${m.telefone})`}
+                                        >
+                                          <MessageCircle className="w-2.5 h-2.5" />
+                                        </a>
+                                      )}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 group-hover:text-emerald-700 transition font-bold">
-                          <span>Ver / Gerenciar Moradores</span>
-                          <span className="text-xs group-hover:translate-x-0.5 transition-transform">→</span>
+                        {/* Rodapé do Card com Ação Direta 1-Clique */}
+                        <div className="pt-2 border-t border-slate-100">
+                          {!item.ocupada ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                abrirNovoMorador({ numero: item.unidade.numero, bloco: item.unidade.bloco });
+                              }}
+                              className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>+ Cadastrar Morador</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center justify-between gap-1 w-full text-xs">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  abrirNovoMorador({ numero: item.unidade.numero, bloco: item.unidade.bloco });
+                                }}
+                                className="py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold border border-emerald-200 transition flex items-center gap-1 cursor-pointer"
+                                title="Adicionar outro morador a esta casa"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>+ Morador</span>
+                              </button>
+                              <span className="text-[11px] text-slate-500 group-hover:text-emerald-700 font-bold flex items-center gap-0.5 transition">
+                                Ver Dossiê →
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1652,57 +1970,138 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {moradores
                   .filter(m => {
+                    if (filtroTipoMorador !== 'todos' && (m.tipo || 'Morador') !== filtroTipoMorador) return false;
+                    if (filtroStatusAcesso !== 'todos' && (m.status_acesso || 'liberado') !== filtroStatusAcesso) return false;
                     if (!termoBuscaMorador.trim()) return true;
                     const termo = termoBuscaMorador.toLowerCase();
                     const nm = (m.nome || '').toLowerCase();
                     const und = (m.unidade || '').toString().toLowerCase();
                     const blc = (m.bloco || '').toLowerCase();
-                    return nm.includes(termo) || und.includes(termo) || blc.includes(termo);
+                    const tel = (m.telefone || '').toLowerCase();
+                    const tag = (m.tag_rfid || '').toLowerCase();
+                    const plk = (m.veiculo_placa || '').toLowerCase();
+                    const cpf = (m.cpf || '').toLowerCase();
+                    return nm.includes(termo) || und.includes(termo) || blc.includes(termo) || tel.includes(termo) || tag.includes(termo) || plk.includes(termo) || cpf.includes(termo);
                   })
                   .map((m) => {
                     const telLimpo = (m.telefone || '').replace(/\D/g, '');
+                    const statusAcesso = m.status_acesso || 'liberado';
 
                     return (
                       <div 
                         key={m.id}
-                        className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-purple-300 transition space-y-3 flex flex-col justify-between"
+                        className={`bg-white rounded-2xl border p-4 shadow-sm hover:shadow-md transition space-y-3 flex flex-col justify-between ${
+                          statusAcesso === 'bloqueado' 
+                            ? 'border-rose-300 bg-rose-50/20' 
+                            : statusAcesso === 'aviso'
+                            ? 'border-amber-300 bg-amber-50/20'
+                            : 'border-slate-200 hover:border-purple-300'
+                        }`}
                       >
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                            <div>
-                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-950 border border-emerald-200">
-                                {eEstruturaCasasAtivo ? `Casa ${m.unidade}` : `${m.bloco ? `${m.bloco} - ` : ''}Ap. ${m.unidade}`}
-                              </span>
-                              <h4 className="font-extrabold text-slate-900 text-sm mt-1">{m.nome}</h4>
+                        <div className="space-y-2.5">
+                          {/* Topo do Morador com Avatar, Nome e Badges */}
+                          <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {m.foto_url ? (
+                                <img 
+                                  src={m.foto_url} 
+                                  alt={m.nome} 
+                                  className="w-11 h-11 rounded-2xl object-cover shrink-0 border-2 border-purple-400 shadow-2xs" 
+                                />
+                              ) : (
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 border ${
+                                  statusAcesso === 'bloqueado'
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                    : statusAcesso === 'aviso'
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : 'bg-purple-100 text-purple-800 border-purple-200'
+                                }`}>
+                                  {m.nome ? m.nome.slice(0, 2).toUpperCase() : 'MO'}
+                                </div>
+                              )}
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-950 border border-emerald-200">
+                                    {eEstruturaCasasAtivo ? `Casa ${m.unidade}` : `${m.bloco ? `${m.bloco} - ` : ''}Ap. ${m.unidade}`}
+                                  </span>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                    {m.tipo || 'Morador'}
+                                  </span>
+                                </div>
+                                <h4 className="font-black text-slate-900 text-sm mt-0.5 truncate">{m.nome}</h4>
+                              </div>
                             </div>
-                            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
-                              Morador
-                            </span>
+
+                            {/* Badge de Status de Acesso */}
+                            <div className="shrink-0">
+                              {statusAcesso === 'bloqueado' ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shadow-2xs">
+                                  <ShieldAlert className="w-3 h-3 text-rose-600" /> Bloqueado
+                                </span>
+                              ) : statusAcesso === 'aviso' ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                  <AlertTriangle className="w-3 h-3 text-amber-600" /> Alerta
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                  <ShieldCheck className="w-3 h-3 text-emerald-600" /> Liberado
+                                </span>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="space-y-1 text-xs text-slate-600">
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="w-3 h-3 text-slate-400" />
-                              <span>{m.telefone || 'Telefone não informado'}</span>
+                          {/* Credenciais de Controle de Acesso e Contatos */}
+                          <div className="space-y-1.5 text-xs text-slate-600">
+                            {/* Telefone e Documento */}
+                            <div className="flex items-center justify-between gap-1 text-[11px]">
+                              <span className="flex items-center gap-1 truncate text-slate-700 font-semibold">
+                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                {m.telefone || 'Sem telefone'}
+                              </span>
+                              {m.cpf && (
+                                <span className="text-slate-400 font-mono text-[10px] shrink-0">
+                                  CPF: {m.cpf}
+                                </span>
+                              )}
                             </div>
-                            {eAdmin && (
-                              <div className="text-[11px] text-slate-400">
-                                🏢 {getNomeCondominioPorId(m.condominio_id)}
-                              </div>
-                            )}
+
+                            {/* Tags RFID e Veículos Cadastrados */}
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {m.tag_rfid ? (
+                                <span className="text-[10px] font-bold bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded-lg border border-indigo-200 flex items-center gap-1">
+                                  <CreditCard className="w-3 h-3 text-indigo-600" /> Tag: {m.tag_rfid}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] text-slate-400 italic">Sem tag RFID</span>
+                              )}
+
+                              {m.veiculo_placa && (
+                                <span className="text-[10px] font-bold bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1">
+                                  <Car className="w-3 h-3 text-amber-700" /> {m.veiculo_placa} {m.veiculo_modelo ? `(${m.veiculo_modelo})` : ''}
+                                </span>
+                              )}
+
+                              {m.codigo_acesso && (
+                                <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                                  <Key className="w-3 h-3 text-slate-500" /> Senha ativa
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                        {/* Ações Rápidas do Morador */}
+                        <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
                           {telLimpo ? (
                             <a
                               href={`https://wa.me/55${telLimpo}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1 transition"
+                              className="px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1 transition cursor-pointer"
                               title="Conversar no WhatsApp"
                             >
-                              <MessageCircle className="w-3 h-3 text-emerald-600" />
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                               <span>WhatsApp</span>
                             </a>
                           ) : (
@@ -1712,8 +2111,16 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
+                              onClick={() => setMoradorDetalheModal(m)}
+                              className="p-1.5 text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition cursor-pointer"
+                              title="Visualizar Dossiê Completo"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => prepararEdicaoMorador(m)}
-                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
+                              className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center gap-1 transition shadow-2xs cursor-pointer active:scale-95"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                               <span>Editar</span>
@@ -1722,9 +2129,9 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                               type="button"
                               onClick={() => excluirMorador(m)}
                               className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
-                              title="Excluir"
+                              title="Excluir Morador"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1766,7 +2173,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       {/* ========================================================================= */}
       {modalFlutuanteAberto && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-8 relative">
+          <div className={`bg-white rounded-3xl ${tipoModalFlutuante === 'morador' ? 'max-w-2xl' : 'max-w-lg'} w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-8 relative`}>
             {/* Header do Menu Flutuante */}
             <div className="flex items-center justify-between border-b pb-3 border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -2117,6 +2524,35 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   </div>
                 )}
 
+                {/* Foto do Operador */}
+                <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="relative group shrink-0">
+                    {fotoOperador ? (
+                      <img src={fotoOperador} alt="Foto Operador" className="w-14 h-14 rounded-xl object-cover border-2 border-blue-500 shadow-xs" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-xl bg-slate-800 text-blue-400 font-black text-lg flex items-center justify-center border border-slate-700">
+                        {nomeOperador ? nomeOperador.charAt(0).toUpperCase() : 'OP'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <span className="text-[11px] font-bold text-slate-800 uppercase block">Foto de Perfil</span>
+                    <p className="text-[10px] text-slate-500">Foto do crachá e perfil do operador</p>
+                    <div className="flex items-center gap-2">
+                      <label className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition">
+                        <Camera className="w-3.5 h-3.5 text-blue-400" />
+                        <span>{fotoOperador ? 'Trocar Foto' : 'Tirar / Carregar Foto'}</span>
+                        <input type="file" accept="image/*" capture="user" onChange={handleFotoOperadorUpload} className="hidden" />
+                      </label>
+                      {fotoOperador && (
+                        <button type="button" onClick={() => setFotoOperador('')} className="p-1 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                     Nome Completo do Operador *
@@ -2202,157 +2638,395 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
               </form>
             )}
 
-            {/* FORMULÁRIO 3: MORADOR */}
+            {/* FORMULÁRIO 3: MORADOR (COMPLETO COM CONTROLE DE ACESSO, VEÍCULOS E VÍNCULO) */}
             {tipoModalFlutuante === 'morador' && (
               <form onSubmit={salvarMorador} className="space-y-3.5">
-                {eAdmin && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Condomínio *
-                    </label>
-                    <select
-                      value={condominioIdMorador}
-                      onChange={(e) => {
-                        const novoId = e.target.value;
-                        setCondominioIdMorador(novoId);
-                        const cfgNovo = mapaConfigsCondos[novoId];
-                        if (isEstruturaCasas(cfgNovo?.tipo_estrutura)) {
-                          setBlocoMorador('Casa');
-                        }
-                      }}
-                      required
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
-                    >
-                      <option value="">Selecione o Condomínio...</option>
-                      {condominios.map((c) => (
-                        <option key={c.id} value={c.id}>🏢 {c.nome}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                    Nome Completo do Morador *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={nomeMorador}
-                    onChange={(e) => setNomeMorador(e.target.value)}
-                    placeholder="Ex: Carlos Eduardo da Silva"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
-                  />
+                {/* Abas Internas do Formulário do Morador */}
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setAbaModalMorador('dados')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+                      abaModalMorador === 'dados' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>👤 Dados Gerais</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAbaModalMorador('acesso')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+                      abaModalMorador === 'acesso' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>🛡️ Acesso & Veículos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAbaModalMorador('contato')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+                      abaModalMorador === 'contato' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>📝 Observações</span>
+                  </button>
                 </div>
 
-                {/* Estrutura: Se for Condomínio de Casas, Bloco vira "Casa" fixo sem operador selecionar ou digitar */}
-                {(() => {
-                  const targetCondo = eAdmin ? (condominioIdMorador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
-                  const cfgTarget = mapaConfigsCondos[targetCondo];
-                  const eCasasModal = isEstruturaCasas(cfgTarget?.tipo_estrutura);
-                  const eTorresModal = isEstruturaTorres(cfgTarget?.tipo_estrutura);
-                  const eNumeralModal = isEstruturaNumeralDireto(cfgTarget?.tipo_estrutura);
-                  const listaBlocosSugestao = obterListaBlocosOuTorres(cfgTarget, moradores);
-                  const rotuloBlocoModal = eTorresModal ? 'Torre' : 'Bloco';
-                  const rotuloUnidadeModal = eCasasModal 
-                    ? 'Número da Casa *' 
-                    : eNumeralModal 
-                    ? 'Número da Unidade / Lote *' 
-                    : 'Apartamento / Unidade *';
-
-                  return (
-                    <div className={eNumeralModal ? 'space-y-2' : 'grid grid-cols-2 gap-2.5'}>
-                      {eCasasModal ? (
-                        <div>
-                          <label className="block text-[11px] font-bold text-emerald-900 uppercase mb-1 flex items-center gap-1">
-                            <Home className="w-3.5 h-3.5 text-emerald-600" /> Bloco / Tipo
+                {/* ABA 1: DADOS GERAIS */}
+                {abaModalMorador === 'dados' && (
+                  <div className="space-y-3">
+                    {/* Foto do Morador */}
+                    <div className="flex items-center gap-3.5 bg-purple-50/70 p-3 rounded-xl border border-purple-200">
+                      <div className="relative group shrink-0">
+                        {fotoMorador ? (
+                          <img src={fotoMorador} alt="Foto Morador" className="w-14 h-14 rounded-xl object-cover border-2 border-purple-500 shadow-xs" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl bg-purple-100 text-purple-800 font-black text-lg flex items-center justify-center border border-purple-300">
+                            {nomeMorador ? nomeMorador.charAt(0).toUpperCase() : 'MO'}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <span className="text-[11px] font-bold text-slate-800 uppercase block">Foto de Perfil do Morador</span>
+                        <p className="text-[10px] text-slate-500">Identificação facial e controle de acesso na portaria</p>
+                        <div className="flex items-center gap-2">
+                          <label className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition shadow-2xs">
+                            <Camera className="w-3.5 h-3.5 text-purple-200" />
+                            <span>{fotoMorador ? 'Trocar Foto' : 'Tirar / Carregar Foto'}</span>
+                            <input type="file" accept="image/*" capture="user" onChange={handleFotoMoradorUpload} className="hidden" />
                           </label>
-                          <div className="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-black text-emerald-950 flex items-center justify-between">
-                            <span>🏠 Casa (Fixo)</span>
-                            <span className="text-[9px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
-                              Automático
-                            </span>
-                          </div>
-                        </div>
-                      ) : eNumeralModal ? null : (
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                              {rotuloBlocoModal} *
-                            </label>
-                            {listaBlocosSugestao.length > 0 && (
-                              <span className="text-[10px] text-purple-700 font-bold">
-                                {listaBlocosSugestao.length} {eTorresModal ? 'torres' : 'blocos'} cadastrados
-                              </span>
-                            )}
-                          </div>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              list="lista-sugestoes-blocos"
-                              value={blocoMorador}
-                              onChange={(e) => setBlocoMorador(e.target.value)}
-                              placeholder={eTorresModal ? "Selecione ou digite a Torre..." : "Selecione ou digite o Bloco..."}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
-                            />
-                            <datalist id="lista-sugestoes-blocos">
-                              {listaBlocosSugestao.map((b) => (
-                                <option key={b} value={b} />
-                              ))}
-                            </datalist>
-                          </div>
-                          {listaBlocosSugestao.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto">
-                              {listaBlocosSugestao.map((b) => (
-                                <button
-                                  key={b}
-                                  type="button"
-                                  onClick={() => setBlocoMorador(b)}
-                                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
-                                    blocoMorador.toLowerCase() === b.toLowerCase()
-                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
-                                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-purple-50 hover:text-purple-700'
-                                  }`}
-                                >
-                                  {b}
-                                </button>
-                              ))}
-                            </div>
+                          {fotoMorador && (
+                            <button type="button" onClick={() => setFotoMorador('')} className="p-1 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
-                      )}
-
+                      </div>
+                    </div>
+                    {eAdmin && (
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                          {rotuloUnidadeModal}
+                          Condomínio *
+                        </label>
+                        <select
+                          value={condominioIdMorador}
+                          onChange={(e) => {
+                            const novoId = e.target.value;
+                            setCondominioIdMorador(novoId);
+                            const cfgNovo = mapaConfigsCondos[novoId];
+                            if (isEstruturaCasas(cfgNovo?.tipo_estrutura)) {
+                              setBlocoMorador('Casa');
+                            }
+                          }}
+                          required
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                        >
+                          <option value="">Selecione o Condomínio...</option>
+                          {condominios.map((c) => (
+                            <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Nome Completo do Morador *
                         </label>
                         <input
                           type="text"
                           required
-                          value={unidadeMorador}
-                          onChange={(e) => setUnidadeMorador(e.target.value)}
-                          placeholder={eCasasModal ? "Ex: 01 ou 117" : "Ex: 101"}
-                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                          value={nomeMorador}
+                          onChange={(e) => setNomeMorador(e.target.value)}
+                          placeholder="Ex: Carlos Eduardo da Silva"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Tipo de Vínculo *
+                        </label>
+                        <select
+                          value={tipoMorador}
+                          onChange={(e) => setTipoMorador(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                        >
+                          <option value="Morador">Morador</option>
+                          <option value="Proprietário">Proprietário</option>
+                          <option value="Inquilino">Inquilino</option>
+                          <option value="Familiar">Familiar / Dependente</option>
+                          <option value="Prestador Fixo">Prestador Fixo</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Estrutura: Se for Condomínio de Casas, Bloco vira "Casa" fixo sem operador selecionar ou digitar */}
+                    {(() => {
+                      const targetCondo = eAdmin ? (condominioIdMorador || condominioFiltroAdmin) : usuarioLogado?.condominio_id;
+                      const cfgTarget = mapaConfigsCondos[targetCondo];
+                      const eCasasModal = isEstruturaCasas(cfgTarget?.tipo_estrutura);
+                      const eTorresModal = isEstruturaTorres(cfgTarget?.tipo_estrutura);
+                      const eNumeralModal = isEstruturaNumeralDireto(cfgTarget?.tipo_estrutura);
+                      const listaBlocosSugestao = obterListaBlocosOuTorres(cfgTarget, moradores);
+                      const rotuloBlocoModal = eTorresModal ? 'Torre' : 'Bloco';
+                      const rotuloUnidadeModal = eCasasModal 
+                        ? 'Número da Casa *' 
+                        : eNumeralModal 
+                        ? 'Número da Unidade / Lote *' 
+                        : 'Apartamento / Unidade *';
+
+                      return (
+                        <div className={eNumeralModal ? 'space-y-2' : 'grid grid-cols-2 gap-2.5'}>
+                          {eCasasModal ? (
+                            <div>
+                              <label className="block text-[11px] font-bold text-emerald-900 uppercase mb-1 flex items-center gap-1">
+                                <Home className="w-3.5 h-3.5 text-emerald-600" /> Bloco / Tipo
+                              </label>
+                              <div className="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-black text-emerald-950 flex items-center justify-between">
+                                <span>🏠 Casa (Fixo)</span>
+                                <span className="text-[9px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
+                                  Automático
+                                </span>
+                              </div>
+                            </div>
+                          ) : eNumeralModal ? null : (
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                                  {rotuloBlocoModal} *
+                                </label>
+                                {listaBlocosSugestao.length > 0 && (
+                                  <span className="text-[10px] text-purple-700 font-bold">
+                                    {listaBlocosSugestao.length} {eTorresModal ? 'torres' : 'blocos'} cadastrados
+                                  </span>
+                                )}
+                              </div>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  list="lista-sugestoes-blocos"
+                                  value={blocoMorador}
+                                  onChange={(e) => setBlocoMorador(e.target.value)}
+                                  placeholder={eTorresModal ? "Selecione ou digite a Torre..." : "Selecione ou digite o Bloco..."}
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                                />
+                                <datalist id="lista-sugestoes-blocos">
+                                  {listaBlocosSugestao.map((b) => (
+                                    <option key={b} value={b} />
+                                  ))}
+                                </datalist>
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                              {rotuloUnidadeModal}
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={unidadeMorador}
+                              onChange={(e) => setUnidadeMorador(e.target.value)}
+                              placeholder={eCasasModal ? "Ex: 01 ou 117" : "Ex: 101"}
+                              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Telefone / WhatsApp (com DDD)
+                        </label>
+                        <input
+                          type="text"
+                          value={telefoneMorador}
+                          onChange={(e) => setTelefoneMorador(e.target.value)}
+                          placeholder="(11) 99999-9999"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          CPF
+                        </label>
+                        <input
+                          type="text"
+                          value={cpfMorador}
+                          onChange={(e) => setCpfMorador(e.target.value)}
+                          placeholder="000.000.000-00"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
                         />
                       </div>
                     </div>
-                  );
-                })()}
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                    Telefone / WhatsApp
-                  </label>
-                  <input
-                    type="text"
-                    value={telefoneMorador}
-                    onChange={(e) => setTelefoneMorador(e.target.value)}
-                    placeholder="(11) 99999-9999"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
-                  />
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          RG
+                        </label>
+                        <input
+                          type="text"
+                          value={rgMorador}
+                          onChange={(e) => setRgMorador(e.target.value)}
+                          placeholder="00.000.000-0"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          E-mail
+                        </label>
+                        <input
+                          type="email"
+                          value={emailMorador}
+                          onChange={(e) => setEmailMorador(e.target.value)}
+                          placeholder="morador@email.com"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                <div className="flex items-center gap-2 pt-2">
+                {/* ABA 2: ACESSO & VEÍCULOS */}
+                {abaModalMorador === 'acesso' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="block text-[11px] font-bold text-slate-900 uppercase">
+                        Status de Acesso na Portaria
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStatusAcessoMorador('liberado')}
+                          className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                            statusAcessoMorador === 'liberado'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
+                          }`}
+                        >
+                          <span>🟢 Liberado</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusAcessoMorador('aviso')}
+                          className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                            statusAcessoMorador === 'aviso'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
+                          }`}
+                        >
+                          <span>🟡 Alerta</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusAcessoMorador('bloqueado')}
+                          className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                            statusAcessoMorador === 'bloqueado'
+                              ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-rose-50'
+                          }`}
+                        >
+                          <span>🔴 Bloqueado</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center gap-1">
+                          <CreditCard className="w-3.5 h-3.5 text-indigo-600" /> Tag RFID / Chaveiro
+                        </label>
+                        <input
+                          type="text"
+                          value={tagRfidMorador}
+                          onChange={(e) => setTagRfidMorador(e.target.value.toUpperCase())}
+                          placeholder="Ex: TAG-998822"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Código de Acesso / Senha
+                        </label>
+                        <input
+                          type="text"
+                          value={codigoAcessoMorador}
+                          onChange={(e) => setCodigoAcessoMorador(e.target.value)}
+                          placeholder="Ex: 4421"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="block text-[11px] font-bold text-slate-900 uppercase flex items-center gap-1">
+                        <Car className="w-3.5 h-3.5 text-amber-600" /> Veículo Principal
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Placa</label>
+                          <input
+                            type="text"
+                            value={veiculoPlacaMorador}
+                            onChange={(e) => setVeiculoPlacaMorador(e.target.value.toUpperCase())}
+                            placeholder="ABC-1234 ou BRA2E19"
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-black text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Modelo / Cor</label>
+                          <input
+                            type="text"
+                            value={veiculoModeloMorador}
+                            onChange={(e) => setVeiculoModeloMorador(e.target.value)}
+                            placeholder="Ex: Corolla Preto"
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Contato de Emergência (Nome e Telefone)
+                      </label>
+                      <input
+                        type="text"
+                        value={contatoEmergenciaMorador}
+                        onChange={(e) => setContatoEmergenciaMorador(e.target.value)}
+                        placeholder="Ex: Mãe Maria - (11) 98888-7777"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* ABA 3: OBSERVAÇÕES */}
+                {abaModalMorador === 'contato' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Observações da Portaria & Regras Específicas
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={observacoesMorador}
+                        onChange={(e) => setObservacoesMorador(e.target.value)}
+                        placeholder="Ex: Autorizado a receber encomendas em horário comercial. Não permitir entrega com terceiro sem ligação prévia..."
+                        className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={fecharModalFlutuante}
@@ -2363,7 +3037,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition shadow-md shadow-purple-600/30 cursor-pointer"
+                    className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-xl text-xs font-black transition shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-50"
                   >
                     {loading ? 'Salvando...' : idEdicao ? 'Atualizar Morador' : 'Salvar Morador'}
                   </button>
@@ -2618,16 +3292,24 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     return (
                       <div
                         key={m.id}
-                        className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200 flex items-center justify-between gap-2 transition"
+                        className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200 flex items-center justify-between gap-2.5 transition"
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-black text-slate-900 truncate flex items-center gap-1.5">
-                            <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span className="truncate">{m.nome}</span>
-                          </p>
-                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                            {m.telefone ? `📞 ${m.telefone}` : 'Telefone não informado'}
-                          </p>
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {m.foto_url ? (
+                            <img src={m.foto_url} alt={m.nome} className="w-10 h-10 rounded-xl object-cover shrink-0 border border-purple-300 shadow-2xs" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 font-black text-xs flex items-center justify-center shrink-0 border border-purple-200">
+                              {m.nome ? m.nome.slice(0, 2).toUpperCase() : 'MO'}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {m.nome}
+                            </p>
+                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                              {m.telefone ? `📞 ${m.telefone}` : 'Telefone não informado'} • <span className="font-semibold text-slate-700">{m.tipo || 'Morador'}</span>
+                            </p>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
