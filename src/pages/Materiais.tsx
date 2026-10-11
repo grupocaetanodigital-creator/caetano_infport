@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { verificarPermissao } from '../services/permissoesService';
 import { 
   Radio, 
   AlertTriangle, 
@@ -11,7 +12,8 @@ import {
   Pencil, 
   X, 
   Wrench,
-  Trash2
+  Trash2,
+  Lock
 } from 'lucide-react';
 
 interface MateriaisProps {
@@ -19,6 +21,14 @@ interface MateriaisProps {
 }
 
 export default function Materiais({ usuarioLogado }: MateriaisProps) {
+  // Nível numérico do usuário logado (0: Admin Geral, 1: Master, 2: Supervisor, 3: Portaria, 4: Síndico)
+  const nivelNum = Number(usuarioLogado?.nivel_acesso ?? usuarioLogado?.nivel ?? 3);
+
+  // Permissões granulares de acesso - REGRA ESTRITA: Nível 3 (Porteiro) e Nível 4 (Síndico consulta) NUNCA excluem equipamentos
+  const podeVisualizar = verificarPermissao(usuarioLogado, 'materiais', 'visualizar');
+  const podeCriar = (nivelNum < 3) && (verificarPermissao(usuarioLogado, 'materiais', 'criar') || verificarPermissao(usuarioLogado, 'materiais', 'cadastrar_equipamentos'));
+  const podeEditar = (nivelNum <= 3) && verificarPermissao(usuarioLogado, 'materiais', 'editar');
+  const podeExcluir = (nivelNum < 3) && verificarPermissao(usuarioLogado, 'materiais', 'excluir');
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
@@ -132,6 +142,14 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
 
   const salvarMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (idEdicao && !podeEditar) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu nível de acesso não permite editar equipamentos.' });
+      return;
+    }
+    if (!idEdicao && !podeCriar) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu nível de acesso não permite cadastrar novos equipamentos.' });
+      return;
+    }
     if (!nomeMaterial.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Informe o nome do equipamento.' });
       return;
@@ -188,10 +206,19 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
   };
 
   const excluirMaterial = (id: string, nome: string) => {
+    if (!podeExcluir) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu nível de acesso (Nível 3 ou inferior) não tem permissão para excluir equipamentos do posto.' });
+      return;
+    }
     setItemParaExcluir({ id, nome });
   };
 
   const confirmarExclusaoMaterial = async () => {
+    if (!podeExcluir) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Operação de exclusão negada para o seu perfil.' });
+      setItemParaExcluir(null);
+      return;
+    }
     if (!itemParaExcluir) return;
     const { id, nome } = itemParaExcluir;
     setItemParaExcluir(null);
@@ -244,12 +271,18 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
           </div>
         </div>
 
-        <button
-          onClick={() => { limparFormulario(); setModalAberto(true); }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" /> <span>Cadastrar Equipamento</span>
-        </button>
+        {podeCriar ? (
+          <button
+            onClick={() => { limparFormulario(); setModalAberto(true); }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" /> <span>Cadastrar Equipamento</span>
+          </button>
+        ) : (
+          <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+            <Lock className="w-3 h-3 text-amber-400" /> Cadastro Restrito (Nível {usuarioLogado?.nivel_acesso ?? 3})
+          </span>
+        )}
       </div>
 
       {totalAvariados > 0 && (
@@ -357,20 +390,24 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
               </span>
 
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => prepararEdicao(m)}
-                  className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition cursor-pointer"
-                  title="Editar Status / Informar Avaria"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => excluirMaterial(m.id, m.nome)}
-                  className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition cursor-pointer"
-                  title="Excluir / Baixar Equipamento"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {podeEditar && (
+                  <button
+                    onClick={() => prepararEdicao(m)}
+                    className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition cursor-pointer"
+                    title="Editar Status / Informar Avaria"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {podeExcluir && (
+                  <button
+                    onClick={() => excluirMaterial(m.id, m.nome)}
+                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition cursor-pointer"
+                    title="Excluir / Baixar Equipamento"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
