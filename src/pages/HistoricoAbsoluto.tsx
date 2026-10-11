@@ -45,24 +45,38 @@ interface HistoricoAbsolutoProps {
 }
 
 export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, listaCondominios = [] }: HistoricoAbsolutoProps) {
+  // PRIVACIDADE ESTRITA: Apenas o Super Administrador Geral da Plataforma (sem condomínio fixo vinculado) tem visão multi-condomínio
+  // Qualquer operador, síndico ou administrador vinculado a um condomínio específico FICA RIGIDAMENTE BLOQUEADO no seu condomínio
+  const eAdminGlobal = Boolean(
+    operadorLogado?.eSuperAdminGlobal ||
+    ((operadorLogado?.login === 'admin' || operadorLogado?.perfil === 'admin_geral') && 
+     (!operadorLogado?.condominio_id || operadorLogado?.condominio_id === 'global'))
+  );
+
+  // Administrador ou Síndico dentro do seu escopo
   const eAdmin = operadorLogado?.perfil === 'admin' || operadorLogado?.nivel_acesso === 0 || operadorLogado?.perfil === 'master' || operadorLogado?.nivel_acesso === 1;
+
+  // Condomínio obrigatório para operadores, porteiros, supervisores e síndicos
+  const idCondominioRestrito = operadorLogado?.condominio_id || condominioAtivo?.id || '';
 
   // Permissões granulares do módulo Histórico Absoluto
   const podeVisualizar = eAdmin || 
                          verificarPermissao(operadorLogado, 'historico_absoluto', 'visualizar') || 
                          verificarPermissao(operadorLogado, 'historico_absoluto', 'ver_feed');
 
-  const podeExcluirDados = eAdmin || 
+  const podeExcluirDados = (eAdminGlobal || eAdmin) && (
                            verificarPermissao(operadorLogado, 'historico_absoluto', 'limpar_dados') || 
-                           verificarPermissao(operadorLogado, 'historico_absoluto', 'excluir');
+                           verificarPermissao(operadorLogado, 'historico_absoluto', 'excluir'));
 
   const [abaAtiva, setAbaAtiva] = useState<'feed' | 'limpeza' | 'sql' | 'metricas'>('feed');
   const [registros, setRegistros] = useState<RegistroAuditoria[]>([]);
   const [loading, setLoading] = useState(false);
   const [fonteDados, setFonteDados] = useState<'supabase' | 'cache_local'>('supabase');
 
-  // Filtros do Feed
-  const [filtroCondominio, setFiltroCondominio] = useState<string>('todos');
+  // Filtros do Feed - se não for admin global, trava no condomínio do operador
+  const [filtroCondominio, setFiltroCondominio] = useState<string>(
+    eAdminGlobal ? 'todos' : idCondominioRestrito
+  );
   const [filtroModulo, setFiltroModulo] = useState('todos');
   const [filtroAcao, setFiltroAcao] = useState('todas');
   const [termoBusca, setTermoBusca] = useState('');
@@ -75,7 +89,9 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const trintaDiasAtras = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
   const [tabelaSelecionada, setTabelaSelecionada] = useState('encomendas_itens');
-  const [escopoCondominioLimpeza, setEscopoCondominioLimpeza] = useState<string>(condominioAtivo?.id || 'todos');
+  const [escopoCondominioLimpeza, setEscopoCondominioLimpeza] = useState<string>(
+    eAdminGlobal ? 'todos' : idCondominioRestrito
+  );
   const [detalhesPorTabelaLimpeza, setDetalhesPorTabelaLimpeza] = useState<{ id: string; nomeAmigavel: string; modulo: string; total: number; campoData: string }[]>([]);
   const [detalheRemocaoConsolidada, setDetalheRemocaoConsolidada] = useState<Record<string, number> | null>(null);
   const [erroConfirmacao, setErroConfirmacao] = useState<string | null>(null);
@@ -125,9 +141,11 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
   const carregarFeed = async () => {
     setLoading(true);
     try {
-      const condoIdBusca = filtroCondominio === 'todos' 
-        ? undefined 
-        : (filtroCondominio || condominioAtivo?.id || undefined);
+      // Blindagem estrita de privacidade multi-condomínio:
+      // Operador de guarita, supervisor ou síndico NUNCA acessa registros de outros condomínios
+      const condoIdBusca = !eAdminGlobal
+        ? (idCondominioRestrito || undefined)
+        : (filtroCondominio === 'todos' ? undefined : (filtroCondominio || undefined));
 
       const res = await buscarHistoricoAbsoluto({
         condominio_id: condoIdBusca,
@@ -456,18 +474,25 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                 <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
                   Condomínio
                 </label>
-                <select
-                  value={filtroCondominio}
-                  onChange={(e) => setFiltroCondominio(e.target.value)}
-                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-bold"
-                >
-                  <option value="todos">🌐 Todos os Condomínios (Visão Global)</option>
-                  {listaCondominios.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      🏢 {c.nome}
-                    </option>
-                  ))}
-                </select>
+                {eAdminGlobal ? (
+                  <select
+                    value={filtroCondominio}
+                    onChange={(e) => setFiltroCondominio(e.target.value)}
+                    className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 font-bold"
+                  >
+                    <option value="todos">🌐 Todos os Condomínios (Visão Global)</option>
+                    {listaCondominios.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🏢 {c.nome}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full bg-slate-950 text-emerald-400 text-xs p-2.5 rounded-xl border border-slate-800 font-bold flex items-center justify-between">
+                    <span className="truncate">🏢 {condominioAtivo?.nome || 'Condomínio Atual'}</span>
+                    <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">Privado</span>
+                  </div>
+                )}
               </div>
 
               {/* Módulo */}
@@ -705,22 +730,29 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
                   <Layers className="w-4 h-4 text-purple-400" />
                   1. Escopo de Condomínio para a Limpeza
                 </label>
-                <select
-                  value={escopoCondominioLimpeza}
-                  onChange={(e) => {
-                    setEscopoCondominioLimpeza(e.target.value);
-                    setContagemPeriodo(null);
-                    setResultadoLimpeza(null);
-                  }}
-                  className="w-full bg-slate-950 text-white font-bold text-sm p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
-                >
-                  <option value="todos">🌐 Todos os Condomínios (Base Geral do Sistema)</option>
-                  {listaCondominios.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      🏢 {c.nome} {c.id === condominioAtivo?.id ? ' (Condomínio Ativo)' : ''}
-                    </option>
-                  ))}
-                </select>
+                {eAdminGlobal ? (
+                  <select
+                    value={escopoCondominioLimpeza}
+                    onChange={(e) => {
+                      setEscopoCondominioLimpeza(e.target.value);
+                      setContagemPeriodo(null);
+                      setResultadoLimpeza(null);
+                    }}
+                    className="w-full bg-slate-950 text-white font-bold text-sm p-3.5 rounded-2xl border border-slate-700 focus:outline-none focus:border-rose-500"
+                  >
+                    <option value="todos">🌐 Todos os Condomínios (Base Geral do Sistema)</option>
+                    {listaCondominios.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🏢 {c.nome} {c.id === condominioAtivo?.id ? ' (Condomínio Ativo)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full bg-slate-950 text-emerald-400 font-bold text-sm p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+                    <span>🏢 {condominioAtivo?.nome || 'Condomínio Atual'}</span>
+                    <span className="text-xs text-slate-500 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">Escopo Restrito ao Posto</span>
+                  </div>
+                )}
                 <p className="text-[11px] text-slate-400 mt-1.5">
                   {escopoCondominioLimpeza === 'todos' 
                     ? 'Atenção: A consulta e a limpeza serão aplicadas em todos os condomínios cadastrados.' 
