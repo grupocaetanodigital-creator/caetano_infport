@@ -70,19 +70,33 @@ import {
   obterNomeNivel, 
   NivelAcessoItem 
 } from '../services/permissoesService';
+import { salvarCacheLocal, obterCacheLocal } from '../services/offlineStorageService';
 
 interface CadastrosProps {
   usuarioLogado?: any;
 }
 
 export default function Cadastros({ usuarioLogado }: CadastrosProps) {
-  const eAdmin = usuarioLogado?.perfil === 'admin' || usuarioLogado?.nivel_acesso === 0;
-  const eMaster = usuarioLogado?.perfil === 'master' || usuarioLogado?.nivel_acesso === 1;
-  const eSupervisor = usuarioLogado?.perfil === 'supervisor' || usuarioLogado?.nivel_acesso === 2;
-  const eOperador = usuarioLogado?.perfil === 'operador' || usuarioLogado?.nivel_acesso === 3;
+  const nivelNum = usuarioLogado?.nivel_acesso !== undefined && usuarioLogado?.nivel_acesso !== null 
+    ? Number(usuarioLogado.nivel_acesso) 
+    : 3;
+  const perfilStr = (usuarioLogado?.perfil || '').toLowerCase();
+  
+  const eAdmin = Boolean(
+    usuarioLogado?.eSuperAdminGlobal ||
+    perfilStr === 'admin' ||
+    perfilStr === 'master' ||
+    nivelNum === 0 ||
+    nivelNum === 1
+  );
+  const eMaster = perfilStr === 'master' || nivelNum === 1;
+  const eSupervisor = perfilStr === 'supervisor' || nivelNum === 2;
+  const eOperador = (perfilStr === 'operador' || nivelNum === 3) && !eAdmin && !eSupervisor;
 
-  const [condominioFiltroAdmin, setCondominioFiltroAdmin] = useState('');
-  const [abaAtiva, setAbaAtiva] = useState(eAdmin ? 'condominios' : 'moradores');
+  const [condominioFiltroAdmin, setCondominioFiltroAdmin] = useState(usuarioLogado?.condominio_id || '');
+  const [abaAtiva, setAbaAtiva] = useState<'condominios' | 'operadores' | 'moradores' | 'niveis'>(
+    eAdmin ? 'condominios' : 'moradores'
+  );
 
   const [condominios, setCondominios] = useState<any[]>([]);
   const [mapaConfigsCondos, setMapaConfigsCondos] = useState<Record<string, CondominioConfig>>({});
@@ -176,11 +190,18 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [filtroTipoMorador, setFiltroTipoMorador] = useState<string>('todos');
   const [filtroStatusAcesso, setFiltroStatusAcesso] = useState<string>('todos');
 
-  // Identificação do condomínio ativo em foco
-  const condoAtivoId = eAdmin 
-    ? (condominioFiltroAdmin || (condominios[0]?.id || ''))
-    : (usuarioLogado?.condominio_id || '');
-  const configCondoAtivo = mapaConfigsCondos[condoAtivoId];
+  // Identificação do condomínio ativo em foco com fallback resiliente
+  const condoAtivoId = (eAdmin 
+    ? (condominioFiltroAdmin || (condominios[0]?.id || usuarioLogado?.condominio_id || ''))
+    : (usuarioLogado?.condominio_id || (condominios[0]?.id || ''))) || (condominios[0]?.id || '');
+
+  const configCondoAtivo = mapaConfigsCondos[condoAtivoId] || {
+    id: condoAtivoId,
+    nome: condominios.find(c => c.id === condoAtivoId)?.nome || 'Condomínio',
+    tipo_estrutura: 'casas',
+    unidades_por_bloco: 117,
+    zeros_esquerda: true
+  };
   const eEstruturaCasasAtivo = isEstruturaCasas(configCondoAtivo?.tipo_estrutura);
 
   // Estados para edição dos números das unidades/casas nos cards (ex: "Casa 1" -> "Casa 12A")
@@ -193,7 +214,14 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [textoListaUnidades, setTextoListaUnidades] = useState<string>('');
   const [modalAddUnidadeAvulsaAberto, setModalAddUnidadeAvulsaAberto] = useState<boolean>(false);
   const [novaUnidadeAvulsaNumero, setNovaUnidadeAvulsaNumero] = useState<string>('');
-  const [unidadeSelecionadaParaGerenciar, setUnidadeSelecionadaParaGerenciar] = useState<any | null>(null);
+  const [unidadeModalAberta, setUnidadeModalAberta] = useState<any | null>(null);
+  const [moradorParaExcluir, setMoradorParaExcluir] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (usuarioLogado?.condominio_id && !condominioFiltroAdmin) {
+      setCondominioFiltroAdmin(usuarioLogado.condominio_id);
+    }
+  }, [usuarioLogado?.condominio_id]);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -210,6 +238,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   }, [abaAtiva, condominioFiltroAdmin]);
 
   const limparFormularios = () => {
+    const targetCondo = condoAtivoId || (condominios[0]?.id || usuarioLogado?.condominio_id || '');
     setIdEdicao(null);
     setNomeCondominio('');
     setEnderecoCondominio('');
@@ -230,13 +259,13 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setSenhaOperador('');
     setFotoOperador('');
     setNivelAcesso('nivel_3');
-    setCondominioIdOperador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
+    setCondominioIdOperador(targetCondo);
     setNomeMorador('');
     setFotoMorador('');
     setBlocoMorador(eEstruturaCasasAtivo ? 'Casa' : '');
     setUnidadeMorador('');
     setTelefoneMorador('');
-    setCondominioIdMorador(eAdmin ? (condominioFiltroAdmin || '') : (usuarioLogado?.condominio_id || ''));
+    setCondominioIdMorador(targetCondo);
     setCpfMorador('');
     setRgMorador('');
     setEmailMorador('');
@@ -264,16 +293,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
   const abrirNovoOperador = () => {
     limparFormularios();
-    setCondominioIdOperador(condominioFiltroAdmin || usuarioLogado?.condominio_id || (condominios[0]?.id || ''));
+    const targetCondo = condoAtivoId || (condominios[0]?.id || usuarioLogado?.condominio_id || '');
+    setCondominioIdOperador(targetCondo);
     setTipoModalFlutuante('operador');
     setModalFlutuanteAberto(true);
   };
 
   const abrirNovoMorador = (unidadePredefinida?: { numero: string; bloco?: string }) => {
     limparFormularios();
-    const targetCondo = condoAtivoId;
+    const targetCondo = condoAtivoId || (condominios[0]?.id || usuarioLogado?.condominio_id || '');
     setCondominioIdMorador(targetCondo);
-    const cfg = mapaConfigsCondos[targetCondo];
+    const cfg = mapaConfigsCondos[targetCondo] || configCondoAtivo;
     const eCasas = isEstruturaCasas(cfg?.tipo_estrutura);
 
     if (eCasas) {
@@ -302,71 +332,82 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         if (condoData && condoData.length > 0) {
           listaCondos = condoData;
           setCondominios(condoData);
+          salvarCacheLocal('condominios', condoData, 'global');
           if (!condominioFiltroAdmin) {
             const initialId = usuarioLogado?.condominio_id || condoData[0].id;
             setCondominioFiltroAdmin(initialId);
           }
+        } else {
+          const cacheCondos = obterCacheLocal<any[]>('condominios', 'global', []);
+          if (cacheCondos && cacheCondos.length > 0) {
+            listaCondos = cacheCondos;
+            setCondominios(cacheCondos);
+          }
         }
       }
 
-      const activeCondoId = eAdmin
-        ? (condominioFiltroAdmin || listaCondos[0]?.id || '')
-        : (usuarioLogado?.condominio_id || listaCondos[0]?.id || '');
+      const activeCondoId = (eAdmin
+        ? (condominioFiltroAdmin || listaCondos[0]?.id || usuarioLogado?.condominio_id || '')
+        : (usuarioLogado?.condominio_id || listaCondos[0]?.id || '')) || (listaCondos[0]?.id || '');
+
+      // Carrega antecipadamente as configurações dos condomínios para que os cards das unidades sempre apareçam
+      const configs: Record<string, CondominioConfig> = { ...mapaConfigsCondos };
+      for (const c of listaCondos) {
+        if (!configs[c.id]) {
+          configs[c.id] = await carregarCondominioConfig(c.id);
+        }
+      }
+      if (activeCondoId && !configs[activeCondoId]) {
+        configs[activeCondoId] = await carregarCondominioConfig(activeCondoId);
+      }
+      setMapaConfigsCondos(configs);
 
       if (abaAtiva === 'condominios' && eAdmin) {
         const { data, error } = await supabase.from('condominios').select('*').order('nome');
-        if (error) throw error;
-        setCondominios(data || []);
-        listaCondos = data || [];
-
-        const configs: Record<string, CondominioConfig> = {};
-        for (const c of (data || [])) {
-          const cfg = await carregarCondominioConfig(c.id);
-          configs[c.id] = cfg;
+        if (!error && data) {
+          setCondominios(data);
+          listaCondos = data;
+          salvarCacheLocal('condominios', data, 'global');
         }
-        setMapaConfigsCondos(configs);
       } else if (abaAtiva === 'operadores' && !eOperador) {
         let query = supabase.from('operadores').select('*').order('nome');
-        if (eAdmin && activeCondoId) {
+        if (activeCondoId) {
           query = query.eq('condominio_id', activeCondoId);
-        } else if (!eAdmin && usuarioLogado?.condominio_id) {
-          query = query.eq('condominio_id', usuarioLogado.condominio_id);
         }
         const { data, error } = await query;
-        if (error) throw error;
-        setOperadores(data || []);
+        if (!error && data) {
+          setOperadores(data);
+        }
       } else if (abaAtiva === 'moradores') {
         let query = supabase.from('moradores').select('*').order('unidade');
-        const targetCondo = activeCondoId;
-        if (targetCondo) {
-          query = query.eq('condominio_id', targetCondo);
+        if (activeCondoId) {
+          query = query.eq('condominio_id', activeCondoId);
         }
 
         const { data, error } = await query;
-        if (error) throw error;
-        setMoradores(data || []);
-
-        const configs = { ...mapaConfigsCondos };
-        for (const c of listaCondos) {
-          configs[c.id] = await carregarCondominioConfig(c.id);
+        if (!error && data) {
+          setMoradores(data);
+          salvarCacheLocal('moradores', data, activeCondoId || 'global');
+        } else {
+          const cacheMoradores = obterCacheLocal<any[]>('moradores', activeCondoId || 'global', []);
+          if (cacheMoradores && cacheMoradores.length > 0) {
+            setMoradores(cacheMoradores);
+          }
         }
-        setMapaConfigsCondos(configs);
       } else if (abaAtiva === 'niveis' && !eOperador) {
         let query = supabase.from('operadores').select('*').order('nome');
-        if (eAdmin && activeCondoId) {
+        if (activeCondoId) {
           query = query.eq('condominio_id', activeCondoId);
-        } else if (!eAdmin && usuarioLogado?.condominio_id) {
-          query = query.eq('condominio_id', usuarioLogado.condominio_id);
         }
         const { data: opsData } = await query;
         if (opsData) setOperadores(opsData);
       }
 
       // Sempre atualiza os níveis em segundo plano
-      const niveisCarregados = await carregarNiveisAcesso(condoAtivoId);
+      const niveisCarregados = await carregarNiveisAcesso(activeCondoId || condoAtivoId);
       setListaNiveis(niveisCarregados);
     } catch (err: any) {
-      setMensagem({ tipo: 'erro', texto: `Erro ao carregar dados: ${err.message}` });
+      console.warn('[Cadastros] Aviso ao sincronizar dados:', err);
     } finally {
       setLoading(false);
     }
@@ -739,16 +780,19 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     setModalFlutuanteAberto(true);
   };
 
-  const excluirMorador = async (m: any) => {
-    const ident = m.bloco ? `${m.bloco} - Unidade ${m.unidade}` : `Unidade ${m.unidade}`;
-    if (!window.confirm(`Tem certeza que deseja remover o morador "${m.nome}" (${ident})?`)) {
-      return;
-    }
+  const excluirMorador = (m: any) => {
+    setMoradorParaExcluir(m);
+  };
+
+  const confirmarExcluirMorador = async () => {
+    if (!moradorParaExcluir) return;
+    const m = moradorParaExcluir;
     setLoading(true);
     try {
       const { error } = await supabase.from('moradores').delete().eq('id', m.id);
       if (error) throw error;
       setMensagem({ tipo: 'sucesso', texto: `Morador "${m.nome}" removido com sucesso!` });
+      setMoradorParaExcluir(null);
       await carregarDados();
       setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
     } catch (err: any) {
@@ -1114,6 +1158,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             }`}
           >
             <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-bold">Condomínios</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'condominios' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-300 text-slate-700'
             }`}>
@@ -1133,6 +1178,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
             }`}
           >
             <Users className="w-4 h-4 text-blue-400 shrink-0" />
+            <span className="font-bold">Operadores</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'operadores' ? 'bg-slate-800 text-blue-300' : 'bg-slate-300 text-slate-700'
             }`}>
@@ -2172,7 +2218,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
       {/* MENU FLUTUANTE / MODAL DE CADASTRO E EDIÇÃO DIRETAMENTE NO CARD           */}
       {/* ========================================================================= */}
       {modalFlutuanteAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
+        <div className="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
           <div className={`bg-white rounded-3xl ${tipoModalFlutuante === 'morador' ? 'max-w-2xl' : 'max-w-lg'} w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-8 relative`}>
             {/* Header do Menu Flutuante */}
             <div className="flex items-center justify-between border-b pb-3 border-slate-100">
@@ -3050,7 +3096,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
       {/* Modal de Personalização / Renumeração em Lote das Unidades */}
       {modalRenumeracaoAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -3071,7 +3117,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 onClick={() => setModalRenumeracaoAberto(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -3160,7 +3206,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
       {/* Modal de Adição de Casa / Unidade Avulsa */}
       {modalAddUnidadeAvulsaAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -3222,6 +3268,43 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition shadow-md shadow-emerald-600/20 cursor-pointer"
               >
                 {loading ? 'Adicionando...' : 'Adicionar Casa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação Segura para Exclusão de Morador */}
+      {moradorParaExcluir && (
+        <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h4 className="font-black text-slate-900 text-sm">Excluir Morador?</h4>
+                <p className="text-xs text-slate-500">Esta ação não poderá ser desfeita.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              Confirma a remoção de <strong>{moradorParaExcluir.nome}</strong> ({moradorParaExcluir.bloco ? `${moradorParaExcluir.bloco} - ` : ''}Unidade {moradorParaExcluir.unidade})?
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setMoradorParaExcluir(null)}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={confirmarExcluirMorador}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition cursor-pointer"
+              >
+                {loading ? 'Removendo...' : 'Sim, Excluir'}
               </button>
             </div>
           </div>
