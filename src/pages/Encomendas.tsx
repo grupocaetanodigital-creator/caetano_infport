@@ -686,18 +686,20 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const anoStr = String(hoje.getFullYear()).slice(-2);
       const prefixoHoje = `RE${diaStr}/${mesStr}/${anoStr}N`;
 
-      // 1. Descobre a maior sequência existente hoje em todo o banco para evitar colisão de unique key
+      // 1. Descobre a maior sequência existente hoje no banco para evitar colisão de unique key
       let maiorSeq = 0;
       try {
+        const inicioDoDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0, 0);
         const { data: lotesHoje } = await supabase
           .from('lotes_re')
-          .select('codigo_re')
-          .like('codigo_re', `${prefixoHoje}%`);
+          .select('codigo_re, created_at')
+          .or(`codigo_re.ilike.%${diaStr}/${mesStr}/${anoStr}%,created_at.gte.${inicioDoDia.toISOString()}`)
+          .limit(200);
 
         if (lotesHoje && lotesHoje.length > 0) {
           lotesHoje.forEach((l: any) => {
             const cod = String(l.codigo_re || '');
-            const match = cod.match(/N(\d+)/i);
+            const match = cod.match(/N(\d+)/i) || cod.match(/-(\d+)$/);
             if (match && match[1]) {
               const num = parseInt(match[1], 10);
               if (!isNaN(num) && num > maiorSeq) {
@@ -710,13 +712,13 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         console.warn('Aviso ao consultar maior sequência RE do dia:', errSeq);
       }
 
-      let sequenciaHoje = maiorSeq + 1;
+      let sequenciaHoje = Math.max(maiorSeq + 1, 1);
       let data: any = null;
       let codigoRE = '';
       let tentativas = 0;
-      const maxTentativas = 8;
+      const maxTentativas = 15;
 
-      // 2. Loop de inserção com resolução automática contra duplicate key
+      // 2. Loop de inserção com resolução e incremento automático contra qualquer variação de duplicate key
       while (!data && tentativas < maxTentativas) {
         tentativas++;
         const seqFormatada = String(sequenciaHoje).padStart(3, '0');
@@ -743,20 +745,25 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           break;
         }
 
-        const msgErro = res.error?.message || '';
-        const ehDuplicata = msgErro.includes('unique constraint') ||
-                            msgErro.includes('duplicate key') ||
-                            msgErro.includes('lotes_re_codigo_re_key') ||
-                            (res.error as any)?.code === '23505';
+        const msgErro = (res.error?.message || '').toLowerCase();
+        const codigoErro = (res.error as any)?.code;
+        const ehDuplicata = codigoErro === '23505' ||
+                            msgErro.includes('unique') ||
+                            msgErro.includes('duplicate') ||
+                            msgErro.includes('duplicad') ||
+                            msgErro.includes('unicidad') ||
+                            msgErro.includes('already exists') ||
+                            msgErro.includes('já existe') ||
+                            msgErro.includes('lotes_re_codigo_re');
 
         if (ehDuplicata) {
-          console.warn(`[Lotes RE] Código ${codigoRE} colidiu com registro existente. Tentando N${sequenciaHoje + 1}...`);
+          console.warn(`[Lotes RE] Código ${codigoRE} colidiu com registro existente no banco. Incrementando para sequência ${sequenciaHoje + 1}...`);
           sequenciaHoje++;
           continue;
         }
 
         // Se o erro foi restrição de FK de entregador_id
-        if (msgErro.includes('entregador_id') || msgErro.includes('foreign key')) {
+        if (msgErro.includes('entregador_id') || msgErro.includes('foreign key') || msgErro.includes('chave estrangeira')) {
           console.warn('[Lotes RE] Tentando sem vínculo estrito de entregador_id...');
           const fbPayload = { ...payload, entregador_id: null };
           const resFb = await supabase.from('lotes_re').insert([fbPayload]).select('*').single();
@@ -764,15 +771,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             data = resFb.data;
             break;
           }
+          const msgFb = (resFb.error?.message || '').toLowerCase();
+          if ((resFb.error as any)?.code === '23505' || msgFb.includes('unique') || msgFb.includes('duplicate') || msgFb.includes('unicidad')) {
+            sequenciaHoje++;
+            continue;
+          }
         }
 
         // Se persistir outro erro não recuperável
         throw res.error;
       }
 
-      // 3. Fallback de segurança se após tentativas sequenciais ainda houver colisão
+      // 3. Fallback garantido de unicidade caso haja concorrência extrema
       if (!data) {
-        const codigoEmergencia = `${prefixoHoje}${String(sequenciaHoje).padStart(3, '0')}-${Date.now().toString().slice(-4)}`;
+        const sufixoAleatorio = Math.floor(100 + Math.random() * 900);
+        const codigoEmergencia = `${prefixoHoje}${String(sequenciaHoje).padStart(3, '0')}-${sufixoAleatorio}`;
         codigoRE = codigoEmergencia;
         const payloadEmergencia = {
           codigo_re: codigoEmergencia,
