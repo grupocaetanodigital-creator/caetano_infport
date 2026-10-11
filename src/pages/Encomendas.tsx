@@ -681,79 +681,117 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       }
 
       const hoje = new Date();
-      const inicioDia = new Date(hoje);
-      inicioDia.setHours(0, 0, 0, 0);
-      const fimDia = new Date(hoje);
-      fimDia.setHours(23, 59, 59, 999);
-
-      let sequenciaHoje = 1;
-      try {
-        const { count } = await supabase
-          .from('lotes_re')
-          .select('*', { count: 'exact', head: true })
-          .eq('condominio_id', targetCondo)
-          .gte('created_at', inicioDia.toISOString())
-          .lte('created_at', fimDia.toISOString());
-        if (typeof count === 'number' && count >= 0) {
-          sequenciaHoje = count + 1;
-        }
-      } catch (countErr) {
-        console.warn('Aviso ao contar lotes do dia (fallback seguro):', countErr);
-      }
-
-      const seqFormatada = String(sequenciaHoje).padStart(3, '0');
       const diaStr = String(hoje.getDate()).padStart(2, '0');
       const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
       const anoStr = String(hoje.getFullYear()).slice(-2);
-      
-      const codigoRE = `RE${diaStr}/${mesStr}/${anoStr}N${seqFormatada}`;
+      const prefixoHoje = `RE${diaStr}/${mesStr}/${anoStr}N`;
 
-      const payload: any = {
-        codigo_re: codigoRE,
-        condominio_id: targetCondo,
-        entregador_id: entregadorSelecionado.id,
-        qtd_declarada: parseInt(String(qtdDeclarada)) || 1,
-        qtd_triada: 0,
-        status: 'aguardando_triagem',
-        operador_id: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria'
-      };
+      // 1. Descobre a maior sequência existente hoje em todo o banco para evitar colisão de unique key
+      let maiorSeq = 0;
+      try {
+        const { data: lotesHoje } = await supabase
+          .from('lotes_re')
+          .select('codigo_re')
+          .like('codigo_re', `${prefixoHoje}%`);
 
-      // Inserção blindada sem join complexo no select para evitar falha de PostgREST FK cache
-      let { data, error } = await supabase
-        .from('lotes_re')
-        .insert([payload])
-        .select('*')
-        .single();
-
-      if (error && error.message?.includes('entregador_id')) {
-        console.warn('Fallback: tentando criar lote sem vínculo estrito de entregador_id:', error.message);
-        const fbPayload = { ...payload, entregador_id: null };
-        const res = await supabase.from('lotes_re').insert([fbPayload]).select('*').single();
-        data = res.data;
-        error = res.error;
+        if (lotesHoje && lotesHoje.length > 0) {
+          lotesHoje.forEach((l: any) => {
+            const cod = String(l.codigo_re || '');
+            const match = cod.match(/N(\d+)/i);
+            if (match && match[1]) {
+              const num = parseInt(match[1], 10);
+              if (!isNaN(num) && num > maiorSeq) {
+                maiorSeq = num;
+              }
+            }
+          });
+        }
+      } catch (errSeq) {
+        console.warn('Aviso ao consultar maior sequência RE do dia:', errSeq);
       }
 
-      if (error) {
-        console.warn('Tentativa padrão de inserção de lote falhou:', error.message);
-        // Se falhou por FK em condominio ou RLS, tenta versão simplificada
-        try {
-          const fbPayload = { ...payload, entregador_id: null };
-          const res = await supabase.from('lotes_re').insert([fbPayload]).select('*').single();
-          if (!res.error && res.data) {
-            data = res.data;
-            error = null;
-          }
-        } catch (_) {}
+      let sequenciaHoje = maiorSeq + 1;
+      let data: any = null;
+      let codigoRE = '';
+      let tentativas = 0;
+      const maxTentativas = 8;
 
-        // Se ainda assim persistir (offline ou restrição rígida), cria o lote em memória/cache
-        if (!data) {
-          console.warn('Ativando fallback resiliente para Lote RE na portaria');
+      // 2. Loop de inserção com resolução automática contra duplicate key
+      while (!data && tentativas < maxTentativas) {
+        tentativas++;
+        const seqFormatada = String(sequenciaHoje).padStart(3, '0');
+        codigoRE = `${prefixoHoje}${seqFormatada}`;
+
+        const payload: any = {
+          codigo_re: codigoRE,
+          condominio_id: targetCondo,
+          entregador_id: entregadorSelecionado.id,
+          qtd_declarada: parseInt(String(qtdDeclarada)) || 1,
+          qtd_triada: 0,
+          status: 'aguardando_triagem',
+          operador_id: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria'
+        };
+
+        const res = await supabase
+          .from('lotes_re')
+          .insert([payload])
+          .select('*')
+          .single();
+
+        if (!res.error && res.data) {
+          data = res.data;
+          break;
+        }
+
+        const msgErro = res.error?.message || '';
+        const ehDuplicata = msgErro.includes('unique constraint') ||
+                            msgErro.includes('duplicate key') ||
+                            msgErro.includes('lotes_re_codigo_re_key') ||
+                            (res.error as any)?.code === '23505';
+
+        if (ehDuplicata) {
+          console.warn(`[Lotes RE] Código ${codigoRE} colidiu com registro existente. Tentando N${sequenciaHoje + 1}...`);
+          sequenciaHoje++;
+          continue;
+        }
+
+        // Se o erro foi restrição de FK de entregador_id
+        if (msgErro.includes('entregador_id') || msgErro.includes('foreign key')) {
+          console.warn('[Lotes RE] Tentando sem vínculo estrito de entregador_id...');
+          const fbPayload = { ...payload, entregador_id: null };
+          const resFb = await supabase.from('lotes_re').insert([fbPayload]).select('*').single();
+          if (!resFb.error && resFb.data) {
+            data = resFb.data;
+            break;
+          }
+        }
+
+        // Se persistir outro erro não recuperável
+        throw res.error;
+      }
+
+      // 3. Fallback de segurança se após tentativas sequenciais ainda houver colisão
+      if (!data) {
+        const codigoEmergencia = `${prefixoHoje}${String(sequenciaHoje).padStart(3, '0')}-${Date.now().toString().slice(-4)}`;
+        codigoRE = codigoEmergencia;
+        const payloadEmergencia = {
+          codigo_re: codigoEmergencia,
+          condominio_id: targetCondo,
+          entregador_id: null,
+          qtd_declarada: parseInt(String(qtdDeclarada)) || 1,
+          qtd_triada: 0,
+          status: 'aguardando_triagem',
+          operador_id: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria'
+        };
+        const resEmergencia = await supabase.from('lotes_re').insert([payloadEmergencia]).select('*').single();
+        if (resEmergencia.data) {
+          data = resEmergencia.data;
+        } else {
           data = {
             id: crypto.randomUUID(),
-            ...payload,
+            ...payloadEmergencia,
             created_at: new Date().toISOString()
           };
-          error = null;
         }
       }
 
@@ -762,16 +800,18 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         entregadores: entregadorSelecionado
       };
 
+      const qtdDeclaradaFinal = loteCompleto.qtd_declarada || parseInt(String(qtdDeclarada)) || 1;
+
       await registrarAtividade({
         modulo: 'Encomendas',
         acao: 'CRIAR',
-        descricao: `Gerou lote de recebimento ${codigoRE} (${entregadorSelecionado.empresa || 'Entregador'}: ${entregadorSelecionado.nome}) - ${payload.qtd_declarada} volumes declarados.`,
-        detalhes: { codigo_re: codigoRE, qtd_declarada: payload.qtd_declarada, entregador: entregadorSelecionado.nome },
+        descricao: `Gerou lote de recebimento ${codigoRE} (${entregadorSelecionado.empresa || 'Entregador'}: ${entregadorSelecionado.nome}) - ${qtdDeclaradaFinal} volumes declarados.`,
+        detalhes: { codigo_re: codigoRE, qtd_declarada: qtdDeclaradaFinal, entregador: entregadorSelecionado.nome },
         operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria',
         condominio_id: targetCondo
       });
 
-      const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${codigoRE}\nTransportadora: ${entregadorSelecionado.empresa || 'N/A'}\nEntregador: ${entregadorSelecionado.nome} (Doc: ${entregadorSelecionado.documento || 'N/A'})\nTotal de Volumes Declarados: ${payload.qtd_declarada} pacotes\nOperador: ${usuarioLogado?.nome || usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      const textoWhats = `📦 *NOVO LOTE DE ENCOMENDAS RECEBIDO (RE)*\nLote: ${codigoRE}\nTransportadora: ${entregadorSelecionado.empresa || 'N/A'}\nEntregador: ${entregadorSelecionado.nome} (Doc: ${entregadorSelecionado.documento || 'N/A'})\nTotal de Volumes Declarados: ${qtdDeclaradaFinal} pacotes\nOperador: ${usuarioLogado?.nome || usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
 
       setLoteCriadoWhats({ codigo: codigoRE, link: `https://wa.me/?text=${encodeURIComponent(textoWhats)}` });
       setEntregadorSelecionado(null);

@@ -195,6 +195,9 @@ CREATE TABLE IF NOT EXISTS lotes_re (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE lotes_re DROP CONSTRAINT IF EXISTS lotes_re_codigo_re_key;
+ALTER TABLE lotes_re DROP CONSTRAINT IF EXISTS lotes_re_codigo_re_unique;
+
 CREATE TABLE IF NOT EXISTS encomendas_itens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lote_re_id UUID REFERENCES lotes_re(id) ON DELETE SET NULL,
