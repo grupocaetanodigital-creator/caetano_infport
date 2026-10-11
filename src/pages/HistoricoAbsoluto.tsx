@@ -9,6 +9,7 @@ import {
   SQL_CRIACAO_HISTORICO_ABSOLUTO,
   RegistroAuditoria 
 } from '../services/auditoriaService';
+import { verificarPermissao } from '../services/permissoesService';
 import { 
   History, 
   Activity, 
@@ -45,6 +46,15 @@ interface HistoricoAbsolutoProps {
 
 export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, listaCondominios = [] }: HistoricoAbsolutoProps) {
   const eAdmin = operadorLogado?.perfil === 'admin' || operadorLogado?.nivel_acesso === 0 || operadorLogado?.perfil === 'master' || operadorLogado?.nivel_acesso === 1;
+
+  // Permissões granulares do módulo Histórico Absoluto
+  const podeVisualizar = eAdmin || 
+                         verificarPermissao(operadorLogado, 'historico_absoluto', 'visualizar') || 
+                         verificarPermissao(operadorLogado, 'historico_absoluto', 'ver_feed');
+
+  const podeExcluirDados = eAdmin || 
+                           verificarPermissao(operadorLogado, 'historico_absoluto', 'limpar_dados') || 
+                           verificarPermissao(operadorLogado, 'historico_absoluto', 'excluir');
 
   const [abaAtiva, setAbaAtiva] = useState<'feed' | 'limpeza' | 'sql' | 'metricas'>('feed');
   const [registros, setRegistros] = useState<RegistroAuditoria[]>([]);
@@ -313,6 +323,18 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
     };
   }, [registros]);
 
+  if (!podeVisualizar) {
+    return (
+      <div className="p-8 sm:p-12 bg-white rounded-3xl border border-red-200 shadow-sm text-center space-y-3 my-6 max-w-2xl mx-auto">
+        <ShieldAlert className="w-12 h-12 text-red-500 mx-auto" />
+        <h3 className="text-base font-black text-slate-900">Acesso Restrito ao Histórico Absoluto</h3>
+        <p className="text-xs text-slate-600 max-w-md mx-auto">
+          Seu perfil de usuário não possui permissão para visualizar o Histórico Absoluto & Auditoria. Solicite liberação no Gerenciamento de Acessos ao Administrador.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
       {/* Top Banner de Identificação */}
@@ -376,7 +398,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
           </span>
         </button>
 
-        {eAdmin && (
+        {podeExcluirDados && (
           <button
             onClick={() => setAbaAtiva('limpeza')}
             className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
@@ -388,7 +410,7 @@ export default function HistoricoAbsoluto({ operadorLogado, condominioAtivo, lis
             <Trash2 className="w-4 h-4 text-rose-400" />
             <span>Limpar Dados por Período</span>
             <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-rose-900/80 text-rose-200 uppercase">
-              Apenas ADM
+              {eAdmin ? 'Apenas ADM' : 'Autorizado'}
             </span>
           </button>
         )}
