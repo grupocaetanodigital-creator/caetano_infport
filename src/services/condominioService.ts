@@ -173,7 +173,7 @@ export function formatarIdentificacaoUnidade(
   const tipo = tipoEstrutura || 'casas';
 
   if (isEstruturaCasas(tipo)) {
-    return `Casa ${u}`;
+    return u.toLowerCase().startsWith('casa') ? u : (u ? `Casa ${u}` : 'Casa');
   }
 
   if (isEstruturaNumeralDireto(tipo)) {
@@ -203,7 +203,7 @@ export function formatarTextoWhatsUnidade(
   const tipo = tipoEstrutura || 'casas';
 
   if (isEstruturaCasas(tipo)) {
-    return `Casa ${u}`;
+    return u.toLowerCase().startsWith('casa') ? u : (u ? `Casa ${u}` : 'Casa');
   }
 
   if (isEstruturaNumeralDireto(tipo)) {
