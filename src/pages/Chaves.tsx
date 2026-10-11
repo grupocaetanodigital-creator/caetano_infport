@@ -13,8 +13,10 @@ import {
   ExternalLink, 
   Check,
   Pencil,
-  Home
+  Home,
+  Trash2
 } from 'lucide-react';
+import { registrarAtividade } from '../services/auditoriaService';
 import { 
   carregarCondominioConfig, 
   isEstruturaCasas, 
@@ -44,6 +46,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const [modalNovaChave, setModalNovaChave] = useState(false);
   const [modalRetirada, setModalRetirada] = useState<any | null>(null);
   const [modalDevolucao, setModalDevolucao] = useState<any | null>(null);
+  const [chaveParaExcluir, setChaveParaExcluir] = useState<any | null>(null);
 
   const [idEdicao, setIdEdicao] = useState<string | null>(null);
   const [codigoChave, setCodigoChave] = useState('');
@@ -54,6 +57,8 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
   const [moradores, setMoradores] = useState<any[]>([]);
   const [colaboradores, setColaboradores] = useState<any[]>([]);
+  const [terceirosAtivos, setTerceirosAtivos] = useState<any[]>([]);
+  const [terceiroSelecionadoId, setTerceiroSelecionadoId] = useState<string>('');
   const [blocosDisponiveis, setBlocosDisponiveis] = useState<string[]>([]);
 
   const [tipoRetirante, setTipoRetirante] = useState('Morador');
@@ -67,6 +72,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const [fotoDocTerceiroUrl, setFotoDocTerceiroUrl] = useState('');
   const [prazoModo, setPrazoModo] = useState<string>('chave');
   const [prazoHorasCustom, setPrazoHorasCustom] = useState<number | string>(2);
+  const [prazoMinutosCustom, setPrazoMinutosCustom] = useState<number | string>(30);
 
   const [fotoRetiradaUrl, setFotoRetiradaUrl] = useState('');
   const [condoConfig, setCondoConfig] = useState<CondominioConfig | null>(null);
@@ -143,6 +149,92 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       const { data: colabData } = await colabQuery;
       setColaboradores(colabData || []);
 
+      // Buscar prestadores e terceiros do módulo Autorizados (cadastrados ou em trânsito)
+      let acessosAtivosList: any[] = [];
+      try {
+        let acessosQ = supabase
+          .from('prestadores_acessos')
+          .select('*')
+          .is('data_hora_saida', null)
+          .order('data_hora_entrada', { ascending: false });
+        if (!isGlobal && condId) {
+          acessosQ = acessosQ.eq('condominio_id', condId);
+        }
+        const { data: acDb } = await acessosQ;
+        if (acDb) acessosAtivosList = acDb;
+      } catch (e) {
+        console.warn('Erro ao buscar prestadores_acessos:', e);
+      }
+
+      let prestQuery = supabase
+        .from('prestadores')
+        .select('*')
+        .order('nome_profissional');
+      if (!isGlobal && condId) {
+        prestQuery = prestQuery.eq('condominio_id', condId);
+      }
+      const { data: prestData } = await prestQuery;
+
+      const mapaPorChave = new Map<string, any>();
+
+      // 1. Prestadores com acesso ativo em aberto (Dentro do Condomínio)
+      acessosAtivosList.forEach((ac: any) => {
+        const doc = (ac.documento || '').trim();
+        const nome = ac.nome_completo || ac.nome_profissional || '';
+        const chave = doc || nome || ac.id;
+        if (chave) {
+          mapaPorChave.set(chave, {
+            id: ac.prestador_id || ac.id,
+            nome_profissional: nome,
+            documento: ac.documento || '',
+            empresa: ac.empresa || ac.parentesco_vinculo || 'Prestador Terceiro',
+            telefone: ac.telefone || '',
+            foto_documento: ac.foto_documento || '',
+            foto_rosto: ac.foto_rosto || '',
+            unidade: ac.unidade || '',
+            bloco: ac.bloco || '',
+            em_transito: true,
+            data_hora_entrada: ac.data_hora_entrada
+          });
+        }
+      });
+
+      // 2. Todos os prestadores cadastrados (marcando se estiver DENTRO)
+      (prestData || []).forEach((p: any) => {
+        const doc = (p.documento || '').trim();
+        const nome = p.nome_profissional || p.nome_completo || '';
+        const chave = doc || nome || p.id;
+        const estaDentro = p.status_acesso === 'DENTRO' || p.status_acesso === 'EM_ANDAMENTO';
+        if (!mapaPorChave.has(chave)) {
+          mapaPorChave.set(chave, {
+            id: p.id,
+            nome_profissional: nome,
+            documento: p.documento || '',
+            empresa: p.empresa || p.parentesco_vinculo || 'Terceiro / Prestador',
+            telefone: p.telefone || '',
+            foto_documento: p.foto_documento || '',
+            foto_rosto: p.foto_rosto || '',
+            unidade: p.unidade || '',
+            bloco: p.bloco || '',
+            em_transito: estaDentro,
+            data_hora_entrada: p.data_hora_entrada || p.created_at
+          });
+        } else if (estaDentro) {
+          const item = mapaPorChave.get(chave);
+          item.em_transito = true;
+          if (p.foto_documento && !item.foto_documento) item.foto_documento = p.foto_documento;
+          if (p.telefone && !item.telefone) item.telefone = p.telefone;
+        }
+      });
+
+      const listaTerceirosOrdenada = Array.from(mapaPorChave.values()).sort((a, b) => {
+        if (a.em_transito && !b.em_transito) return -1;
+        if (!a.em_transito && b.em_transito) return 1;
+        return a.nome_profissional.localeCompare(b.nome_profissional);
+      });
+
+      setTerceirosAtivos(listaTerceirosOrdenada);
+
       const agora = new Date();
       
       const movsComStatus = (movData || []).map((mov: any) => {
@@ -212,6 +304,45 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     setModalNovaChave(true);
   };
 
+  const confirmarExcluirChave = (chave: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setChaveParaExcluir(chave);
+  };
+
+  const executarExclusaoChave = async () => {
+    if (!chaveParaExcluir) return;
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('chaves')
+        .delete()
+        .eq('id', chaveParaExcluir.id);
+
+      if (error) throw error;
+
+      await registrarAtividade({
+        modulo: 'Chaves',
+        acao: 'EXCLUIR',
+        descricao: `Excluiu a chave ${chaveParaExcluir.codigo_chave} (${chaveParaExcluir.nome_chave}) do quadro digital.`,
+        detalhes: { chave_id: chaveParaExcluir.id, codigo: chaveParaExcluir.codigo_chave, nome: chaveParaExcluir.nome_chave },
+        operador_nome: usuarioLogado?.login || usuarioLogado?.nome || 'Portaria',
+        condominio_id: chaveParaExcluir.condominio_id || condId
+      });
+
+      setMensagem({ tipo: 'sucesso', texto: `Chave ${chaveParaExcluir.codigo_chave} excluída com sucesso!` });
+      setChaveParaExcluir(null);
+      if (idEdicao === chaveParaExcluir.id) {
+        limparFormularioChave();
+      }
+      await carregarQuadroChaves();
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao excluir chave: ' + err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const salvarChave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!codigoChave.trim() || !nomeChave.trim()) {
@@ -268,7 +399,30 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
     try {
       const agora = new Date();
-      const previsao = new Date(agora.getTime() + (modalRetirada.tempo_limite_horas || 2) * 60 * 60 * 1000);
+      
+      // Cálculo do prazo com suporte flexível a minutos (ajuste customizado em minutos)
+      let minutosTotais = (modalRetirada.tempo_limite_horas || 2) * 60;
+      if (prazoModo === 'custom') {
+        minutosTotais = parseInt(String(prazoMinutosCustom)) || 30;
+      } else if (prazoModo === '15m') {
+        minutosTotais = 15;
+      } else if (prazoModo === '30m') {
+        minutosTotais = 30;
+      } else if (prazoModo === '1h') {
+        minutosTotais = 60;
+      } else if (prazoModo === '2h') {
+        minutosTotais = 120;
+      } else if (prazoModo === '4h') {
+        minutosTotais = 240;
+      } else if (prazoModo === '8h') {
+        minutosTotais = 480;
+      } else if (prazoModo === '12h') {
+        minutosTotais = 720;
+      } else if (prazoModo === '24h') {
+        minutosTotais = 1440;
+      }
+
+      const previsao = new Date(agora.getTime() + minutosTotais * 60 * 1000);
       const nomeCompletoComTipo = `${retiranteNome.trim()} (${tipoRetirante})`;
 
       const { error: errMov } = await supabase
@@ -294,7 +448,8 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
         .eq('id', modalRetirada.id);
 
       const tel = retiranteTel.replace(/\D/g, '');
-      const textoWhats = `🔑 *COMPROVANTE DE RETIRADA DE CHAVE*\nChave: ${modalRetirada.codigo_chave} - ${modalRetirada.nome_chave}\nRetirado por: ${nomeCompletoComTipo}\nData/Hora: ${agora.toLocaleString('pt-BR')}\nPrazo de Devolução: ${previsao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (${modalRetirada.tempo_limite_horas}h limite)\n\nPor favor, devolva a chave no prazo acordado!`;
+      const rotuloPrazoDesc = prazoModo === 'custom' ? `${minutosTotais}min` : `${Math.round(minutosTotais / 60)}h`;
+      const textoWhats = `🔑 *COMPROVANTE DE RETIRADA DE CHAVE*\nChave: ${modalRetirada.codigo_chave} - ${modalRetirada.nome_chave}\nRetirado por: ${nomeCompletoComTipo}\nData/Hora: ${agora.toLocaleString('pt-BR')}\nPrazo de Devolução: ${previsao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (${rotuloPrazoDesc} limite)\n\nPor favor, devolva a chave no prazo acordado!`;
 
       setWhatsEmprestimo({
         link: tel ? `https://wa.me/55${tel}?text=${encodeURIComponent(textoWhats)}` : `https://wa.me/?text=${encodeURIComponent(textoWhats)}`
@@ -303,6 +458,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
       setModalRetirada(null);
       setRetiranteNome(''); setRetiranteDoc(''); setRetiranteTel(''); setFotoRetiradaUrl(''); setTipoRetirante('Morador');
       setRetiranteUnidade(''); setRetiranteBloco(''); setRetiranteFuncao(''); setRetiranteEmpresa(''); setFotoDocTerceiroUrl('');
+      setTerceiroSelecionadoId('');
       carregarQuadroChaves();
       setMensagem({ tipo: 'sucesso', texto: 'Empréstimo registrado com sucesso!' });
     } catch (err: any) {
@@ -455,6 +611,13 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                     >
                       <Pencil className="w-3 h-3" />
                     </button>
+                    <button
+                      onClick={(e) => confirmarExcluirChave(chave, e)}
+                      className="p-0.5 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
+                      title="Excluir Chave do Quadro"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                     <Key className={`w-3.5 h-3.5 ${
                       chave.status === 'Disponível' ? 'text-emerald-600' : estaAtrasada ? 'text-red-600' : 'text-amber-600'
                     }`} />
@@ -599,6 +762,23 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 >
                   Cancelar
                 </button>
+                {idEdicao && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const c = chaves.find((x: any) => x.id === idEdicao);
+                      if (c) {
+                        setModalNovaChave(false);
+                        confirmarExcluirChave(c);
+                      }
+                    }}
+                    className="px-3 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1"
+                    title="Excluir Chave do Quadro"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir</span>
+                  </button>
+                )}
                 <button
                   type="submit"
                   disabled={loading}
@@ -636,26 +816,60 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
               <form onSubmit={efetivarRetirada} className="space-y-2.5">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Tipo de Retirante *</label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {['Morador', 'Colaborador', 'Terceiros'].map((tipo) => (
-                      <button
-                        key={tipo}
-                        type="button"
-                        onClick={() => {
-                          setTipoRetirante(tipo);
-                          setRetiranteNome('');
-                          setRetiranteDoc('');
-                          setRetiranteTel('');
-                        }}
-                        className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition cursor-pointer ${
-                          tipoRetirante === tipo
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                            : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-                        }`}
-                      >
-                        {tipo}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoRetirante('Morador');
+                        setRetiranteNome('');
+                        setRetiranteDoc('');
+                        setRetiranteTel('');
+                      }}
+                      className={`py-2 px-2 text-xs font-black rounded-xl border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 shadow-2xs ${
+                        tipoRetirante === 'Morador'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20 ring-2 ring-emerald-400/40'
+                          : 'bg-emerald-50/70 text-emerald-950 border-emerald-200/80 hover:bg-emerald-100 hover:border-emerald-300'
+                      }`}
+                    >
+                      <span className="text-[10px] opacity-80 font-bold uppercase">👤 Residencial</span>
+                      <span>Morador</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoRetirante('Colaborador');
+                        setRetiranteNome('');
+                        setRetiranteDoc('');
+                        setRetiranteTel('');
+                      }}
+                      className={`py-2 px-2 text-xs font-black rounded-xl border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 shadow-2xs ${
+                        tipoRetirante === 'Colaborador'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20 ring-2 ring-blue-400/40'
+                          : 'bg-blue-50/70 text-blue-950 border-blue-200/80 hover:bg-blue-100 hover:border-blue-300'
+                      }`}
+                    >
+                      <span className="text-[10px] opacity-80 font-bold uppercase">👔 Interno</span>
+                      <span>Colaborador</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoRetirante('Terceiros');
+                        setRetiranteNome('');
+                        setRetiranteDoc('');
+                        setRetiranteTel('');
+                      }}
+                      className={`py-2 px-2 text-xs font-black rounded-xl border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 shadow-2xs ${
+                        tipoRetirante === 'Terceiros'
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-600/20 ring-2 ring-amber-400/40'
+                          : 'bg-amber-50/70 text-amber-950 border-amber-200/80 hover:bg-amber-100 hover:border-amber-300'
+                      }`}
+                    >
+                      <span className="text-[10px] opacity-80 font-bold uppercase">🚚 Prestador</span>
+                      <span>Terceiros</span>
+                    </button>
                   </div>
                 </div>
 
