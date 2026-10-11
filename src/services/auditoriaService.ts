@@ -396,7 +396,7 @@ export async function buscarHistoricoAbsoluto(filtros: {
       .limit(limite);
 
     if (condoId) {
-      qHist = qHist.or(`condominio_id.eq.${condoId},condominio_id.is.null`);
+      qHist = qHist.eq('condominio_id', condoId);
     }
     if (moduloFiltro) {
       qHist = qHist.ilike('modulo', `%${moduloFiltro}%`);
