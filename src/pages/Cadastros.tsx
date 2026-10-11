@@ -1145,20 +1145,20 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         </div>
       )}
 
-      {/* Navegação de Abas Fluida com Contadores */}
+      {/* Navegação de Abas Fluida Apenas com Ícones e Contadores */}
       <div className="flex bg-slate-200/70 p-1.5 rounded-2xl border border-slate-300 gap-1.5 shadow-2xs items-center">
         {eAdmin && (
           <button
+            type="button"
             onClick={() => setAbaAtiva('condominios')}
             title="Condomínios Cadastrados"
-            className={`py-2 px-3 text-xs font-black flex items-center justify-center gap-1.5 rounded-xl transition cursor-pointer shrink-0 ${
+            className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
               abaAtiva === 'condominios'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-700 hover:bg-white/60'
             }`}
           >
             <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-bold">Condomínios</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'condominios' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-300 text-slate-700'
             }`}>
@@ -1169,16 +1169,16 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
         {!eOperador && (
           <button
+            type="button"
             onClick={() => setAbaAtiva('operadores')}
             title="Operadores e Equipe de Portaria"
-            className={`py-2 px-3 text-xs font-black flex items-center justify-center gap-1.5 rounded-xl transition cursor-pointer shrink-0 ${
+            className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
               abaAtiva === 'operadores'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-700 hover:bg-white/60'
             }`}
           >
             <Users className="w-4 h-4 text-blue-400 shrink-0" />
-            <span className="font-bold">Operadores</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'operadores' ? 'bg-slate-800 text-blue-300' : 'bg-slate-300 text-slate-700'
             }`}>
@@ -1188,16 +1188,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
         )}
 
         <button
+          type="button"
           onClick={() => setAbaAtiva('moradores')}
+          title="Moradores & Unidades"
           className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
             abaAtiva === 'moradores'
               ? 'bg-slate-900 text-white shadow-sm'
               : 'text-slate-700 hover:bg-white/60'
           }`}
         >
-          <Home className="w-4 h-4 text-purple-400" />
-          <span>Moradores & Unidades</span>
-          <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+          <Home className="w-4 h-4 text-purple-400 shrink-0" />
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
             abaAtiva === 'moradores' ? 'bg-slate-800 text-purple-300' : 'bg-slate-300 text-slate-700'
           }`}>
             {moradores.length}
@@ -1206,16 +1207,17 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
         {!eOperador && (
           <button
+            type="button"
             onClick={() => setAbaAtiva('niveis')}
+            title="Níveis de Acesso & Permissões"
             className={`flex-1 py-2 px-3 text-xs font-black flex items-center justify-center gap-2 rounded-xl transition cursor-pointer ${
               abaAtiva === 'niveis'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-700 hover:bg-white/60'
             }`}
           >
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Níveis de Acesso & Permissões</span>
-            <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
               abaAtiva === 'niveis' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-300 text-slate-700'
             }`}>
               {listaNiveis.length}
