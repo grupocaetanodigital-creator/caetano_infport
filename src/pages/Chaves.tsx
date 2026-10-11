@@ -14,9 +14,13 @@ import {
   Check,
   Pencil,
   Home,
-  Trash2
+  Trash2,
+  Lock,
+  Clock,
+  Filter
 } from 'lucide-react';
 import { registrarAtividade } from '../services/auditoriaService';
+import { verificarPermissao } from '../services/permissoesService';
 import { 
   carregarCondominioConfig, 
   isEstruturaCasas, 
@@ -42,6 +46,15 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   const [chaves, setChaves] = useState<any[]>([]);
   const [movimentacoesAtivas, setMovimentacoesAtivas] = useState<any[]>([]);
   const [buscaTermo, setBuscaTermo] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState<'todas' | 'disponiveis' | 'emprestadas' | 'atrasadas'>('todas');
+
+  // Permissões RBAC dinâmicas
+  const podeVisualizar = verificarPermissao(usuarioLogado, 'chaves', 'visualizar');
+  const podeCadastrar = verificarPermissao(usuarioLogado, 'chaves', 'cadastrar') || verificarPermissao(usuarioLogado, 'chaves', 'criar');
+  const podeEditar = verificarPermissao(usuarioLogado, 'chaves', 'editar') || verificarPermissao(usuarioLogado, 'chaves', 'cadastrar');
+  const podeExcluir = verificarPermissao(usuarioLogado, 'chaves', 'excluir');
+  const podeEmprestar = verificarPermissao(usuarioLogado, 'chaves', 'emprestar');
+  const podeDevolver = verificarPermissao(usuarioLogado, 'chaves', 'devolver');
 
   const [modalNovaChave, setModalNovaChave] = useState(false);
   const [modalRetirada, setModalRetirada] = useState<any | null>(null);
@@ -306,20 +319,40 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
   const confirmarExcluirChave = (chave: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!podeExcluir) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso Negado: Seu perfil de usuário não possui permissão para excluir chaves no Gerenciamento de Acesso.' });
+      return;
+    }
     setChaveParaExcluir(chave);
   };
 
   const executarExclusaoChave = async () => {
     if (!chaveParaExcluir) return;
+    if (!podeExcluir) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso Negado: Seu perfil de usuário não possui permissão para excluir chaves.' });
+      setChaveParaExcluir(null);
+      return;
+    }
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      // 1. Limpa registros vinculados na tabela de movimentações para prevenir violação de chave estrangeira (FK)
+      const { error: errMovDel } = await supabase
+        .from('movimentacao_chaves')
+        .delete()
+        .eq('chave_id', chaveParaExcluir.id);
+
+      if (errMovDel) {
+        console.warn('[Chaves] Aviso ao limpar movimentações prévias da chave:', errMovDel.message);
+      }
+
+      // 2. Exclui o registro da chave no quadro digital
+      const { error: errChaveDel } = await supabase
         .from('chaves')
         .delete()
         .eq('id', chaveParaExcluir.id);
 
-      if (error) throw error;
+      if (errChaveDel) throw errChaveDel;
 
       await registrarAtividade({
         modulo: 'Chaves',
@@ -330,14 +363,15 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
         condominio_id: chaveParaExcluir.condominio_id || condId
       });
 
-      setMensagem({ tipo: 'sucesso', texto: `Chave ${chaveParaExcluir.codigo_chave} excluída com sucesso!` });
+      setMensagem({ tipo: 'sucesso', texto: `Chave ${chaveParaExcluir.codigo_chave} (${chaveParaExcluir.nome_chave}) excluída com sucesso do quadro!` });
       setChaveParaExcluir(null);
       if (idEdicao === chaveParaExcluir.id) {
         limparFormularioChave();
+        setModalNovaChave(false);
       }
       await carregarQuadroChaves();
     } catch (err: any) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao excluir chave: ' + err.message });
+      setMensagem({ tipo: 'erro', texto: 'Erro ao excluir chave: ' + (err.message || 'Falha no banco de dados') });
     } finally {
       setLoading(false);
     }
@@ -522,66 +556,169 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
   };
 
   const chavesFiltradas = chaves.filter((c: any) => {
+    const movAtiva = movimentacoesAtivas.find((m: any) => m.chave_id === c.id);
+    const estaAtrasada = movAtiva?.atrasado;
+
+    if (filtroStatus === 'disponiveis' && c.status !== 'Disponível') return false;
+    if (filtroStatus === 'emprestadas' && c.status !== 'Emprestada') return false;
+    if (filtroStatus === 'atrasadas' && !estaAtrasada) return false;
+
+    if (!buscaTermo.trim()) return true;
     const termo = buscaTermo.toLowerCase();
     const cod = c.codigo_chave?.toLowerCase() || '';
     const nome = c.nome_chave?.toLowerCase() || '';
     const unid = c.unidade?.toLowerCase() || '';
-    return cod.includes(termo) || nome.includes(termo) || unid.includes(termo);
+    const retNome = (movAtiva?.retirante_nome || '').toLowerCase();
+    return cod.includes(termo) || nome.includes(termo) || unid.includes(termo) || retNome.includes(termo);
   });
 
+  const totalDisponiveis = chaves.filter((c: any) => c.status === 'Disponível').length;
+  const totalEmprestadas = chaves.filter((c: any) => c.status === 'Emprestada').length;
   const totalAtrasadas = movimentacoesAtivas.filter((m: any) => m.atrasado).length;
+
+  if (!podeVisualizar) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-3">
+        <Lock className="w-10 h-10 text-amber-400 mx-auto" />
+        <h3 className="text-white font-bold text-sm">Acesso Restrito ao Quadro de Chaves</h3>
+        <p className="text-xs text-slate-400 max-w-md mx-auto">
+          Seu perfil de usuário atual não possui permissão para visualizar o Claviculário Digital. Solicite autorização a um supervisor ou administrador no Gerenciamento de Acesso.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
-        <div className="flex items-center gap-2">
-          <Key className="w-5 h-5 text-amber-400 shrink-0" />
+      {/* Topo do Quadro de Chaves */}
+      <div className="bg-slate-900 text-white p-3 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md border border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+            <Key className="w-5 h-5 text-amber-400 shrink-0" />
+          </div>
           <div>
-            <h3 className="font-bold text-xs sm:text-sm text-white">Quadro Digital de Chaves</h3>
-            <p className="text-[10px] text-slate-400">Controle de prazos, empréstimos e devoluções na portaria</p>
+            <h3 className="font-black text-sm text-white flex items-center gap-2">
+              Quadro Digital de Chaves (Claviculário)
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                {chaves.length} Chaves
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-400">Controle de empréstimos, prazos com alerta sonoro/visual e devoluções</p>
           </div>
         </div>
 
-        <button
-          onClick={() => { limparFormularioChave(); setModalNovaChave(true); }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition shadow-2xs cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" /> <span>Cadastrar Chave</span>
-        </button>
+        {podeCadastrar && (
+          <button
+            onClick={() => { limparFormularioChave(); setModalNovaChave(true); }}
+            className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" /> <span>+ Cadastrar Chave</span>
+          </button>
+        )}
       </div>
 
       {totalAtrasadas > 0 && (
-        <div className="bg-red-600 text-white p-2.5 rounded-xl flex items-center gap-2 animate-pulse shadow-2xs">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <div className="text-[11px]">
-            <strong className="block font-bold">⚠️ ATENÇÃO: {totalAtrasadas} CHAVE(S) EM ATRASO!</strong>
-            Chaves ultrapassaram o tempo limite de devolução.
+        <div className="bg-red-600 text-white p-3 rounded-2xl flex items-center justify-between gap-2 animate-pulse shadow-md">
+          <div className="flex items-center gap-2.5 text-xs">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <div>
+              <strong className="block font-black text-sm">⚠️ ATENÇÃO: {totalAtrasadas} CHAVE(S) EM ATRASO!</strong>
+              Tempo limite de devolução foi excedido. Contate imediatamente os retirantes.
+            </div>
           </div>
+          <button
+            onClick={() => setFiltroStatus('atrasadas')}
+            className="px-2.5 py-1 bg-white text-red-700 font-bold text-[11px] rounded-lg shadow-2xs hover:bg-red-50 cursor-pointer shrink-0"
+          >
+            Filtrar Atrasadas
+          </button>
         </div>
       )}
 
       {mensagem.texto && (
-        <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-medium ${
-          mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+        <div className={`p-3 rounded-2xl flex items-center justify-between gap-2 text-xs font-bold border ${
+          mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-900 border-emerald-300' : 'bg-red-50 text-red-900 border-red-300'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-          <span>{mensagem.texto}</span>
+          <div className="flex items-center gap-2">
+            {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />}
+            <span>{mensagem.texto}</span>
+          </div>
+          <button onClick={() => setMensagem({ tipo: '', texto: '' })} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Barra de Pesquisa Compacta */}
-      <div className="relative">
-        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-        <input
-          type="text"
-          value={buscaTermo}
-          onChange={(e) => setBuscaTermo(e.target.value)}
-          placeholder="Buscar por código, nome ou unidade..."
-          className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs font-medium focus:outline-hidden focus:border-emerald-500 transition"
-        />
+      {/* Barra de Filtros e Busca Rápida */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
+        {/* Filtros em Pílulas */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setFiltroStatus('todas')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shrink-0 ${
+              filtroStatus === 'todas'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Todas ({chaves.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFiltroStatus('disponiveis')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shrink-0 flex items-center gap-1 ${
+              filtroStatus === 'disponiveis'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-emerald-800 hover:bg-emerald-50'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Disponíveis ({totalDisponiveis})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFiltroStatus('emprestadas')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shrink-0 flex items-center gap-1 ${
+              filtroStatus === 'emprestadas'
+                ? 'bg-amber-600 text-white shadow-2xs'
+                : 'text-amber-800 hover:bg-amber-50'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            Emprestadas ({totalEmprestadas})
+          </button>
+          {totalAtrasadas > 0 && (
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('atrasadas')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shrink-0 flex items-center gap-1 ${
+                filtroStatus === 'atrasadas'
+                  ? 'bg-red-600 text-white shadow-2xs'
+                  : 'text-red-700 bg-red-50 hover:bg-red-100'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
+              Atrasadas ({totalAtrasadas})
+            </button>
+          )}
+        </div>
+
+        {/* Input de Busca */}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={buscaTermo}
+            onChange={(e) => setBuscaTermo(e.target.value)}
+            placeholder="Buscar por código, nome, retirante ou casa..."
+            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs shadow-2xs font-medium focus:bg-white focus:outline-none focus:border-emerald-500 transition"
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+      {/* Grid de Cards de Chaves */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
         {chavesFiltradas.map((chave: any) => {
           const movAtiva = movimentacoesAtivas.find((m: any) => m.chave_id === chave.id);
           const estaAtrasada = movAtiva?.atrasado;
@@ -589,32 +726,45 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
           return (
             <div
               key={chave.id}
-              className={`p-2 sm:p-2.5 rounded-lg border flex flex-col justify-between transition shadow-2xs relative ${
+              className={`p-2.5 rounded-xl border flex flex-col justify-between transition shadow-2xs relative ${
                 chave.status === 'Disponível'
                   ? 'bg-emerald-50/40 border-emerald-300 hover:border-emerald-500'
                   : estaAtrasada
-                  ? 'bg-red-50 border-red-500 ring-1 ring-red-500 animate-pulse'
+                  ? 'bg-red-50 border-red-500 ring-2 ring-red-500 animate-pulse'
                   : 'bg-amber-50/50 border-amber-300'
               }`}
             >
               <div>
                 <div className="flex justify-between items-center gap-1">
-                  <span className="text-[10px] font-black font-mono bg-slate-900 text-white px-1.5 py-0.2 rounded">
+                  <span className="text-[10px] font-black font-mono bg-slate-900 text-white px-1.5 py-0.5 rounded">
                     {chave.codigo_chave}
                   </span>
                   
                   <div className="flex items-center gap-1">
+                    {podeEditar && (
+                      <button
+                        onClick={(e) => prepararEdicao(chave, e)}
+                        className="p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded transition cursor-pointer"
+                        title="Editar Chave"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
                     <button
-                      onClick={(e) => prepararEdicao(chave, e)}
-                      className="p-0.5 text-slate-400 hover:text-slate-900 rounded transition cursor-pointer"
-                      title="Editar Chave"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={(e) => confirmarExcluirChave(chave, e)}
-                      className="p-0.5 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
-                      title="Excluir Chave do Quadro"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (podeExcluir) {
+                          confirmarExcluirChave(chave, e);
+                        } else {
+                          setMensagem({ tipo: 'erro', texto: 'Acesso Negado: Seu perfil não possui permissão para excluir chaves no Gerenciamento de Acesso.' });
+                        }
+                      }}
+                      className={`p-1 rounded transition cursor-pointer ${
+                        podeExcluir 
+                          ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' 
+                          : 'text-slate-300 opacity-60 hover:opacity-100 cursor-not-allowed'
+                      }`}
+                      title={podeExcluir ? "Excluir Chave do Quadro" : "Sem permissão para excluir (consulte Gerenciamento de Acesso)"}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -624,36 +774,48 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                   </div>
                 </div>
 
-                <h4 className="font-bold text-slate-900 text-xs mt-1 truncate" title={chave.nome_chave}>{chave.nome_chave}</h4>
+                <h4 className="font-bold text-slate-900 text-xs mt-1.5 truncate" title={chave.nome_chave}>{chave.nome_chave}</h4>
                 {chave.unidade && (
-                  <p className="text-[10px] text-slate-500 truncate">
+                  <p className="text-[10px] text-slate-500 truncate mt-0.5 font-medium">
                     {formatarIdentificacaoUnidade(chave.unidade, chave.bloco, condoConfig?.tipo_estrutura)}
                   </p>
                 )}
               </div>
 
-              <div className="mt-2 pt-1.5 border-t border-slate-200/60">
+              <div className="mt-2 pt-2 border-t border-slate-200/70">
                 {chave.status === 'Disponível' ? (
-                  <button
-                    onClick={() => abrirEmprestimo(chave)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1 rounded-md transition cursor-pointer"
-                  >
-                    Emprestar
-                  </button>
+                  podeEmprestar ? (
+                    <button
+                      onClick={() => abrirEmprestimo(chave)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-[10px] font-black py-1.5 rounded-lg transition cursor-pointer shadow-2xs"
+                    >
+                      Emprestar
+                    </button>
+                  ) : (
+                    <span className="block text-center text-[10px] font-bold text-slate-400 py-1 bg-slate-100 rounded-md">
+                      Disponível
+                    </span>
+                  )
                 ) : (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-800 truncate">
+                    <p className="text-[10px] font-bold text-slate-800 truncate" title={movAtiva?.retirante_nome}>
                       {movAtiva?.retirante_nome}
                     </p>
-                    <p className={`text-[9px] font-bold ${estaAtrasada ? 'text-red-700' : 'text-amber-700'}`}>
+                    <p className={`text-[9px] font-bold ${estaAtrasada ? 'text-red-700 font-black' : 'text-amber-700'}`}>
                       {estaAtrasada ? '⚠️ ATRASADO' : `Até: ${new Date(movAtiva?.previsao_devolucao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
                     </p>
-                    <button
-                      onClick={() => setModalDevolucao(movAtiva)}
-                      className="w-full bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold py-1 rounded-md transition cursor-pointer"
-                    >
-                      Devolver
-                    </button>
+                    {podeDevolver ? (
+                      <button
+                        onClick={() => setModalDevolucao(movAtiva)}
+                        className="w-full bg-slate-900 hover:bg-slate-800 active:scale-98 text-white text-[10px] font-black py-1 rounded-md transition cursor-pointer"
+                      >
+                        Devolver
+                      </button>
+                    ) : (
+                      <span className="block text-center text-[9px] font-bold text-amber-700">
+                        Emprestada
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1245,6 +1407,93 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
                 Efetivar Devolução e Liberar Chave
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE CHAVE */}
+      {chaveParaExcluir && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-200 animate-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="p-3 bg-red-100 text-red-700 rounded-xl shrink-0">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-black text-slate-900 text-base">
+                  Excluir Chave do Quadro?
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Esta ação removerá definitivamente a chave e seu histórico de movimentação do posto.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChaveParaExcluir(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-bold uppercase text-[10px]">Código da Chave:</span>
+                <span className="font-mono font-black text-white bg-slate-900 px-2 py-0.5 rounded text-xs">
+                  {chaveParaExcluir.codigo_chave}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-bold uppercase text-[10px]">Identificador / Local:</span>
+                <span className="font-bold text-slate-900 text-xs">{chaveParaExcluir.nome_chave}</span>
+              </div>
+              {chaveParaExcluir.unidade && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-bold uppercase text-[10px]">Unidade / Bloco:</span>
+                  <span className="font-bold text-slate-700">
+                    {formatarIdentificacaoUnidade(chaveParaExcluir.unidade, chaveParaExcluir.bloco, condoConfig?.tipo_estrutura)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-bold uppercase text-[10px]">Situação:</span>
+                <span className={`font-black text-[10px] px-2 py-0.5 rounded-full ${
+                  chaveParaExcluir.status === 'Disponível' 
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }`}>
+                  {chaveParaExcluir.status || 'Disponível'}
+                </span>
+              </div>
+            </div>
+
+            {chaveParaExcluir.status === 'Emprestada' && (
+              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-2.5 text-xs text-amber-900">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Atenção:</strong> Esta chave consta como emprestada no momento. Ao confirmar a exclusão, a pendência será encerrada do quadro.
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setChaveParaExcluir(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executarExclusaoChave}
+                disabled={loading}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs rounded-xl transition shadow-md shadow-red-600/30 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{loading ? 'Excluindo...' : 'Sim, Excluir Chave'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
