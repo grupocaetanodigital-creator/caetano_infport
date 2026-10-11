@@ -94,7 +94,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
-  const eAdmin = operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
+  const eSuperAdminGlobal = (operador?.login === 'admin' || operador?.perfil === 'admin_geral' || (Number(operador?.nivel_acesso) === 0 && (!operador?.condominio_id || operador?.condominio_id === 'global')));
+  const eAdmin = eSuperAdminGlobal || operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
   const eSindico = operador?.nivel_acesso === 4 || 
                    operador?.perfil === 'sindico' || 
                    operador?.perfil === 'Síndico' || 
@@ -464,12 +465,13 @@ export default function App() {
     ...operador,
     somenteLeitura: eSindico,
     eSindico: eSindico,
-    condominio_id: eAdmin ? (condominioAtivoId || '') : (operador.condominio_id || ''),
-    condominio_nome: eAdmin 
+    eSuperAdminGlobal,
+    condominio_id: eSuperAdminGlobal ? (condominioAtivoId || '') : (operador.condominio_id || ''),
+    condominio_nome: eSuperAdminGlobal 
       ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos)'))
       : (condominio?.nome || 'Condomínio Geral'),
-    isGlobal: eAdmin && !condominioAtivoId,
-    listaCondominios: listaCondominios
+    isGlobal: eSuperAdminGlobal && !condominioAtivoId,
+    listaCondominios: eSuperAdminGlobal ? listaCondominios : (condominio ? [condominio] : [])
   } : null;
 
   const modulosDisponiveis = eSindico ? [
@@ -536,7 +538,7 @@ export default function App() {
               </button>
             </div>
 
-            {eAdmin && !eSindico && menuAberto && (
+            {eSuperAdminGlobal && !eSindico && menuAberto && (
               <div className="p-3 bg-slate-800/80 mx-3 mt-3 rounded-xl border border-slate-700/60 space-y-1">
                 <label className="block text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
                   <Filter className="w-3.5 h-3.5" /> Condomínio Ativo
@@ -601,9 +603,17 @@ export default function App() {
                 className="flex items-center gap-2 overflow-hidden cursor-pointer hover:opacity-85 transition group"
                 title="Meu Perfil & Alterar Senha"
               >
-                <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition">
-                  {operador.nome?.charAt(0)}
-                </div>
+                {operador.foto_url ? (
+                  <img 
+                    src={operador.foto_url} 
+                    alt={operador.nome} 
+                    className="w-8 h-8 rounded-full object-cover border-2 border-emerald-400 shrink-0" 
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition">
+                    {operador.nome?.charAt(0)}
+                  </div>
+                )}
                 <div className="truncate">
                   <p className="text-xs sm:text-sm font-bold text-white truncate flex items-center gap-1">
                     {operador.nome}
@@ -651,7 +661,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {eAdmin && !eSindico && (
+                {eSuperAdminGlobal && !eSindico && (
                   <div className="my-3 p-2.5 bg-slate-800 rounded-xl space-y-1">
                     <label className="text-xs font-bold text-emerald-400 uppercase">Condomínio Ativo</label>
                     <select
@@ -714,13 +724,33 @@ export default function App() {
               </div>
 
               <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-                <div className="truncate">
-                  <p className="text-xs sm:text-sm font-bold text-white truncate">{operador.nome}</p>
-                  <p className="text-xs text-slate-400 uppercase">{operadorContextoGlobal.condominio_nome}</p>
+                <div 
+                  onClick={() => {
+                    setModalMeuPerfilAberto(true);
+                    setDrawerMobileAberto(false);
+                  }}
+                  className="flex items-center gap-2.5 truncate cursor-pointer hover:opacity-85 transition"
+                >
+                  {operador.foto_url ? (
+                    <img 
+                      src={operador.foto_url} 
+                      alt={operador.nome} 
+                      className="w-9 h-9 rounded-full object-cover border-2 border-emerald-400 shrink-0" 
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-slate-800 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                      {operador.nome?.charAt(0)}
+                    </div>
+                  )}
+                  <div className="truncate">
+                    <p className="text-xs sm:text-sm font-bold text-white truncate">{operador.nome}</p>
+                    <p className="text-[10px] text-slate-400 uppercase">{operadorContextoGlobal.condominio_nome}</p>
+                  </div>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="bg-red-600 text-white p-2.5 rounded-xl font-bold text-xs"
+                  className="bg-red-600 hover:bg-red-700 text-white p-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
+                  title="Sair do Sistema"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -747,7 +777,7 @@ export default function App() {
             <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
               <EmblemaInfport tamanho="sm" comBrilho />
               <div className="min-w-0 flex-1">
-                {eAdmin && !eSindico ? (
+                {eSuperAdminGlobal && !eSindico ? (
                   <select
                     value={condominioAtivoId}
                     onChange={(e) => {
@@ -775,36 +805,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {!eSindico && (
-                <button
-                  type="button"
-                  onClick={() => setModalSupabaseDoctorAberto(true)}
-                  className="p-1.5 text-sky-400 hover:text-white bg-slate-800 hover:bg-sky-600 rounded-lg transition cursor-pointer flex items-center gap-1 text-xs font-bold"
-                  title="Diagnóstico & Sincronização do Supabase"
-                >
-                  <Database className="w-4 h-4 text-sky-400" />
-                  <span className="hidden lg:inline text-[11px]">Banco Supabase</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setModalMeuPerfilAberto(true)}
-                className="p-1.5 text-slate-300 hover:text-emerald-400 bg-slate-800 hover:bg-slate-700 rounded-lg transition cursor-pointer"
-                title="Meu Perfil & Senha"
-              >
-                <KeyRound className="w-4 h-4" />
-              </button>
-              {!eSindico && (
-                <button
-                  onClick={() => setModalLeitorNfcGlobal(true)}
-                  className="p-1.5 text-emerald-400 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition cursor-pointer"
-                  title="Leitor de Tags & Cartões NFC"
-                >
-                  <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-                </button>
-              )}
-            </div>
+            {/* Apenas Logo, Nome do Condomínio e Operador permanecem no Cabeçalho */}
           </header>
 
           {moduloAtual !== 'dashboard' && !eSindico && (
@@ -833,50 +834,10 @@ export default function App() {
             {moduloAtual === 'dashboard' && (
               <div className="max-w-4xl mx-auto space-y-3">
                 
-                {/* Faixa Rápida de Status do Posto (Sleek & Sem Duplicações) */}
-                <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl shadow-xs flex items-center justify-between gap-2 border border-slate-800">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    <div className="truncate flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-bold text-white">Posto Ativo:</span>
-                      {eAdmin && !eSindico ? (
-                        <select
-                          value={condominioAtivoId}
-                          onChange={(e) => {
-                            const novoId = e.target.value;
-                            setCondominioAtivoId(novoId);
-                            localStorage.setItem('infport_condominio_ativo_id', novoId);
-                            const cObj = listaCondominios.find(c => c.id === novoId);
-                            if (cObj) setCondominio(cObj);
-                          }}
-                          className="bg-slate-800 text-emerald-400 font-extrabold text-xs px-2 py-0.5 rounded-lg border border-slate-700 hover:border-emerald-500 transition cursor-pointer max-w-[260px] truncate"
-                        >
-                          <option value="">🏢 Todos (Visão Global)</option>
-                          {listaCondominios.map((c) => (
-                            <option key={c.id} value={c.id}>🏢 {c.nome}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-emerald-400 font-extrabold text-xs">{operadorContextoGlobal.condominio_nome || 'Condomínio'}</span>
-                      )}
-                      <span className="text-[11px] text-slate-300 truncate hidden sm:inline">
-                        • Plantão: <strong className="text-white">{operador.nome || 'Caetano'}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <ControleFonteAcessibilidade />
-                    <PWAInstallButton />
-                    <button
-                      onClick={() => setModalLeitorNfcGlobal(true)}
-                      className="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold px-2 py-1 rounded-lg text-xs flex items-center gap-1 transition cursor-pointer"
-                      title="Abrir Leitor de Tags e Cartões NFC"
-                    >
-                      <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                      <span className="hidden sm:inline">NFC</span>
-                    </button>
-                  </div>
+                {/* Bloco Utilitário: Botão Instalar App e Porcentagem de Acessibilidade */}
+                <div className="flex items-center justify-end gap-2 p-1">
+                  <ControleFonteAcessibilidade />
+                  <PWAInstallButton />
                 </div>
 
                 {/* Grid dos Módulos Operacionais Otimizado (Ícones Compactos e Fáceis de Clicar) */}
