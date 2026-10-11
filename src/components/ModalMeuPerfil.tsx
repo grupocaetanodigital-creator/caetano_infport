@@ -11,8 +11,11 @@ import {
   CheckCircle2, 
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Camera,
+  Trash2
 } from 'lucide-react';
+import { comprimirImagemBase64 } from '../services/imageUtils';
 
 interface ModalMeuPerfilProps {
   isOpen: boolean;
@@ -30,6 +33,7 @@ export default function ModalMeuPerfil({
   onOperadorAtualizado
 }: ModalMeuPerfilProps) {
   const [nome, setNome] = useState(operador?.nome || '');
+  const [fotoUrl, setFotoUrl] = useState(operador?.foto_url || '');
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmaNovaSenha, setConfirmaNovaSenha] = useState('');
@@ -38,6 +42,17 @@ export default function ModalMeuPerfil({
   const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
 
   if (!isOpen || !operador) return null;
+
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const base64 = await comprimirImagemBase64(file, 400, 400, 0.82);
+      setFotoUrl(base64);
+    } catch (err) {
+      console.error('Erro ao processar imagem:', err);
+    }
+  };
 
   const getNivelNome = (nivel?: number) => {
     switch (nivel) {
@@ -71,8 +86,9 @@ export default function ModalMeuPerfil({
 
     setLoading(true);
     try {
-      const payload: { nome: string; senha?: string } = {
-        nome: nome.trim()
+      const payload: { nome: string; senha?: string; foto_url?: string | null } = {
+        nome: nome.trim(),
+        foto_url: fotoUrl || null
       };
 
       if (novaSenha.trim()) {
@@ -89,6 +105,7 @@ export default function ModalMeuPerfil({
       const operadorAtualizado = {
         ...operador,
         nome: payload.nome,
+        foto_url: payload.foto_url,
         ...(payload.senha ? { senha: payload.senha } : {})
       };
 
@@ -112,8 +129,8 @@ export default function ModalMeuPerfil({
       setMensagem({ 
         tipo: 'sucesso', 
         texto: novaSenha.trim() 
-          ? 'Dados e senha atualizados com sucesso no banco de dados!' 
-          : 'Dados do operador atualizados com sucesso!' 
+          ? 'Foto, dados e senha atualizados com sucesso no banco de dados!' 
+          : 'Foto de perfil e dados atualizados com sucesso!' 
       });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: `Falha ao atualizar dados: ${err.message || 'Erro desconhecido'}` });
@@ -160,6 +177,51 @@ export default function ModalMeuPerfil({
               <span>{mensagem.texto}</span>
             </div>
           )}
+
+          {/* Foto de Perfil do Operador */}
+          <div className="flex items-center gap-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+            <div className="relative group shrink-0">
+              {fotoUrl ? (
+                <img 
+                  src={fotoUrl} 
+                  alt={nome} 
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-500 shadow-sm" 
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-slate-800 text-emerald-400 font-black text-xl flex items-center justify-center border-2 border-slate-700 shadow-sm">
+                  {nome ? nome.charAt(0).toUpperCase() : 'OP'}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 space-y-1">
+              <span className="text-xs font-bold text-slate-800 block">Foto de Perfil</span>
+              <p className="text-[11px] text-slate-500">Aparecerá no cabeçalho e nos relatórios de portaria.</p>
+              <div className="flex items-center gap-2 pt-0.5">
+                <label className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition shadow-2xs">
+                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{fotoUrl ? 'Trocar Foto' : 'Tirar / Carregar Foto'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="user"
+                    onChange={handleFotoUpload}
+                    className="hidden"
+                  />
+                </label>
+                {fotoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setFotoUrl('')}
+                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                    title="Remover foto"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Cards de Identificação */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
