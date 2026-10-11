@@ -140,6 +140,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
   const [textoListaUnidades, setTextoListaUnidades] = useState<string>('');
   const [modalAddUnidadeAvulsaAberto, setModalAddUnidadeAvulsaAberto] = useState<boolean>(false);
   const [novaUnidadeAvulsaNumero, setNovaUnidadeAvulsaNumero] = useState<string>('');
+  const [unidadeModalAberta, setUnidadeModalAberta] = useState<any | null>(null);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -1197,7 +1198,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                       )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -1205,18 +1206,18 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                           setCondominioIdMorador(c.id);
                           setAbaAtiva('moradores');
                         }}
-                        className="px-3 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black rounded-xl border border-emerald-200 transition cursor-pointer flex items-center justify-center gap-1"
+                        className="w-full py-2 px-3 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black rounded-xl border border-emerald-200 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                         title="Ver e gerenciar cards de casas e moradores deste condomínio"
                       >
-                        <Home className="w-3.5 h-3.5 text-emerald-700" />
-                        <span>Gerenciar {cfg.unidades_por_bloco || 117} Casas</span>
+                        <Home className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span className="truncate">Gerenciar {isEstruturaCasas(cfg.tipo_estrutura) ? `${cfg.unidades_por_bloco || 117} Casas` : `${(cfg.qtd_blocos || 1) * (cfg.unidades_por_bloco || 20)} Unidades`}</span>
                       </button>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setCondominioFiltroAdmin(c.id)}
-                          className="px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition cursor-pointer"
+                          className="flex-1 py-1.5 px-2.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition cursor-pointer text-center"
                         >
                           Filtrar
                         </button>
@@ -1224,9 +1225,9 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                         <button
                           type="button"
                           onClick={() => prepararEdicaoCondominio(c)}
-                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
+                          className="flex-2 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          <Pencil className="w-3.5 h-3.5 shrink-0" />
                           <span>Editar no Card</span>
                         </button>
                       </div>
@@ -1593,173 +1594,48 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     return (
                       <div
                         key={item.unidade.id}
-                        className={`bg-white rounded-2xl border p-3.5 shadow-2xs hover:shadow-sm transition flex flex-col justify-between space-y-3 ${
+                        onClick={() => setUnidadeModalAberta(item)}
+                        className={`rounded-2xl border p-3.5 shadow-2xs hover:shadow-md transition flex flex-col justify-between gap-3 cursor-pointer group select-none ${
                           item.ocupada 
-                            ? 'border-emerald-200 hover:border-emerald-400 bg-gradient-to-b from-emerald-50/20 to-white' 
-                            : 'border-slate-200 hover:border-slate-300'
+                            ? 'bg-white hover:bg-emerald-50/40 border-slate-200 hover:border-emerald-400' 
+                            : 'bg-slate-50/70 hover:bg-slate-100 border-dashed border-slate-300 hover:border-slate-400'
                         }`}
                       >
-                        {/* Topo do Card: Número da Casa / Unidade e Status */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-2">
-                            {unidadeEditandoId === item.unidade.id ? (
-                              /* Modo de Edição Inline do Número da Casa */
-                              <div className="flex items-center gap-1 bg-amber-50 border-2 border-amber-400 rounded-xl px-2 py-1 shadow-xs">
-                                <span className="text-[10px] font-black uppercase text-amber-900 flex items-center gap-1">
-                                  <Home className="w-3 h-3 text-amber-700" />
-                                  {eEstruturaCasasAtivo ? 'CASA' : 'UND'}
-                                </span>
-                                <input
-                                  type="text"
-                                  value={novoNumeroUnidade}
-                                  onChange={(e) => setNovoNumeroUnidade(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      salvarEdicaoNumeroUnidade(item.unidade, novoNumeroUnidade);
-                                    } else if (e.key === 'Escape') {
-                                      setUnidadeEditandoId(null);
-                                    }
-                                  }}
-                                  placeholder="Ex: 12A"
-                                  autoFocus
-                                  disabled={salvandoNumeroUnidade}
-                                  className="w-16 px-1.5 py-0.5 text-xs font-black bg-white border border-amber-400 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => salvarEdicaoNumeroUnidade(item.unidade, novoNumeroUnidade)}
-                                  disabled={salvandoNumeroUnidade}
-                                  className="p-1 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100 rounded-md transition cursor-pointer font-bold"
-                                  title="Salvar novo número da casa (Enter)"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setUnidadeEditandoId(null)}
-                                  disabled={salvandoNumeroUnidade}
-                                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-md transition cursor-pointer"
-                                  title="Cancelar (Esc)"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              /* Badge Interativo Editável (Destacado em Amarelo como solicitado) */
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => iniciarEdicaoNumero(item.unidade)}
-                                  title="Clique para editar o número ou identificação desta casa (ex: 12A, 102...)"
-                                  className={`group px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs transition hover:scale-102 cursor-pointer border ${
-                                    eEstruturaCasasAtivo 
-                                      ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300 ring-1 ring-amber-300/60' 
-                                      : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-950 border-indigo-300'
-                                  }`}
-                                >
-                                  <Home className="w-3.5 h-3.5 text-amber-800" />
-                                  <span>{eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}</span>
-                                  <span className="p-0.5 bg-amber-200/90 group-hover:bg-amber-300 text-amber-900 rounded-md transition ml-0.5" title="Editar número">
-                                    <Pencil className="w-2.5 h-2.5" />
-                                  </span>
-                                </button>
-                              </div>
-                            )}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition ${
+                              item.ocupada ? 'bg-amber-100 text-amber-900 border border-amber-300 group-hover:scale-105' : 'bg-slate-200 text-slate-500'
+                            }`}>
+                              <Home className="w-4 h-4 text-amber-800" />
+                            </div>
 
+                            <div className="min-w-0">
+                              <span className="text-xs sm:text-sm font-black text-slate-900 block truncate group-hover:text-emerald-950">
+                                {eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}
+                              </span>
+                              <span className="text-[10px] text-slate-500 block truncate">
+                                {item.ocupada ? `${item.moradores.length} ${item.moradores.length > 1 ? 'moradores cadastrados' : 'morador cadastrado'}` : 'Casa disponível'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0">
                             {item.ocupada ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span className="text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                 {item.moradores.length} {item.moradores.length > 1 ? 'Moradores' : 'Morador'}
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-600 border border-slate-300">
                                 Disponível
                               </span>
                             )}
                           </div>
-
-                          {/* Lista de Moradores da Unidade / Casa */}
-                          {item.moradores.length > 0 ? (
-                            <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
-                              {item.moradores.map((m) => {
-                                const telLimpo = (m.telefone || '').replace(/\D/g, '');
-                                return (
-                                  <div
-                                    key={m.id}
-                                    className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200/80 space-y-1 transition"
-                                  >
-                                    <div className="flex items-start justify-between gap-1">
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-black text-slate-900 truncate flex items-center gap-1" title={m.nome}>
-                                          <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                                          <span className="truncate">{m.nome}</span>
-                                        </p>
-                                        <p className="text-[11px] text-slate-500 truncate">
-                                          {m.telefone || 'Sem telefone'}
-                                        </p>
-                                      </div>
-
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        {telLimpo && (
-                                          <a
-                                            href={`https://wa.me/55${telLimpo}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="p-1 text-emerald-700 hover:bg-emerald-100 rounded-lg transition"
-                                            title="WhatsApp"
-                                          >
-                                            <MessageCircle className="w-3.5 h-3.5" />
-                                          </a>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={() => prepararEdicaoMorador(m)}
-                                          className="p-1 text-slate-600 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition cursor-pointer"
-                                          title="Editar Morador"
-                                        >
-                                          <Pencil className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => excluirMorador(m)}
-                                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                                          title="Excluir Morador"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="py-3 px-2 bg-slate-50/80 rounded-xl border border-dashed border-slate-200 text-center space-y-1">
-                              <p className="text-[11px] font-semibold text-slate-400">
-                                Casa sem morador cadastrado
-                              </p>
-                              <p className="text-[10px] text-slate-400/80">
-                                Clique abaixo para cadastrar.
-                              </p>
-                            </div>
-                          )}
                         </div>
 
-                        {/* Botão de Ação Direta no Card da Casa */}
-                        <div className="pt-2 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => abrirNovoMorador({ numero: item.unidade.numero, bloco: item.unidade.bloco })}
-                            className="w-full py-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-800 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border border-emerald-200 hover:border-emerald-600 cursor-pointer shadow-2xs active:scale-95"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>
-                              {eEstruturaCasasAtivo 
-                                ? (item.ocupada ? `+ Outro Morador na Casa ${item.unidade.numero}` : `+ Cadastrar Casa ${item.unidade.numero}`)
-                                : (item.ocupada ? `+ Outro Morador` : `+ Cadastrar Unidade`)}
-                            </span>
-                          </button>
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 group-hover:text-emerald-700 transition font-bold">
+                          <span>Ver / Gerenciar Moradores</span>
+                          <span className="text-xs group-hover:translate-x-0.5 transition-transform">→</span>
                         </div>
                       </div>
                     );
@@ -2677,6 +2553,143 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
           </div>
         </div>
       )}
+
+      {/* MODAL: GERENCIAR MORADORES DA UNIDADE / CASA */}
+      {unidadeModalAberta && (() => {
+        const itemUnidade = unidadesComMoradores.find((u: any) => u.unidade.id === unidadeModalAberta.unidade.id) || unidadeModalAberta;
+        const totalMoradores = itemUnidade.moradores.length;
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-5 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+              <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center">
+                    <Home className="w-5 h-5 text-amber-800" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                      <span>{eEstruturaCasasAtivo ? `CASA ${itemUnidade.unidade.numero}` : itemUnidade.unidade.label}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        totalMoradores > 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}>
+                        {totalMoradores > 0 ? `${totalMoradores} ${totalMoradores > 1 ? 'Moradores' : 'Morador'}` : 'Disponível'}
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Gerenciamento e cadastro de residentes desta unidade.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setUnidadeModalAberta(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Botão de Adicionar Morador nesta Unidade */}
+              <div className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    abrirNovoMorador({ numero: itemUnidade.unidade.numero, bloco: itemUnidade.unidade.bloco });
+                  }}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>
+                    {totalMoradores > 0 
+                      ? `+ Adicionar Outro Morador na ${eEstruturaCasasAtivo ? `Casa ${itemUnidade.unidade.numero}` : 'Unidade'}`
+                      : `+ Cadastrar Morador na ${eEstruturaCasasAtivo ? `Casa ${itemUnidade.unidade.numero}` : 'Unidade'}`}
+                  </span>
+                </button>
+              </div>
+
+              {/* Lista dos Moradores da Unidade */}
+              <div className="overflow-y-auto space-y-2.5 pr-1 flex-1">
+                {totalMoradores > 0 ? (
+                  itemUnidade.moradores.map((m: any) => {
+                    const telLimpo = (m.telefone || '').replace(/\D/g, '');
+
+                    return (
+                      <div
+                        key={m.id}
+                        className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200 flex items-center justify-between gap-2 transition"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-slate-900 truncate flex items-center gap-1.5">
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">{m.nome}</span>
+                          </p>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                            {m.telefone ? `📞 ${m.telefone}` : 'Telefone não informado'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {telLimpo && (
+                            <a
+                              href={`https://wa.me/55${telLimpo}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-2 text-emerald-700 hover:bg-emerald-100 rounded-lg transition"
+                              title="Conversar no WhatsApp"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </a>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => prepararEdicaoMorador(m)}
+                            className="p-2 text-slate-600 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition cursor-pointer"
+                            title="Editar Dados do Morador"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => excluirMorador(m)}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="Excluir Morador"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 px-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-1.5">
+                    <Home className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold text-slate-600">
+                      Nenhum morador cadastrado nesta {eEstruturaCasasAtivo ? 'casa' : 'unidade'}.
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Utilize o botão acima para cadastrar o primeiro morador.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setUnidadeModalAberta(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
