@@ -3,6 +3,11 @@ import { supabase } from '../services/supabase';
 import ModalLeitorDocumentoOCR from '../components/ModalLeitorDocumentoOCR';
 import { registrarAtividade } from '../services/auditoriaService';
 import { 
+  carregarCondominioConfig,
+  isEstruturaCasas,
+  formatarIdentificacaoUnidade
+} from '../services/condominioService';
+import { 
   UserCheck, 
   Building2, 
   Clock, 
@@ -68,6 +73,25 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
   const idCondominio = usuarioLogado?.condominio_id || usuarioLogado?.condominio?.id || '';
   const isGlobal = !idCondominio || idCondominio === 'global';
   const operadorNome = usuarioLogado?.nome || usuarioLogado?.login || 'Operador da Portaria';
+
+  // Configuração da estrutura do condomínio (Casas vs Torres vs Blocos)
+  const [condoConfig, setCondoConfig] = useState<any>(null);
+
+  useEffect(() => {
+    async function carregarConfigCondo() {
+      if (idCondominio && idCondominio !== 'global') {
+        try {
+          const cfg = await carregarCondominioConfig(idCondominio);
+          setCondoConfig(cfg);
+        } catch (e) {
+          console.warn('Erro ao carregar configuracao do condominio:', e);
+        }
+      }
+    }
+    carregarConfigCondo();
+  }, [idCondominio]);
+
+  const eEstruturaCasas = isEstruturaCasas(condoConfig?.tipo_estrutura);
 
   // Abas principais (Removida aba SQL da tela conforme solicitação)
   const [abaAtiva, setAbaAtiva] = useState<'dentro' | 'cadastros' | 'historico'>('dentro');
@@ -327,11 +351,12 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         telefone: telefone.trim() || null,
         placa_veiculo: placaVeiculo.trim() || null,
         foto_rosto: fotoRosto || null,
+        foto_url: fotoRosto || null,
         foto_documento: fotoDocumento || null,
         tipo_servico: tipoServico.trim() || null,
         atende_condominio: perfilAcesso === 'prestador_condominio',
         unidade: perfilAcesso === 'prestador_condominio' ? 'Condomínio' : unidade.trim(),
-        bloco: perfilAcesso === 'prestador_condominio' ? 'Área Comum' : bloco.trim(),
+        bloco: perfilAcesso === 'prestador_condominio' ? 'Área Comum' : (eEstruturaCasas ? 'Casa' : bloco.trim()),
         observacoes: observacoes.trim(),
         tipo_validade: tipoValidade,
         data_validade_inicio: datasValidade.inicio,
@@ -531,12 +556,12 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     }
 
     if (perfilAcesso === 'autorizado' && !unidade.trim()) {
-      alert('Para Autorizados (Visitantes/Família), informe a Unidade/Apartamento de destino.');
+      alert(`Para Autorizados (Visitantes/Família), informe ${eEstruturaCasas ? 'o Número da Casa' : 'a Unidade/Apartamento'} de destino.`);
       return;
     }
 
     if (perfilAcesso === 'prestador_unidade' && (!documento.trim() || !unidade.trim())) {
-      alert('Para Prestadores da Unidade, o Documento e a Unidade de destino são obrigatórios.');
+      alert(`Para Prestadores da Unidade, o Documento e ${eEstruturaCasas ? 'o Número da Casa' : 'a Unidade'} de destino são obrigatórios.`);
       return;
     }
 
@@ -560,11 +585,12 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         telefone: telefone.trim() || null,
         placa_veiculo: placaVeiculo.trim() || null,
         foto_rosto: fotoRosto || null,
+        foto_url: fotoRosto || null,
         foto_documento: fotoDocumento || null,
         tipo_servico: tipoServico.trim() || (perfilAcesso === 'autorizado' ? 'Visita Familiar' : 'Prestação de Serviço'),
         atende_condominio: perfilAcesso === 'prestador_condominio',
         unidade: perfilAcesso === 'prestador_condominio' ? 'Condomínio' : unidade.trim(),
-        bloco: perfilAcesso === 'prestador_condominio' ? 'Área Comum' : bloco.trim(),
+        bloco: perfilAcesso === 'prestador_condominio' ? 'Área Comum' : (eEstruturaCasas ? 'Casa' : bloco.trim()),
         observacoes: observacoes.trim(),
         tipo_validade: tipoValidade,
         data_validade_inicio: datasValidade.inicio,
@@ -831,7 +857,8 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
         (!item.bloco || m.bloco?.toString().trim().toLowerCase() === item.bloco?.toString().trim().toLowerCase())
       );
       const telMorador = moradorDestino?.telefone?.replace(/\D/g, '') || item.telefone?.replace(/\D/g, '') || '';
-      const texto = `Olá! Informamos que *${nome}* acabou de registrar *ENTRADA* na portaria para a sua unidade (Ap. ${item.unidade}${item.bloco ? ' Bloco ' + item.bloco : ''}) às *${hora}*.`;
+      const rotuloDestino = formatarIdentificacaoUnidade(item.unidade, item.bloco, condoConfig?.tipo_estrutura);
+      const texto = `Olá! Informamos que *${nome}* acabou de registrar *ENTRADA* na portaria para ${rotuloDestino} às *${hora}*.`;
       const url = telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(texto)}` : `https://wa.me/?text=${encodeURIComponent(texto)}`;
       window.open(url, '_blank');
     }
@@ -1076,11 +1103,11 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-3">
                           <div 
-                            onClick={() => item.foto_rosto && setModalVisualizarFoto(item.foto_rosto)}
+                            onClick={() => (item.foto_rosto || item.foto_url) && setModalVisualizarFoto(item.foto_rosto || item.foto_url)}
                             className="w-14 h-14 rounded-2xl bg-slate-800 border-2 border-slate-700 overflow-hidden shrink-0 cursor-pointer flex items-center justify-center text-slate-500 relative group"
                           >
-                            {item.foto_rosto ? (
-                              <img src={item.foto_rosto} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            {(item.foto_rosto || item.foto_url) ? (
+                              <img src={item.foto_rosto || item.foto_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
                             ) : (
                               <UserCheck className="w-7 h-7" />
                             )}
@@ -1110,7 +1137,9 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                         <div className="flex items-center justify-between text-slate-300">
                           <span className="text-slate-400">Destino:</span>
                           <span className="font-bold text-white">
-                            {perfil === 'prestador_condominio' ? 'Área Comum / Condomínio' : `Ap. ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}`}
+                            {perfil === 'prestador_condominio' 
+                              ? 'Área Comum / Condomínio' 
+                              : formatarIdentificacaoUnidade(item.unidade, item.bloco, condoConfig?.tipo_estrutura)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-slate-300">
@@ -1269,11 +1298,11 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                   >
                     <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
                       <div
-                        onClick={() => item.foto_rosto && setModalVisualizarFoto(item.foto_rosto)}
+                        onClick={() => (item.foto_rosto || item.foto_url) && setModalVisualizarFoto(item.foto_rosto || item.foto_url)}
                         className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 cursor-pointer"
                       >
-                        {item.foto_rosto ? (
-                          <img src={item.foto_rosto} alt="" className="w-full h-full object-cover" />
+                        {(item.foto_rosto || item.foto_url) ? (
+                          <img src={item.foto_rosto || item.foto_url} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <UserCheck className="w-6 h-6" />
                         )}
@@ -1312,7 +1341,9 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                           )}
                           <span>
                             Destino: <strong className="text-amber-300">
-                              {perfil === 'prestador_condominio' ? 'Área Comum' : `Ap. ${item.unidade} ${item.bloco ? 'Bloco ' + item.bloco : ''}`}
+                              {perfil === 'prestador_condominio' 
+                                ? 'Área Comum' 
+                                : formatarIdentificacaoUnidade(item.unidade, item.bloco, condoConfig?.tipo_estrutura)}
                             </strong>
                           </span>
                         </div>
@@ -1397,19 +1428,31 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 return (
                   <div
                     key={h.id}
-                    className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800 text-xs text-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+                    className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800 text-xs text-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${perfilBadge(h.perfil_acesso)}`}>
-                          {perfilNome(h.perfil_acesso)}
-                        </span>
-                        <strong className="text-white text-sm">{h.nome_completo}</strong>
-                        {h.cracha && <span className="font-mono text-amber-300">Crachá {h.cracha}</span>}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div 
+                        onClick={() => (h.foto_rosto || h.foto_url) && setModalVisualizarFoto(h.foto_rosto || h.foto_url)}
+                        className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 cursor-pointer"
+                      >
+                        {(h.foto_rosto || h.foto_url) ? (
+                          <img src={h.foto_rosto || h.foto_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <UserCheck className="w-5 h-5" />
+                        )}
                       </div>
-                      <p className="text-slate-400 text-[11px] mt-0.5">
-                        Destino: <strong className="text-slate-200">Ap. {h.unidade} {h.bloco || ''}</strong> • Empresa/Vínculo: {h.empresa || h.parentesco_vinculo || 'Geral'}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${perfilBadge(h.perfil_acesso)}`}>
+                            {perfilNome(h.perfil_acesso)}
+                          </span>
+                          <strong className="text-white text-sm truncate">{h.nome_completo}</strong>
+                          {h.cracha && <span className="font-mono text-amber-300">Crachá {h.cracha}</span>}
+                        </div>
+                        <p className="text-slate-400 text-[11px] mt-0.5 truncate">
+                          Destino: <strong className="text-slate-200">{formatarIdentificacaoUnidade(h.unidade, h.bloco, condoConfig?.tipo_estrutura)}</strong> • Empresa/Vínculo: {h.empresa || h.parentesco_vinculo || 'Geral'}
+                        </p>
+                      </div>
                     </div>
 
                     <div className="text-[11px] font-mono space-y-0.5 text-right self-end sm:self-center">
@@ -1548,7 +1591,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
             <form onSubmit={modalEditarCadastro ? salvarEdicaoCadastro : salvarCadastro} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
+                <div className={perfilAcesso === 'autorizado' ? 'sm:col-span-3' : 'sm:col-span-2'}>
                   <label className="block text-xs font-black uppercase text-slate-300 mb-1">
                     Nome Completo <span className="text-red-400">*</span>
                   </label>
@@ -1562,19 +1605,21 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-black uppercase text-slate-400 mb-1">
-                    Leitor Inteligente OCR
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setModalOcrAberto(true)}
-                    className="w-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-bold text-xs p-2.5 rounded-xl border border-indigo-500/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Scan className="w-4 h-4 text-indigo-400" />
-                    <span>Ler Documento</span>
-                  </button>
-                </div>
+                {perfilAcesso !== 'autorizado' && (
+                  <div>
+                    <label className="block text-xs font-black uppercase text-slate-400 mb-1">
+                      Leitor Inteligente OCR
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setModalOcrAberto(true)}
+                      className="w-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-bold text-xs p-2.5 rounded-xl border border-indigo-500/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Scan className="w-4 h-4 text-indigo-400" />
+                      <span>Ler Documento</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Documento e Empresa / Parentesco com Opções Padronizadas */}
@@ -1681,33 +1726,35 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
               {/* Destino */}
               {perfilAcesso !== 'prestador_condominio' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                <div className={`grid gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800 ${eEstruturaCasas ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                   <div>
                     <label className="block text-xs font-black uppercase text-slate-300 mb-1">
-                      Apartamento / Unidade de Destino <span className="text-red-400">*</span>
+                      {eEstruturaCasas ? 'Número da Casa' : 'Apartamento / Unidade de Destino'} <span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
                       required
                       value={unidade}
                       onChange={(e) => setUnidade(e.target.value)}
-                      placeholder="Ex: 102"
+                      placeholder={eEstruturaCasas ? "Ex: 45 ou 102" : "Ex: 102"}
                       className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-bold"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-black uppercase text-slate-300 mb-1">
-                      Bloco (se houver)
-                    </label>
-                    <input
-                      type="text"
-                      value={bloco}
-                      onChange={(e) => setBloco(e.target.value)}
-                      placeholder="Ex: Bloco A"
-                      className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
+                  {!eEstruturaCasas && (
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-300 mb-1">
+                        Bloco (se houver)
+                      </label>
+                      <input
+                        type="text"
+                        value={bloco}
+                        onChange={(e) => setBloco(e.target.value)}
+                        placeholder="Ex: Bloco A"
+                        className="w-full bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1897,7 +1944,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                   {itemSelecionado.nome_profissional || itemSelecionado.nome_completo}
                 </h4>
                 <p className="text-xs text-slate-300">
-                  {itemSelecionado.empresa || itemSelecionado.parentesco_vinculo || 'Visitante'} • Destino: <strong>Ap. {itemSelecionado.unidade} {itemSelecionado.bloco || ''}</strong>
+                  {itemSelecionado.empresa || itemSelecionado.parentesco_vinculo || 'Visitante'} • Destino: <strong>{formatarIdentificacaoUnidade(itemSelecionado.unidade, itemSelecionado.bloco, condoConfig?.tipo_estrutura)}</strong>
                 </p>
               </div>
             </div>
@@ -2087,7 +2134,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 {itemSelecionado.nome_completo || itemSelecionado.nome_profissional}
               </strong>
               <p className="text-xs text-slate-400">
-                Destino: Ap. {itemSelecionado.unidade} {itemSelecionado.bloco || ''}
+                Destino: {formatarIdentificacaoUnidade(itemSelecionado.unidade, itemSelecionado.bloco, condoConfig?.tipo_estrutura)}
               </p>
               {itemSelecionado.cracha && (
                 <p className="text-xs text-amber-300 font-mono font-bold pt-1">
