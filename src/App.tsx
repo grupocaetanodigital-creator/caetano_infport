@@ -25,6 +25,7 @@ import SupabaseDoctorModal from './components/SupabaseDoctorModal';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
 import { registrarAtividade } from './services/auditoriaService';
+import { carregarNiveisAcesso } from './services/permissoesService';
 import { 
   ShieldCheck, 
   Lock, 
@@ -137,12 +138,15 @@ export default function App() {
               const targetCondo = sessao.condominioId || opData.condominio_id;
               setCondominioAtivoId(targetCondo || '');
               if (targetCondo) {
+                carregarNiveisAcesso(targetCondo);
                 const { data: cData } = await supabase
                   .from('condominios')
                   .select('*')
                   .eq('id', targetCondo)
                   .maybeSingle();
                 if (cData && montado) setCondominio(cData);
+              } else {
+                carregarNiveisAcesso();
               }
             }
           }
@@ -395,6 +399,7 @@ export default function App() {
       setOperador(opData);
       setCondominio(condData || { nome: 'Administração Geral Dev' });
       setCondominioAtivoId(opData.condominio_id || '');
+      carregarNiveisAcesso(opData.condominio_id);
 
       if (lembrarAcesso) {
         localStorage.setItem(CHAVE_SESSAO, JSON.stringify({

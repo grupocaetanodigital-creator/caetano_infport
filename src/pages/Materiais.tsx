@@ -24,11 +24,11 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
   // Nível numérico do usuário logado (0: Admin Geral, 1: Master, 2: Supervisor, 3: Portaria, 4: Síndico)
   const nivelNum = Number(usuarioLogado?.nivel_acesso ?? usuarioLogado?.nivel ?? 3);
 
-  // Permissões granulares de acesso - REGRA ESTRITA: Nível 3 (Porteiro) e Nível 4 (Síndico consulta) NUNCA excluem equipamentos
+  // Permissões granulares de acesso regidas pela matriz de RBAC
   const podeVisualizar = verificarPermissao(usuarioLogado, 'materiais', 'visualizar');
-  const podeCriar = (nivelNum < 3) && (verificarPermissao(usuarioLogado, 'materiais', 'criar') || verificarPermissao(usuarioLogado, 'materiais', 'cadastrar_equipamentos'));
-  const podeEditar = (nivelNum <= 3) && verificarPermissao(usuarioLogado, 'materiais', 'editar');
-  const podeExcluir = (nivelNum < 3) && verificarPermissao(usuarioLogado, 'materiais', 'excluir');
+  const podeCriar = verificarPermissao(usuarioLogado, 'materiais', 'criar') || verificarPermissao(usuarioLogado, 'materiais', 'cadastrar_equipamentos');
+  const podeEditar = verificarPermissao(usuarioLogado, 'materiais', 'editar');
+  const podeExcluir = verificarPermissao(usuarioLogado, 'materiais', 'excluir');
   const [loading, setLoading] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });

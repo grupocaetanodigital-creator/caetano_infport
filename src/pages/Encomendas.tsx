@@ -44,7 +44,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { verificarPermissao } from '../services/permissoesService';
+import { verificarPermissao, carregarNiveisAcesso } from '../services/permissoesService';
 import { 
   carregarCondominioConfig, 
   isEstruturaCasas, 
@@ -109,40 +109,44 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [baixaObsEspecial, setBaixaObsEspecial] = useState('');
   const [baixaNotificarSupervisor, setBaixaNotificarSupervisor] = useState(false);
 
-  // RBAC: Verificação estrita de nível de acesso (0, 1 ou 2)
-  // Operadores de nível 3 OU MAIS não têm acesso a botões de ação e edição
+  // RBAC: Verificação do nível de acesso e permissões configuradas na matriz de Acesso & Permissões
   const nivelNum = usuarioLogado?.nivel_acesso !== undefined && usuarioLogado?.nivel_acesso !== null 
     ? Number(usuarioLogado.nivel_acesso) 
     : 3;
   const perfilStr = (usuarioLogado?.perfil || '').toLowerCase();
   
-  // Usuários com nível de acesso 0, 1 ou 2 (SuperAdmin, Master, Supervisor)
-  const temNivelAutorizado = (nivelNum <= 2) && !perfilStr.includes('porteiro') && !perfilStr.includes('operador');
-  const eNivelElevado = Boolean(
-    temNivelAutorizado ||
-    perfilStr.includes('admin') ||
-    perfilStr.includes('master') ||
-    perfilStr.includes('superv')
-  ) && (nivelNum <= 2);
+  // Superadministradores e Masters têm permissão ampla por padrão
+  const eAdmin = perfilStr === 'admin' || perfilStr === 'admin_geral' || nivelNum === 0 || usuarioLogado?.login === 'admin' || usuarioLogado?.login === 'jaq';
 
-  // Permissões granulares do operador logado por etapa (garantindo que ações fiquem ocultas para nível 3 ou mais)
+  // Permissões granulares do operador logado por etapa - REGIDAS DE FORMA REAL PELA MATRIZ RBAC
   // 1ª Etapa: Recebimento (RE)
-  const podeCadastrarEntregador = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'cadastrar_entregador')));
-  const podeReceberRE = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote')));
-  const podeCriarLote = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'criar_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote')));
-  const podeEditarLotes = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'editar')));
-  const podeExcluirLotes = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir')));
+  const podeCadastrarEntregador = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'cadastrar_entregador'));
+  const podeReceberRE = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote'));
+  const podeCriarLote = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'criar_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote'));
+  const podeEditarLotes = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'editar_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'editar'));
+  const podeExcluirLotes = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir'));
 
   // 2ª Etapa: Triagem
-  const podeFazerTriagem = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'triagem')));
+  const podeFazerTriagem = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'triagem'));
 
-  // 3ª Etapa: Saída / Baixa (operadores podem dar baixa comum se tiverem permissão, mas edição/exclusão de pacotes retidos exige nível 0, 1 ou 2)
-  const podeDarBaixa = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'baixa'));
-  const podeEditarPacote = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'editar')));
-  const podeExcluirPacote = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir')));
+  // 3ª Etapa: Saída / Baixa
+  const podeDarBaixa = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'baixa'));
+  const podeEditarPacote = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'editar_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'editar'));
+  const podeExcluirPacote = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir'));
 
   // 4ª Etapa: Dossiê Completo (Auditoria & Provas)
-  const podeVerDossie = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'dossie')));
+  const podeVerDossie = Boolean(eAdmin || verificarPermissao(usuarioLogado, 'encomendas', 'dossie'));
+
+  // Atualização em tempo real das permissões quando forem salvas na matriz
+  const [, setVersaoPermissoes] = useState(0);
+  useEffect(() => {
+    const condoId = usuarioLogado?.condominio_id || idCondominioAtivo;
+    carregarNiveisAcesso(condoId).then(() => setVersaoPermissoes(v => v + 1));
+
+    const handleAtualizacao = () => setVersaoPermissoes(v => v + 1);
+    window.addEventListener('niveis_acesso_atualizados', handleAtualizacao);
+    return () => window.removeEventListener('niveis_acesso_atualizados', handleAtualizacao);
+  }, [usuarioLogado?.condominio_id, idCondominioAtivo]);
 
   // Estados do Módulo Dossiê Auditável de Encomendas
   const [itensDossie, setItensDossie] = useState<any[]>([]);

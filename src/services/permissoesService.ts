@@ -372,11 +372,17 @@ export async function carregarNiveisAcesso(condominioId?: string): Promise<Nivel
   const locais = obterNiveisLocal();
 
   try {
-    if (condominioId) {
+    let targetCondo = condominioId;
+    if (!targetCondo || targetCondo === 'global') {
+      const { data: c } = await supabase.from('condominios').select('id').limit(1).maybeSingle();
+      if (c?.id) targetCondo = c.id;
+    }
+
+    if (targetCondo) {
       const { data } = await supabase
         .from('configuracoes')
         .select('niveis_acesso')
-        .eq('condominio_id', condominioId)
+        .eq('condominio_id', targetCondo)
         .maybeSingle();
 
       if (data?.niveis_acesso && Array.isArray(data.niveis_acesso) && data.niveis_acesso.length > 0) {
@@ -398,35 +404,40 @@ export async function carregarNiveisAcesso(condominioId?: string): Promise<Nivel
 
 export async function salvarNivelAcesso(nivel: NivelAcessoItem, condominioId?: string): Promise<void> {
   const atuais = obterNiveisLocal();
+  const targetCondo = condominioId || nivel.condominio_id;
+
+  const nivelParaSalvar: NivelAcessoItem = {
+    ...nivel,
+    condominio_id: targetCondo || nivel.condominio_id || null
+  };
+
   const idx = atuais.findIndex(n => n.id === nivel.id);
   let atualizados: NivelAcessoItem[];
 
   if (idx >= 0) {
     atualizados = [...atuais];
-    atualizados[idx] = nivel;
+    atualizados[idx] = nivelParaSalvar;
   } else {
-    atualizados = [...atuais, nivel];
+    atualizados = [...atuais, nivelParaSalvar];
   }
 
   salvarNiveisLocal(atualizados);
 
-  const targetCondo = condominioId || nivel.condominio_id;
   if (targetCondo) {
     try {
-      const customizadosDoCondo = atualizados.filter(n => n.condominio_id === targetCondo || !n.padrao_sistema);
-      // Tenta upsert primeiro garantindo persistência imediata
+      // Salva a lista completa consolidada de níveis para este condomínio (incluindo padrões customizados)
       const { error: upsertErr } = await supabase
         .from('configuracoes')
         .upsert({
           condominio_id: targetCondo,
-          niveis_acesso: customizadosDoCondo
+          niveis_acesso: atualizados
         } as any, { onConflict: 'condominio_id' });
 
       if (upsertErr) {
         // Fallback para update simples
         const { error: updErr } = await supabase
           .from('configuracoes')
-          .update({ niveis_acesso: customizadosDoCondo } as any)
+          .update({ niveis_acesso: atualizados } as any)
           .eq('condominio_id', targetCondo);
         if (updErr) {
           console.warn('Persistência remota de nível no Supabase:', updErr.message);
@@ -597,7 +608,7 @@ export function verificarPermissao(
     return Boolean(permissoesModulo[acao]);
   }
 
-  // Aliases e fallbacks inteligentes para compatibilidade com perfis anteriores
+  // Aliases e fallbacks inteligentes para compatibilidade com perfis
   if (modulo === 'chaves') {
     if (acao === 'excluir') return Boolean(permissoesModulo.excluir ?? false);
     if (acao === 'cadastrar') return Boolean(permissoesModulo.cadastrar ?? permissoesModulo.criar ?? false);
@@ -608,19 +619,22 @@ export function verificarPermissao(
   }
 
   if (modulo === 'encomendas') {
-    if (acao === 'cadastrar_entregador') return Boolean(permissoesModulo.cadastrar_entregador ?? (nivelNum < 3 ? (permissoesModulo.criar ?? true) : false));
-    if (acao === 'editar_pacote') return Boolean(permissoesModulo.editar_pacote ?? (nivelNum < 3 ? (permissoesModulo.editar ?? true) : false));
-    if (acao === 'excluir_pacote') return Boolean(permissoesModulo.excluir_pacote ?? (nivelNum < 3 ? (permissoesModulo.excluir ?? true) : false));
-    if (acao === 'dossie') return Boolean(permissoesModulo.dossie ?? (nivelNum < 3));
-    if (acao === 'criar_lote') return Boolean(permissoesModulo.criar_lote ?? permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? (nivelNum < 3));
-    if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? (nivelNum < 3 ? permissoesModulo.excluir : false));
-    if (acao === 'editar_lotes') return Boolean(permissoesModulo.editar_lotes ?? (nivelNum < 3 ? permissoesModulo.editar : false));
+    if (acao === 'cadastrar_entregador') return Boolean(permissoesModulo.cadastrar_entregador ?? permissoesModulo.criar ?? false);
+    if (acao === 'entrada_lote') return Boolean(permissoesModulo.entrada_lote ?? permissoesModulo.criar_lote ?? permissoesModulo.criar ?? permissoesModulo.visualizar ?? false);
+    if (acao === 'criar_lote') return Boolean(permissoesModulo.criar_lote ?? permissoesModulo.entrada_lote ?? permissoesModulo.criar ?? false);
+    if (acao === 'triagem') return Boolean(permissoesModulo.triagem ?? permissoesModulo.criar ?? false);
+    if (acao === 'baixa') return Boolean(permissoesModulo.baixa ?? permissoesModulo.criar ?? false);
+    if (acao === 'editar_pacote') return Boolean(permissoesModulo.editar_pacote ?? permissoesModulo.editar ?? false);
+    if (acao === 'excluir_pacote') return Boolean(permissoesModulo.excluir_pacote ?? permissoesModulo.excluir ?? false);
+    if (acao === 'dossie') return Boolean(permissoesModulo.dossie ?? permissoesModulo.visualizar ?? false);
+    if (acao === 'editar_lotes') return Boolean(permissoesModulo.editar_lotes ?? permissoesModulo.editar ?? false);
+    if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? permissoesModulo.excluir ?? false);
   }
 
-  if (acao === 'criar_lote') return Boolean(permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? true);
-  if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? (nivelNum < 3 ? permissoesModulo.excluir : false));
+  if (acao === 'criar_lote') return Boolean(permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? false);
+  if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? permissoesModulo.excluir ?? false);
   if (acao === 'editar_lotes') return Boolean(permissoesModulo.editar_lotes ?? permissoesModulo.editar ?? false);
   if (acao === 'limpar_dados') return Boolean(permissoesModulo.limpar_dados ?? false);
 
-  return Boolean(permissoesModulo[acao]);
+  return Boolean(permissoesModulo[acao] ?? permissoesModulo.visualizar ?? false);
 }
