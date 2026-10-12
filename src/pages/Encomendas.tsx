@@ -109,37 +109,40 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [baixaObsEspecial, setBaixaObsEspecial] = useState('');
   const [baixaNotificarSupervisor, setBaixaNotificarSupervisor] = useState(false);
 
-  // RBAC: Usuários com permissão de nível elevado (Master / Supervisor / Admin)
+  // RBAC: Verificação estrita de nível de acesso (0, 1 ou 2)
+  // Operadores de nível 3 OU MAIS não têm acesso a botões de ação e edição
   const nivelNum = usuarioLogado?.nivel_acesso !== undefined && usuarioLogado?.nivel_acesso !== null 
     ? Number(usuarioLogado.nivel_acesso) 
     : 3;
   const perfilStr = (usuarioLogado?.perfil || '').toLowerCase();
   
+  // Usuários com nível de acesso 0, 1 ou 2 (SuperAdmin, Master, Supervisor)
+  const temNivelAutorizado = (nivelNum <= 2) && !perfilStr.includes('porteiro') && !perfilStr.includes('operador');
   const eNivelElevado = Boolean(
+    temNivelAutorizado ||
     perfilStr.includes('admin') ||
     perfilStr.includes('master') ||
-    perfilStr.includes('superv') ||
-    nivelNum <= 2
-  );
+    perfilStr.includes('superv')
+  ) && (nivelNum <= 2);
 
-  // Permissões granulares do operador logado por etapa
+  // Permissões granulares do operador logado por etapa (garantindo que ações fiquem ocultas para nível 3 ou mais)
   // 1ª Etapa: Recebimento (RE)
-  const podeCadastrarEntregador = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'cadastrar_entregador'));
-  const podeReceberRE = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote'));
-  const podeCriarLote = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'criar_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote'));
-  const podeEditarLotes = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'editar'));
-  const podeExcluirLotes = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir'));
+  const podeCadastrarEntregador = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'cadastrar_entregador')));
+  const podeReceberRE = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote')));
+  const podeCriarLote = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'criar_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote')));
+  const podeEditarLotes = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'editar')));
+  const podeExcluirLotes = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir')));
 
   // 2ª Etapa: Triagem
-  const podeFazerTriagem = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'triagem'));
+  const podeFazerTriagem = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'triagem')));
 
-  // 3ª Etapa: Saída / Baixa
+  // 3ª Etapa: Saída / Baixa (operadores podem dar baixa comum se tiverem permissão, mas edição/exclusão de pacotes retidos exige nível 0, 1 ou 2)
   const podeDarBaixa = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'baixa'));
-  const podeEditarPacote = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'editar'));
-  const podeExcluirPacote = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir'));
+  const podeEditarPacote = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'editar')));
+  const podeExcluirPacote = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir')));
 
   // 4ª Etapa: Dossiê Completo (Auditoria & Provas)
-  const podeVerDossie = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'dossie'));
+  const podeVerDossie = Boolean((nivelNum <= 2) && (eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'dossie')));
 
   // Estados do Módulo Dossiê Auditável de Encomendas
   const [itensDossie, setItensDossie] = useState<any[]>([]);
@@ -2163,12 +2166,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                           </td>
                           <td className="p-2.5 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              {emAberto && (
+                              {emAberto && podeFazerTriagem && (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     if (!podeFazerTriagem) {
-                                      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A 2ª Etapa (Triagem) exige permissão de nível elevado (Master/Supervisor/Admin).' });
+                                      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A 2ª Etapa (Triagem) exige permissão de nível 0, 1 ou 2 (Master/Supervisor/Admin).' });
                                       return;
                                     }
                                     setLoteAtivo(lote);
@@ -2176,7 +2179,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                     if (lote.condominio_id) carregarLocais(lote.condominio_id);
                                   }}
                                   className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                                  title="Ir para Triagem deste Lote"
+                                  title="Ir para Triagem deste Lote (Nível 0, 1 ou 2)"
                                 >
                                   <Package className="w-3 h-3" />
                                   <span className="hidden sm:inline">Triar</span>
@@ -2188,7 +2191,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                   type="button"
                                   onClick={() => abrirEdicaoLote(lote)}
                                   className="p-1.5 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 rounded-lg border border-slate-200 hover:border-amber-300 transition cursor-pointer"
-                                  title="Editar Lote de RE"
+                                  title="Editar Lote de RE (Nível 0, 1 ou 2)"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
@@ -2199,14 +2202,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                   type="button"
                                   onClick={() => confirmarExcluirLote(lote)}
                                   className="p-1.5 bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-700 rounded-lg border border-slate-200 hover:border-red-300 transition cursor-pointer"
-                                  title="Excluir Lote de RE"
+                                  title="Excluir Lote de RE (Nível 0, 1 ou 2)"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               )}
 
-                              {!emAberto && !podeEditarLotes && !podeExcluirLotes && (
-                                <span className="text-[10px] text-slate-400 italic">Visualização</span>
+                              {(!emAberto || !podeFazerTriagem) && !podeEditarLotes && !podeExcluirLotes && (
+                                <span className="text-[10px] text-slate-400 italic">Visualização (Nível {nivelNum})</span>
                               )}
                             </div>
                           </td>

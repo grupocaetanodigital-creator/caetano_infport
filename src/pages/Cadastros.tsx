@@ -1307,7 +1307,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 return (
                   <div 
                     key={c.id} 
-                    className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-emerald-300 transition space-y-3 flex flex-col justify-between"
+                    style={{ width: '340px', height: '272.328px' }}
+                    className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-emerald-300 transition space-y-3 flex flex-col justify-between w-[340px] max-w-full"
                   >
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
