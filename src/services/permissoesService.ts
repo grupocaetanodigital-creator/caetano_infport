@@ -11,8 +11,11 @@ export interface PermissaoModuloPadrao {
 export interface PermissoesModulo {
   encomendas?: PermissaoModuloPadrao & {
     entrada_lote?: boolean;
+    cadastrar_entregador?: boolean;
     triagem?: boolean;
     baixa?: boolean;
+    editar_pacote?: boolean;
+    excluir_pacote?: boolean;
     dossie?: boolean;
     editar_lotes?: boolean;
     excluir_lotes?: boolean;
@@ -109,8 +112,11 @@ export const MODULOS_DEFINICAO_RBAC: ModuloDefinicaoInfo[] = [
     acoesEspecificas: [
       { id: 'entrada_lote', label: '1ª Etapa: Recebimento (RE)' },
       { id: 'criar_lote', label: 'Adicionar Lote RE' },
+      { id: 'cadastrar_entregador', label: 'Cadastrar Novo Entregador' },
       { id: 'triagem', label: '2ª Etapa: Efetuar Triagem' },
       { id: 'baixa', label: '3ª Etapa: Dar Saída / Baixa' },
+      { id: 'editar_pacote', label: 'Editar Pacote Retido' },
+      { id: 'excluir_pacote', label: 'Excluir Pacote Retido' },
       { id: 'dossie', label: 'Auditoria & Provas: Aba Dossiê' },
       { id: 'editar_lotes', label: 'Editar Lotes de RE' },
       { id: 'excluir_lotes', label: 'Excluir Lotes de RE' }
@@ -227,7 +233,7 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
     condominio_id: null,
     padrao_sistema: true,
     permissoes: {
-      encomendas: { visualizar: true, criar: true, editar: true, excluir: true, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: true, excluir_lotes: true, historico: true },
+      encomendas: { visualizar: true, criar: true, editar: true, excluir: true, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: true, excluir_lotes: true, cadastrar_entregador: true, editar_pacote: true, excluir_pacote: true, historico: true },
       custodia: { visualizar: true, criar: true, editar: true, excluir: true, receber: true, baixa: true, auditoria: true },
       chaves: { visualizar: true, criar: true, editar: true, excluir: true, emprestar: true, devolver: true, cadastrar: true },
       rondas: { visualizar: true, criar: true, editar: true, excluir: true, iniciar_ronda: true, cadastrar_pontos: true, setores: true },
@@ -249,7 +255,7 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
     condominio_id: null,
     padrao_sistema: true,
     permissoes: {
-      encomendas: { visualizar: true, criar: true, editar: true, excluir: false, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: true, excluir_lotes: false, historico: true },
+      encomendas: { visualizar: true, criar: true, editar: true, excluir: true, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: true, excluir_lotes: true, cadastrar_entregador: true, editar_pacote: true, excluir_pacote: true, historico: true },
       custodia: { visualizar: true, criar: true, editar: true, excluir: false, receber: true, baixa: true, auditoria: true },
       chaves: { visualizar: true, criar: true, editar: true, excluir: false, emprestar: true, devolver: true, cadastrar: true },
       rondas: { visualizar: true, criar: true, editar: true, excluir: false, iniciar_ronda: true, cadastrar_pontos: true, setores: true },
@@ -271,7 +277,7 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
     condominio_id: null,
     padrao_sistema: true,
     permissoes: {
-      encomendas: { visualizar: true, criar: true, editar: false, excluir: false, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: false, excluir_lotes: false, historico: true },
+      encomendas: { visualizar: true, criar: true, editar: true, excluir: true, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: true, excluir_lotes: true, cadastrar_entregador: true, editar_pacote: true, excluir_pacote: true, historico: true },
       custodia: { visualizar: true, criar: true, editar: false, excluir: false, receber: true, baixa: true, auditoria: true },
       chaves: { visualizar: true, criar: true, editar: true, excluir: false, emprestar: true, devolver: true, cadastrar: true },
       rondas: { visualizar: true, criar: true, editar: true, excluir: false, iniciar_ronda: true, cadastrar_pontos: true, setores: false },
@@ -293,7 +299,7 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
     condominio_id: null,
     padrao_sistema: true,
     permissoes: {
-      encomendas: { visualizar: true, criar: true, editar: false, excluir: false, entrada_lote: true, triagem: true, baixa: true, dossie: true, editar_lotes: false, excluir_lotes: false, historico: true },
+      encomendas: { visualizar: true, criar: false, editar: false, excluir: false, entrada_lote: false, triagem: false, baixa: false, dossie: false, editar_lotes: false, excluir_lotes: false, cadastrar_entregador: false, editar_pacote: false, excluir_pacote: false, historico: true },
       custodia: { visualizar: true, criar: true, editar: false, excluir: false, receber: true, baixa: true, auditoria: false },
       chaves: { visualizar: true, criar: true, editar: false, excluir: false, emprestar: true, devolver: true, cadastrar: false },
       rondas: { visualizar: true, criar: true, editar: false, excluir: false, iniciar_ronda: true, cadastrar_pontos: false, setores: false },
@@ -315,7 +321,7 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
     condominio_id: null,
     padrao_sistema: true,
     permissoes: {
-      encomendas: { visualizar: true, criar: false, editar: false, excluir: false, entrada_lote: false, triagem: false, baixa: false, dossie: true, editar_lotes: false, excluir_lotes: false, historico: true },
+      encomendas: { visualizar: true, criar: false, editar: false, excluir: false, entrada_lote: false, triagem: false, baixa: false, dossie: true, editar_lotes: false, excluir_lotes: false, cadastrar_entregador: false, editar_pacote: false, excluir_pacote: false, historico: true },
       custodia: { visualizar: true, criar: false, editar: false, excluir: false, receber: false, baixa: false, auditoria: true },
       chaves: { visualizar: true, criar: false, editar: false, excluir: false, emprestar: false, devolver: false, cadastrar: false },
       rondas: { visualizar: true, criar: false, editar: false, excluir: false, iniciar_ronda: false, cadastrar_pontos: false, setores: false },
@@ -599,6 +605,16 @@ export function verificarPermissao(
     if (acao === 'emprestar') return Boolean(permissoesModulo.emprestar ?? permissoesModulo.criar ?? true);
     if (acao === 'devolver') return Boolean(permissoesModulo.devolver ?? permissoesModulo.editar ?? true);
     if (acao === 'visualizar') return Boolean(permissoesModulo.visualizar ?? true);
+  }
+
+  if (modulo === 'encomendas') {
+    if (acao === 'cadastrar_entregador') return Boolean(permissoesModulo.cadastrar_entregador ?? (nivelNum < 3 ? (permissoesModulo.criar ?? true) : false));
+    if (acao === 'editar_pacote') return Boolean(permissoesModulo.editar_pacote ?? (nivelNum < 3 ? (permissoesModulo.editar ?? true) : false));
+    if (acao === 'excluir_pacote') return Boolean(permissoesModulo.excluir_pacote ?? (nivelNum < 3 ? (permissoesModulo.excluir ?? true) : false));
+    if (acao === 'dossie') return Boolean(permissoesModulo.dossie ?? (nivelNum < 3));
+    if (acao === 'criar_lote') return Boolean(permissoesModulo.criar_lote ?? permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? (nivelNum < 3));
+    if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? (nivelNum < 3 ? permissoesModulo.excluir : false));
+    if (acao === 'editar_lotes') return Boolean(permissoesModulo.editar_lotes ?? (nivelNum < 3 ? permissoesModulo.editar : false));
   }
 
   if (acao === 'criar_lote') return Boolean(permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? true);

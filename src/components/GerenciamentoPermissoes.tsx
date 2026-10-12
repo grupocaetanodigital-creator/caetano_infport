@@ -339,44 +339,42 @@ export default function GerenciamentoPermissoes({
         </div>
       )}
 
-      {/* CABEÇALHO PRINCIPAL (Idêntico ao Print do Usuário) */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-        <div>
-          <h2 className="text-lg md:text-xl font-black text-white flex items-center gap-2.5 tracking-tight">
-            <ShieldCheck className="w-6 h-6 text-emerald-400" />
-            Gerenciamento de Acesso e Permissões
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Matriz dinâmica de controle RBAC para perfis nativos e customizados do sistema INFPORT 1.0.
-          </p>
-        </div>
+      {/* CABEÇALHO PRINCIPAL COMPACTO */}
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+        <h2 className="text-sm font-black text-white flex items-center gap-2 tracking-tight">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span>Acesso & Permissões</span>
+        </h2>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Botão Salvar Alterações */}
+        <div className="flex items-center gap-2">
+          {/* Botão Salvar Alterações (Compacto: apenas ícone de salvar) */}
           <button
+            type="button"
             onClick={handleSalvarMatriz}
             disabled={salvando}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-black rounded-xl transition shadow-lg shadow-emerald-900/30 cursor-pointer disabled:opacity-50"
+            title="Salvar Alterações"
+            className="p-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl transition shadow-md shadow-emerald-900/30 cursor-pointer disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            <span>{salvando ? 'Salvando...' : 'Salvar Alterações'}</span>
           </button>
 
-          {/* Botão Adicionar Novo Nível */}
+          {/* Botão Adicionar Novo Nível (Compacto: ícone de adição + texto reduzido) */}
           <button
+            type="button"
             onClick={abrirModalNovoPerfil}
-            className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-black rounded-xl transition shadow-lg shadow-teal-900/30 cursor-pointer"
+            title="Adicionar Novo Nível"
+            className="flex items-center gap-1 px-2.5 py-2 bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-black rounded-xl transition shadow-md shadow-teal-900/30 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Adicionar Novo Nível</span>
+            <span>+ Nível</span>
           </button>
         </div>
       </div>
 
-      {/* SELETOR DE NÍVEL DE ACESSO */}
-      <div className="my-5 p-4 rounded-2xl bg-[#0f1b36] border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex-1 max-w-md">
-          <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5">
+      {/* SELETOR DE NÍVEL DE ACESSO COMPACTO */}
+      <div className="my-3 p-3 rounded-2xl bg-[#0f1b36] border border-slate-800 flex items-center justify-between gap-3">
+        <div className="w-full max-w-sm">
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
             <Sliders className="w-3.5 h-3.5 text-emerald-400" />
             Nível de Acesso em Configuração
           </label>
@@ -384,7 +382,7 @@ export default function GerenciamentoPermissoes({
             <select
               value={nivelSelecionadoId}
               onChange={(e) => setNivelSelecionadoId(e.target.value)}
-              className="w-full appearance-none bg-[#162544] border border-slate-700 hover:border-slate-600 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl pr-10 focus:outline-none focus:border-emerald-500 transition cursor-pointer"
+              className="w-full appearance-none bg-[#162544] border border-slate-700 hover:border-slate-600 text-white font-bold text-xs py-2 px-3 rounded-xl pr-9 focus:outline-none focus:border-emerald-500 transition cursor-pointer"
             >
               {niveis.map(n => (
                 <option key={n.id} value={n.id}>
@@ -392,25 +390,28 @@ export default function GerenciamentoPermissoes({
                 </option>
               ))}
             </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
-        {nivelAtivo && (
-          <div className="flex-1 text-xs text-slate-400 bg-[#162544]/60 p-3 rounded-xl border border-slate-800/80">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-200">{nivelAtivo.nome}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                nivelAtivo.padrao_sistema 
-                  ? 'bg-blue-900/50 text-blue-300 border border-blue-800' 
-                  : 'bg-purple-900/50 text-purple-300 border border-purple-800'
-              }`}>
-                {nivelAtivo.padrao_sistema ? 'Nativo do Sistema' : 'Customizado'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
-              {nivelAtivo.descricao || 'Sem descrição cadastrada.'}
-            </p>
+        {nivelAtivo && !nivelAtivo.padrao_sistema && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => abrirModalEdicao(nivelAtivo)}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition cursor-pointer"
+              title="Editar Nome do Perfil"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => solicitarExclusao(nivelAtivo)}
+              className="p-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 rounded-xl transition cursor-pointer"
+              title="Excluir Perfil Customizado"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </div>
@@ -562,18 +563,13 @@ export default function GerenciamentoPermissoes({
       {/* SEÇÃO INFERIOR: NÍVEIS DE ACESSO EXISTENTES (Idêntico ao print) */}
       <div className="mt-8 pt-6 border-t border-slate-800">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-black text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-emerald-400" />
-              Níveis de Acesso Existentes
-            </h3>
-            <p className="text-[11px] text-slate-400">
-              Clique para selecionar e editar na matriz acima, ou use o lápis para renomear/remover.
-            </p>
-          </div>
+          <h3 className="text-sm font-black text-white flex items-center gap-2">
+            <Users className="w-4 h-4 text-emerald-400" />
+            <span>Níveis de Acesso</span>
+          </h3>
 
           <span className="text-[11px] font-bold text-slate-400 bg-[#0f1b36] px-3 py-1 rounded-full border border-slate-800">
-            Total: {niveis.length} perfis
+            {niveis.length} perfis
           </span>
         </div>
 

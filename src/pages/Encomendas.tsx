@@ -37,7 +37,12 @@ import {
   RefreshCw,
   Home,
   Trash2,
-  Pencil
+  Pencil,
+  ShieldAlert,
+  Lock,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { verificarPermissao } from '../services/permissoesService';
 import { 
@@ -87,14 +92,54 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [editEntregadorId, setEditEntregadorId] = useState<string>('');
   const [loteParaExcluir, setLoteParaExcluir] = useState<any | null>(null);
 
-  // Permissões granulares do operador logado
-  const podeReceberRE = verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'visualizar');
-  const podeFazerTriagem = verificarPermissao(usuarioLogado, 'encomendas', 'triagem');
-  const podeDarBaixa = verificarPermissao(usuarioLogado, 'encomendas', 'baixa');
-  const podeVerDossie = verificarPermissao(usuarioLogado, 'encomendas', 'dossie');
-  const podeEditarLotes = verificarPermissao(usuarioLogado, 'encomendas', 'editar_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'editar');
-  const podeExcluirLotes = verificarPermissao(usuarioLogado, 'encomendas', 'excluir_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir');
-  const podeCriarLote = verificarPermissao(usuarioLogado, 'encomendas', 'criar_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'criar') || podeReceberRE;
+  // Estados de Edição e Exclusão de Pacotes Retidos (Cards de Encomendas)
+  const [pacoteEmEdicao, setPacoteEmEdicao] = useState<any | null>(null);
+  const [editPacoteUnidade, setEditPacoteUnidade] = useState('');
+  const [editPacoteBloco, setEditPacoteBloco] = useState('');
+  const [editPacoteMoradorId, setEditPacoteMoradorId] = useState('');
+  const [editPacoteCodigo, setEditPacoteCodigo] = useState('');
+  const [editPacoteLocal, setEditPacoteLocal] = useState('');
+  const [editPacoteObs, setEditPacoteObs] = useState('');
+  const [pacoteParaExcluir, setPacoteParaExcluir] = useState<any | null>(null);
+
+  // Estados de Opções Avançadas na Finalização da Entrega / Baixa
+  const [mostrarOpcoesBaixa, setMostrarOpcoesBaixa] = useState(false);
+  const [baixaDocRetirante, setBaixaDocRetirante] = useState('');
+  const [baixaParentesco, setBaixaParentesco] = useState('Titular / Morador');
+  const [baixaObsEspecial, setBaixaObsEspecial] = useState('');
+  const [baixaNotificarSupervisor, setBaixaNotificarSupervisor] = useState(false);
+
+  // RBAC: Usuários com permissão de nível elevado (Master / Supervisor / Admin)
+  const nivelNum = usuarioLogado?.nivel_acesso !== undefined && usuarioLogado?.nivel_acesso !== null 
+    ? Number(usuarioLogado.nivel_acesso) 
+    : 3;
+  const perfilStr = (usuarioLogado?.perfil || '').toLowerCase();
+  
+  const eNivelElevado = Boolean(
+    perfilStr.includes('admin') ||
+    perfilStr.includes('master') ||
+    perfilStr.includes('superv') ||
+    nivelNum <= 2
+  );
+
+  // Permissões granulares do operador logado por etapa
+  // 1ª Etapa: Recebimento (RE)
+  const podeCadastrarEntregador = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'cadastrar_entregador'));
+  const podeReceberRE = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote'));
+  const podeCriarLote = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'criar_lote') || verificarPermissao(usuarioLogado, 'encomendas', 'entrada_lote'));
+  const podeEditarLotes = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'editar'));
+  const podeExcluirLotes = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_lotes') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir'));
+
+  // 2ª Etapa: Triagem
+  const podeFazerTriagem = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'triagem'));
+
+  // 3ª Etapa: Saída / Baixa
+  const podeDarBaixa = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'baixa'));
+  const podeEditarPacote = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'editar_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'editar'));
+  const podeExcluirPacote = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'excluir_pacote') || verificarPermissao(usuarioLogado, 'encomendas', 'excluir'));
+
+  // 4ª Etapa: Dossiê Completo (Auditoria & Provas)
+  const podeVerDossie = Boolean(eNivelElevado || verificarPermissao(usuarioLogado, 'encomendas', 'dossie'));
 
   // Estados do Módulo Dossiê Auditável de Encomendas
   const [itensDossie, setItensDossie] = useState<any[]>([]);
@@ -617,6 +662,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const cadastrarEntregadorRapido = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeCadastrarEntregador) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem cadastrar entregadores.' });
+      return;
+    }
     if (!novoEntNome.trim()) return;
     setLoading(true);
     try {
@@ -843,8 +892,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     }
   };
 
-  // Funções de Edição e Exclusão no Histórico de REs
+  // Funções de Edição e Exclusão no Histórico de REs (Blindadas por RBAC)
   const abrirEdicaoLote = (lote: any) => {
+    if (!podeEditarLotes) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem editar lotes de RE.' });
+      return;
+    }
     setLoteEmEdicao(lote);
     setEditQtdDeclarada(lote.qtd_declarada || 1);
     setEditEntregadorId(lote.entregador_id || '');
@@ -852,6 +905,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const salvarEdicaoLoteRE = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeEditarLotes) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem editar lotes de RE.' });
+      return;
+    }
     if (!loteEmEdicao) return;
     setLoading(true);
 
@@ -887,11 +944,18 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   };
 
   const confirmarExcluirLote = (lote: any) => {
+    if (!podeExcluirLotes) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem excluir lotes de RE.' });
+      return;
+    }
     setLoteParaExcluir(lote);
   };
 
   const executarExclusaoLoteRE = async () => {
-    if (!loteParaExcluir) return;
+    if (!podeExcluirLotes || !loteParaExcluir) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Operação de exclusão de lote não autorizada.' });
+      return;
+    }
     setLoading(true);
 
     try {
@@ -920,6 +984,123 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       await carregarDadosBase();
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao excluir lote: ' + err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Funções de Edição e Exclusão nos Cards de Pacotes Retidos (Blindadas por RBAC)
+  const abrirEdicaoPacote = (item: any) => {
+    if (!podeEditarPacote) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem editar pacotes retidos.' });
+      return;
+    }
+    setPacoteEmEdicao(item);
+    setEditPacoteUnidade(item.unidade || '');
+    setEditPacoteBloco(item.bloco || (eEstruturaCasas ? 'Casa' : ''));
+    setEditPacoteMoradorId(item.morador_id || '');
+    setEditPacoteCodigo(item.codigo_barras || '');
+    setEditPacoteLocal(item.local_armazenamento || 'Bancada Principal');
+    setEditPacoteObs(item.observacoes || '');
+  };
+
+  const salvarEdicaoPacote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!podeEditarPacote || !pacoteEmEdicao) return;
+    setLoading(true);
+
+    try {
+      const payload: any = {
+        unidade: editPacoteUnidade.trim(),
+        bloco: eEstruturaCasas ? 'Casa' : editPacoteBloco.trim(),
+        morador_id: editPacoteMoradorId || null,
+        codigo_barras: editPacoteCodigo.trim(),
+        local_armazenamento: editPacoteLocal.trim(),
+        observacoes: editPacoteObs.trim()
+      };
+
+      const { error } = await supabase
+        .from('encomendas_itens')
+        .update(payload)
+        .eq('id', pacoteEmEdicao.id);
+
+      if (error) throw error;
+
+      await registrarAtividade({
+        modulo: 'Encomendas',
+        acao: 'EDITAR',
+        descricao: `Editou pacote retido ${pacoteEmEdicao.codigo_barras || pacoteEmEdicao.id}: Unidade ${editPacoteUnidade} (${editPacoteBloco}).`,
+        detalhes: { pacoteId: pacoteEmEdicao.id, alteracoes: payload },
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria',
+        condominio_id: pacoteEmEdicao.condominio_id
+      });
+
+      setMensagem({ tipo: 'sucesso', texto: 'Pacote retido atualizado com sucesso!' });
+      setPacoteEmEdicao(null);
+      await carregarDadosBase();
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao editar pacote: ' + err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmarExcluirPacote = (item: any) => {
+    if (!podeExcluirPacote) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem excluir pacotes retidos.' });
+      return;
+    }
+    setPacoteParaExcluir(item);
+  };
+
+  const executarExclusaoPacote = async () => {
+    if (!podeExcluirPacote || !pacoteParaExcluir) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Operação de exclusão de pacote não autorizada.' });
+      return;
+    }
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('encomendas_itens')
+        .delete()
+        .eq('id', pacoteParaExcluir.id);
+
+      if (error) throw error;
+
+      if (pacoteParaExcluir.lote_re_id) {
+        try {
+          const { data: loteObj } = await supabase
+            .from('lotes_re')
+            .select('id, qtd_triada')
+            .eq('id', pacoteParaExcluir.lote_re_id)
+            .maybeSingle();
+
+          if (loteObj && loteObj.qtd_triada > 0) {
+            await supabase
+              .from('lotes_re')
+              .update({ qtd_triada: Math.max(0, loteObj.qtd_triada - 1), status: 'em_triagem' })
+              .eq('id', pacoteParaExcluir.lote_re_id);
+          }
+        } catch (errLote) {
+          console.warn('Erro ao atualizar contador de lote na exclusão de pacote:', errLote);
+        }
+      }
+
+      await registrarAtividade({
+        modulo: 'Encomendas',
+        acao: 'EXCLUIR',
+        descricao: `Excluiu pacote retido da unidade ${pacoteParaExcluir.unidade} (Cód: ${pacoteParaExcluir.codigo_barras || 'S/ Rastreio'}).`,
+        detalhes: { pacoteId: pacoteParaExcluir.id, unidade: pacoteParaExcluir.unidade, codigo: pacoteParaExcluir.codigo_barras },
+        operador_nome: usuarioLogado?.nome || usuarioLogado?.login || 'Portaria',
+        condominio_id: pacoteParaExcluir.condominio_id
+      });
+
+      setMensagem({ tipo: 'sucesso', texto: 'Pacote excluído com sucesso!' });
+      setPacoteParaExcluir(null);
+      await carregarDadosBase();
+    } catch (err: any) {
+      setMensagem({ tipo: 'erro', texto: 'Erro ao excluir pacote: ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -989,6 +1170,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const salvarItemTriagem = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeFazerTriagem) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) podem executar a triagem de pacotes.' });
+      return;
+    }
     if (!loteAtivo || !unidadeTriagem.trim() || !fotoEtiquetaUrl.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Selecione o lote, informe a unidade e tire a foto da etiqueta.' });
       return;
@@ -1485,6 +1670,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const efetivarBaixaSaida = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeDarBaixa) {
+      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) possuem permissão para realizar Baixa de Pacotes.' });
+      return;
+    }
     if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Selecione e marque os pacotes no checklist, informe o nome do retirante e tire a foto da entrega.' });
       return;
@@ -1492,15 +1681,23 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     setLoading(true);
 
     try {
+      const retiranteFormatado = [
+        nomeRetirante.trim(),
+        baixaDocRetirante ? `(Doc: ${baixaDocRetirante.trim()})` : '',
+        baixaParentesco ? `[${baixaParentesco}]` : ''
+      ].filter(Boolean).join(' ');
+
+      const payloadUpdate: any = {
+        status: 'entregue',
+        retirado_por: retiranteFormatado,
+        foto_retirada_url: fotoRetiranteUrl.trim(),
+        data_retirada: new Date().toISOString(),
+        operador_baixa_id: usuarioLogado?.login || usuarioLogado?.id || 'Operador'
+      };
+
       const { error } = await supabase
         .from('encomendas_itens')
-        .update({
-          status: 'entregue',
-          retirado_por: nomeRetirante.trim(),
-          foto_retirada_url: fotoRetiranteUrl.trim(),
-          data_retirada: new Date().toISOString(),
-          operador_baixa_id: usuarioLogado?.login || usuarioLogado?.id || 'Operador'
-        })
+        .update(payloadUpdate)
         .in('id', itensSelecionadosIds);
 
       if (error) throw error;
@@ -1511,11 +1708,15 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       registrarAtividade({
         modulo: 'Encomendas',
         acao: 'BAIXA',
-        descricao: `Entregou ${itensSelecionadosIds.length} encomenda(s) para o retirante: ${nomeRetirante.trim()}.`,
+        descricao: `Entregou ${itensSelecionadosIds.length} encomenda(s) para o retirante: ${retiranteFormatado}.${baixaObsEspecial ? ` Obs: ${baixaObsEspecial}` : ''}${baixaNotificarSupervisor ? ' [AUDITORIA SUPERVISÃO SOLICITADA]' : ''}`,
         detalhes: {
           totalItens: itensSelecionadosIds.length,
           itensIds: itensSelecionadosIds,
-          retiradoPor: nomeRetirante.trim()
+          retiradoPor: retiranteFormatado,
+          docRetirante: baixaDocRetirante,
+          vinculo: baixaParentesco,
+          obsEspecial: baixaObsEspecial,
+          notificadoSupervisor: baixaNotificarSupervisor
         },
         operador_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_id: usuarioLogado?.id,
@@ -1533,7 +1734,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       }).join('\n');
 
       const rotuloUnidPrimeiro = formatarIdentificacaoUnidade(primeiroItem?.unidade, primeiroItem?.bloco, condoConfig?.tipo_estrutura);
-      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: ${rotuloUnidPrimeiro}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${nomeRetirante}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: ${rotuloUnidPrimeiro}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${retiranteFormatado}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
 
       setBaixaConcluidaWhats({
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
@@ -1543,6 +1744,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setItensCandidatosEntrega([]);
       setModalBaixaAberta(false);
       setNomeRetirante(''); setFotoRetiranteUrl('');
+      setBaixaDocRetirante(''); setBaixaParentesco('Titular / Morador');
+      setBaixaObsEspecial(''); setBaixaNotificarSupervisor(false);
+      setMostrarOpcoesBaixa(false);
       carregarDadosBase();
       setMensagem({ tipo: 'sucesso', texto: 'Baixa de saída realizada com sucesso!' });
     } catch (err: any) {
@@ -1618,7 +1822,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         <button
           onClick={() => {
             if (!podeReceberRE) {
-              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu usuário não tem permissão para a 1ª Etapa (Recebimento de Lotes RE).' });
+              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A 1ª Etapa (Recebimento de Lotes RE) exige permissão de nível elevado (Master/Supervisor/Admin).' });
               return;
             }
             setEtapa('1');
@@ -1629,7 +1833,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               : 'border-amber-200/60 bg-white hover:bg-amber-50/60 text-amber-900/80'
           } ${!podeReceberRE ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block">1ª Etapa</span>
+          <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block flex items-center gap-1">
+            {!podeReceberRE && <Lock className="w-2.5 h-2.5 text-amber-700" />} 1ª Etapa
+          </span>
           <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-amber-950">
             <Truck className="w-4 h-4 text-amber-600 shrink-0" />
             <span className="truncate">Recebimento (RE)</span>
@@ -1640,7 +1846,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         <button
           onClick={() => {
             if (!podeFazerTriagem) {
-              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu usuário não tem permissão para a 2ª Etapa (Triagem de Pacotes).' });
+              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A 2ª Etapa (Triagem de Pacotes) exige permissão de nível elevado (Master/Supervisor/Admin).' });
               return;
             }
             setEtapa('2');
@@ -1651,7 +1857,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               : 'border-rose-200/60 bg-white hover:bg-rose-50/60 text-rose-900/80'
           } ${!podeFazerTriagem ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider block">2ª Etapa</span>
+          <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider block flex items-center gap-1">
+            {!podeFazerTriagem && <Lock className="w-2.5 h-2.5 text-rose-700" />} 2ª Etapa
+          </span>
           <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-rose-950">
             <Package className="w-4 h-4 text-rose-600 shrink-0" />
             <span className="truncate">Triagem</span>
@@ -1662,7 +1870,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         <button
           onClick={() => {
             if (!podeDarBaixa) {
-              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu usuário não tem permissão para a 3ª Etapa (Saída / Baixa de Pacotes).' });
+              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A 3ª Etapa (Saída / Baixa de Pacotes) exige permissão de nível elevado (Master/Supervisor/Admin).' });
               return;
             }
             setEtapa('3');
@@ -1673,7 +1881,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               : 'border-emerald-200/60 bg-white hover:bg-emerald-50/60 text-emerald-900/80'
           } ${!podeDarBaixa ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider block">3ª Etapa</span>
+          <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider block flex items-center gap-1">
+            {!podeDarBaixa && <Lock className="w-2.5 h-2.5 text-emerald-700" />} 3ª Etapa
+          </span>
           <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-emerald-950">
             <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="truncate">Saída / Baixa</span>
@@ -1684,7 +1894,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         <button
           onClick={() => {
             if (!podeVerDossie) {
-              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Seu usuário não tem permissão para a Aba Dossiê Completo.' });
+              setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A visualização do Dossiê Completo de Auditoria exige permissão de nível elevado (Master/Supervisor/Admin).' });
               return;
             }
             setEtapa('4');
@@ -1697,7 +1907,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           } ${!podeVerDossie ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-purple-600" /> Auditoria & Provas
+            {podeVerDossie ? <ShieldCheck className="w-3 h-3 text-purple-600" /> : <Lock className="w-2.5 h-2.5 text-purple-700" />} Auditoria & Provas
           </span>
           <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-purple-950">
             <FileText className="w-4 h-4 text-purple-700 shrink-0" />
@@ -1723,13 +1933,27 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
               <Truck className="w-4 h-4 text-slate-800" /> Recebimento de Entrega (RE)
             </h3>
-            <button
-              onClick={() => setModalNovoEntregador(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> + Entregador
-            </button>
+            {podeCadastrarEntregador ? (
+              <button
+                type="button"
+                onClick={() => setModalNovoEntregador(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> + Entregador
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-md border border-slate-200 flex items-center gap-1" title="Cadastro de entregadores restrito a supervisores e administradores">
+                <Lock className="w-3 h-3 text-slate-400" /> + Entregador (Restrito)
+              </span>
+            )}
           </div>
+
+          {!podeCriarLote && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>O preenchimento e gravação de Recebimento de Entrega (RE) são restritos a usuários com permissão elevada (Master/Supervisor/Admin).</span>
+            </div>
+          )}
 
           <form onSubmit={criarLoteRE} className="space-y-3 max-w-2xl">
             {isGlobal && listaCondominios.length > 0 && (
@@ -1824,8 +2048,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               />
             </div>
 
-            <button type="submit" disabled={loading} className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition text-xs disabled:opacity-50 cursor-pointer">
-              {loading ? 'Gerando Lote...' : <><CheckCircle2 className="w-4 h-4" /> Gerar Lote de Recebimento</>}
+            <button type="submit" disabled={loading || !podeCriarLote} className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition text-xs disabled:opacity-50 cursor-pointer">
+              {loading ? 'Gerando Lote...' : !podeCriarLote ? <><Lock className="w-4 h-4 text-amber-400" /> Gravação de Lote RE Restrita</> : <><CheckCircle2 className="w-4 h-4" /> Gerar Lote de Recebimento</>}
             </button>
           </form>
 
@@ -1943,6 +2167,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    if (!podeFazerTriagem) {
+                                      setMensagem({ tipo: 'erro', texto: 'Acesso restrito: A 2ª Etapa (Triagem) exige permissão de nível elevado (Master/Supervisor/Admin).' });
+                                      return;
+                                    }
                                     setLoteAtivo(lote);
                                     setEtapa('2');
                                     if (lote.condominio_id) carregarLocais(lote.condominio_id);
@@ -1955,35 +2183,31 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                 </button>
                               )}
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!podeEditarLotes) {
-                                    alert('Seu usuário não possui permissão para editar lotes de RE.');
-                                    return;
-                                  }
-                                  abrirEdicaoLote(lote);
-                                }}
-                                className="p-1.5 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 rounded-lg border border-slate-200 hover:border-amber-300 transition cursor-pointer"
-                                title="Editar Lote de RE"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
+                              {podeEditarLotes && (
+                                <button
+                                  type="button"
+                                  onClick={() => abrirEdicaoLote(lote)}
+                                  className="p-1.5 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 rounded-lg border border-slate-200 hover:border-amber-300 transition cursor-pointer"
+                                  title="Editar Lote de RE"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              )}
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!podeExcluirLotes) {
-                                    alert('Seu usuário não possui permissão para excluir lotes de RE.');
-                                    return;
-                                  }
-                                  confirmarExcluirLote(lote);
-                                }}
-                                className="p-1.5 bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-700 rounded-lg border border-slate-200 hover:border-red-300 transition cursor-pointer"
-                                title="Excluir Lote de RE"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {podeExcluirLotes && (
+                                <button
+                                  type="button"
+                                  onClick={() => confirmarExcluirLote(lote)}
+                                  className="p-1.5 bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-700 rounded-lg border border-slate-200 hover:border-red-300 transition cursor-pointer"
+                                  title="Excluir Lote de RE"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {!emAberto && !podeEditarLotes && !podeExcluirLotes && (
+                                <span className="text-[10px] text-slate-400 italic">Visualização</span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2005,6 +2229,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       {/* 2ª ETAPA — TRIAGEM DE PACOTES */}
       {etapa === '2' && (
+        !podeFazerTriagem ? (
+          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 text-center space-y-3 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Acesso Restrito à Triagem de Encomendas</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              A navegação nesta etapa e a execução do formulário de triagem (seleção de lote, unidade, escaninho e fotos) requerem permissão de nível elevado (Master, Supervisor ou Administrador).
+            </p>
+          </div>
+        ) : (
         <div className="bg-white p-3 sm:p-4 rounded-xl shadow-2xs border border-slate-200 space-y-3">
           <div className="border-b border-slate-100 pb-2">
             <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
@@ -2251,10 +2486,22 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             )}
           </div>
         </div>
+        )
       )}
 
       {/* 3ª ETAPA — SAÍDA E BAIXA */}
       {etapa === '3' && (
+        !podeDarBaixa ? (
+          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 text-center space-y-3 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Acesso Restrito à Saída / Baixa de Encomendas</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Toda a área de conferência, saída e baixa de pacotes é restrita a usuários com nível de permissão adequado (Master, Supervisor ou Administrador).
+            </p>
+          </div>
+        ) : (
         <div className="bg-white p-2.5 sm:p-3 rounded-xl shadow-2xs border border-slate-200 space-y-2">
           <div className="border-b border-slate-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
             <div>
@@ -2420,19 +2667,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     >
                       <UserCheck className="w-3 h-3" /> Finalizar ({itensSelecionadosIds.length})
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMoverEmLoteSelecionados(true);
-                        setItemParaMover(null);
-                        const primeiro = locaisArmazenamento.find(l => l.ativo !== false);
-                        setNovoLocalSelecionado(primeiro ? (primeiro.codigo && primeiro.nome ? `${primeiro.codigo} - ${primeiro.nome}` : primeiro.nome || primeiro) : 'Bancada Principal');
-                        setModalMoverLocal(true);
-                      }}
-                      className="bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
-                    >
-                      <Boxes className="w-3 h-3" /> Mover Sel.
-                    </button>
+                    {podeEditarPacote && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMoverEmLoteSelecionados(true);
+                          setItemParaMover(null);
+                          const primeiro = locaisArmazenamento.find(l => l.ativo !== false);
+                          setNovoLocalSelecionado(primeiro ? (primeiro.codigo && primeiro.nome ? `${primeiro.codigo} - ${primeiro.nome}` : primeiro.nome || primeiro) : 'Bancada Principal');
+                          setModalMoverLocal(true);
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                      >
+                        <Boxes className="w-3 h-3" /> Mover Sel.
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -2487,29 +2736,61 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                             )}
                           </div>
 
-                          {/* LOCAL FÍSICO COM BOTÃO DE ALTERAR EM 1 CLIQUE (COMPACTO) */}
+                          {/* LOCAL FÍSICO COM BOTÃO DE ALTERAR EM 1 CLIQUE E AÇÕES PROTEGIDAS POR RBAC */}
                           <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 flex-wrap gap-1">
                             <span className="text-[10px] font-bold text-emerald-950 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
                               <Boxes className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span className="truncate max-w-[150px]">{item.local_armazenamento || 'Bancada Principal'}</span>
+                              <span className="truncate max-w-[130px]">{item.local_armazenamento || 'Bancada Principal'}</span>
                             </span>
 
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setItemParaMover(item);
-                                const localAtual = item.local_armazenamento || (locaisArmazenamento[0] ? `${locaisArmazenamento[0].codigo} - ${locaisArmazenamento[0].nome}` : 'Bancada Principal');
-                                setNovoLocalSelecionado(localAtual);
-                                setMoverTodosDaUnidade(true);
-                                setMoverEmLoteSelecionados(false);
-                                setModalMoverLocal(true);
-                              }}
-                              className="text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-1.5 py-0.2 rounded flex items-center gap-0.5 transition cursor-pointer"
-                              title="Alterar local físico deste pacote"
-                            >
-                              <Edit3 className="w-2.5 h-2.5 text-slate-500" /> Alterar
-                            </button>
+                            <div className="flex items-center gap-1">
+                              {podeEditarPacote && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setItemParaMover(item);
+                                    const localAtual = item.local_armazenamento || (locaisArmazenamento[0] ? `${locaisArmazenamento[0].codigo} - ${locaisArmazenamento[0].nome}` : 'Bancada Principal');
+                                    setNovoLocalSelecionado(localAtual);
+                                    setMoverTodosDaUnidade(true);
+                                    setMoverEmLoteSelecionados(false);
+                                    setModalMoverLocal(true);
+                                  }}
+                                  className="text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-1.5 py-0.5 rounded flex items-center gap-0.5 transition cursor-pointer"
+                                  title="Alterar local físico deste pacote"
+                                >
+                                  <Edit3 className="w-2.5 h-2.5 text-slate-500" /> Alterar
+                                </button>
+                              )}
+
+                              {podeEditarPacote && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    abrirEdicaoPacote(item);
+                                  }}
+                                  className="p-1 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 rounded border border-slate-200 transition cursor-pointer"
+                                  title="Editar dados deste pacote"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              )}
+
+                              {podeExcluirPacote && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    confirmarExcluirPacote(item);
+                                  }}
+                                  className="p-1 bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-700 rounded border border-slate-200 transition cursor-pointer"
+                                  title="Excluir este pacote retido"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2630,6 +2911,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* BARRA FLUTUANTE MOBILE (FAB) PARA FINALIZAR ENTREGA (Posicionada acima da barra de navegação inferior) */}
@@ -2742,6 +3024,82 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                         <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
                           <X className="w-3.5 h-3.5" />
                         </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SOLICITAÇÃO DE RECURSO: BOTÃO / MENU 'ADICIONAR OPÇÕES' NA FINALIZAÇÃO DA ENTREGA */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setMostrarOpcoesBaixa(!mostrarOpcoesBaixa)}
+                      className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer border border-slate-200"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-slate-600" />
+                        <span>{mostrarOpcoesBaixa ? 'Ocultar Opções Adicionais' : '+ Adicionar Opções à Entrega'}</span>
+                      </span>
+                      {mostrarOpcoesBaixa ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                    </button>
+
+                    {mostrarOpcoesBaixa && (
+                      <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 animate-in slide-in-from-top-2 duration-150">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                            Documento do Retirante (RG / CNH / CPF)
+                          </label>
+                          <input
+                            type="text"
+                            value={baixaDocRetirante}
+                            onChange={(e) => setBaixaDocRetirante(e.target.value)}
+                            placeholder="Ex: 12.345.678-9 ou CPF..."
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:ring-2 focus:ring-slate-900"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                            Vínculo / Parentesco com o Morador
+                          </label>
+                          <select
+                            value={baixaParentesco}
+                            onChange={(e) => setBaixaParentesco(e.target.value)}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:ring-2 focus:ring-slate-900"
+                          >
+                            <option value="Titular / Morador">Titular / Morador</option>
+                            <option value="Cônjuge / Familiar">Cônjuge / Familiar</option>
+                            <option value="Filho(a) / Dependente">Filho(a) / Dependente</option>
+                            <option value="Funcionário(a) / Diarista">Funcionário(a) / Diarista</option>
+                            <option value="Procurador Autorizado">Procurador Autorizado</option>
+                            <option value="Vizinho com Autorização">Vizinho com Autorização</option>
+                            <option value="Outro (Especificar em obs)">Outro (Especificar em obs)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                            Observação Adicional / Registro de Ocorrência
+                          </label>
+                          <input
+                            type="text"
+                            value={baixaObsEspecial}
+                            onChange={(e) => setBaixaObsEspecial(e.target.value)}
+                            placeholder="Ex: Embalagem violada antes da entrega, autorização via interfone..."
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:ring-2 focus:ring-slate-900"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={baixaNotificarSupervisor}
+                            onChange={(e) => setBaixaNotificarSupervisor(e.target.checked)}
+                            className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span className="text-[11px] font-medium text-slate-700">
+                            Sinalizar para auditoria / supervisão (alerta especial no dossiê)
+                          </span>
+                        </label>
                       </div>
                     )}
                   </div>
@@ -2963,6 +3321,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       {/* 4ª ETAPA — DOSSIÊ AUDITÁVEL DE ENCOMENDAS (HISTÓRICO COM FOTOS DE RECEBIMENTO E ENTREGA) */}
       {etapa === '4' && (
+        !podeVerDossie ? (
+          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 text-center space-y-3 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto border border-purple-200">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Acesso Restrito ao Dossiê de Auditoria</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              O acesso ao Dossiê Completo, histórico sequencial e fotos de auditabilidade é restrito a perfis autorizados (Master, Supervisor ou Administrador) para garantir a integridade das auditorias.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-4">
           {/* Banner do Dossiê */}
           <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 p-4 sm:p-5 rounded-2xl text-white border-2 border-purple-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -3284,6 +3653,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             })()
           )}
         </div>
+        )
       )}
 
       {/* MODAL DE DOSSIÊ COMPLETO DE AUDITORIA DE ENCOMENDA */}
@@ -3620,6 +3990,181 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               <button
                 type="button"
                 onClick={executarExclusaoLoteRE}
+                disabled={loading}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-sm"
+              >
+                {loading ? 'Excluindo...' : 'Confirmar Exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR PACOTE RETIDO (PROTEGIDO POR RBAC) */}
+      {pacoteEmEdicao && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 sm:p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-emerald-600" />
+                <span>Editar Pacote Retido</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setPacoteEmEdicao(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={salvarEdicaoPacote} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                {!eEstruturaCasas && (
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                      {rotuloBloco}
+                    </label>
+                    <input
+                      type="text"
+                      value={editPacoteBloco}
+                      onChange={(e) => setEditPacoteBloco(e.target.value)}
+                      placeholder="Bloco / Torre"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                )}
+                <div className={`space-y-1 ${eEstruturaCasas ? 'col-span-2' : ''}`}>
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    {rotuloUnidade} *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPacoteUnidade}
+                    onChange={(e) => setEditPacoteUnidade(e.target.value)}
+                    placeholder="Unidade"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase">
+                  Código de Barras / Rastreio
+                </label>
+                <input
+                  type="text"
+                  value={editPacoteCodigo}
+                  onChange={(e) => setEditPacoteCodigo(e.target.value)}
+                  placeholder="Código de barras..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase">
+                  Local de Armazenamento *
+                </label>
+                <select
+                  value={editPacoteLocal}
+                  onChange={(e) => setEditPacoteLocal(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {locaisArmazenamento.filter(l => l.ativo !== false).map((loc: any) => {
+                    const valor = loc.codigo && loc.nome ? `${loc.codigo} - ${loc.nome}` : loc.nome || loc;
+                    return (
+                      <option key={loc.id || loc.codigo || loc} value={valor}>
+                        📦 {valor}
+                      </option>
+                    );
+                  })}
+                  {locaisArmazenamento.length === 0 && (
+                    <option value="Bancada Principal">📦 Bancada Principal</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase">
+                  Observações
+                </label>
+                <input
+                  type="text"
+                  value={editPacoteObs}
+                  onChange={(e) => setEditPacoteObs(e.target.value)}
+                  placeholder="Observações do pacote..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPacoteEmEdicao(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-sm"
+                >
+                  {loading ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR EXCLUSÃO DE PACOTE RETIDO (PROTEGIDO POR RBAC) */}
+      {pacoteParaExcluir && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 sm:p-5 space-y-4 shadow-2xl animate-in zoom-in-95 border-2 border-red-100">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h4 className="text-sm font-black text-red-900 flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-red-600" />
+                <span>Excluir Pacote Retido</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setPacoteParaExcluir(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-700">
+              <p className="font-bold text-slate-900">
+                Tem certeza que deseja excluir o pacote da unidade{' '}
+                <span className="font-mono text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-200">
+                  {formatarIdentificacaoUnidade(pacoteParaExcluir.unidade, pacoteParaExcluir.bloco, condoConfig?.tipo_estrutura)}
+                </span>?
+              </p>
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1 text-red-950">
+                <p>• <strong>Código / Rastreio:</strong> {pacoteParaExcluir.codigo_barras || 'Sem código'}</p>
+                <p>• <strong>Local Físico:</strong> {pacoteParaExcluir.local_armazenamento || 'Bancada Principal'}</p>
+                <p>• <strong>Destinatário:</strong> {pacoteParaExcluir.moradores?.nome || 'Não vinculado'}</p>
+              </div>
+              <p className="text-[11px] text-slate-500 italic">
+                * Esta exclusão será registrada no histórico de auditoria e ajustará os volumes pendentes do lote RE correspondente.
+              </p>
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPacoteParaExcluir(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executarExclusaoPacote}
                 disabled={loading}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-sm"
               >
