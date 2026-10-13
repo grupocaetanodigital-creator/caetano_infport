@@ -8,6 +8,7 @@ import {
   NivelEscalaFonte, 
   OPCOES_ESCALA_FONTE 
 } from '../services/fontScaleService';
+import { forcarAtualizacaoPwa } from '../services/pwaUpdateService';
 
 export default function ControleFonteAcessibilidade() {
   const [escala, setEscala] = useState<NivelEscalaFonte>(100);
@@ -117,6 +118,21 @@ export default function ControleFonteAcessibilidade() {
                   </button>
                 );
               })}
+            </div>
+
+            <div className="pt-2 mt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuAberto(false);
+                  forcarAtualizacaoPwa();
+                }}
+                className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-emerald-300 hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer"
+                title="Limpar cache do Service Worker e recarregar última versão sem deslogar"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Atualizar App & Cache</span>
+              </button>
             </div>
           </div>
         </>

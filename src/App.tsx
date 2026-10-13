@@ -17,6 +17,8 @@ import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import ControleFonteAcessibilidade from './components/ControleFonteAcessibilidade';
+import BotaoAtualizarApp from './components/BotaoAtualizarApp';
+import AlertaNovaVersaoPWA from './components/AlertaNovaVersaoPWA';
 import IndicadorConectividade from './components/IndicadorConectividade';
 import EmblemaInfport from './components/EmblemaInfport';
 import LeitorNFC from './components/LeitorNFC';
@@ -830,7 +832,8 @@ export default function App() {
                 <span className="text-xs font-bold uppercase text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
                   {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
                 </span>
-                <div className="hidden sm:flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <BotaoAtualizarApp />
                   <ControleFonteAcessibilidade />
                   <PWAInstallButton />
                 </div>
@@ -843,8 +846,9 @@ export default function App() {
             {moduloAtual === 'dashboard' && (
               <div className="max-w-4xl mx-auto space-y-3">
                 
-                {/* Bloco Utilitário: Botão Instalar App e Porcentagem de Acessibilidade */}
-                <div className="flex items-center justify-end gap-2 p-1">
+                {/* Bloco Utilitário: Botão Instalar App, Atualizar e Acessibilidade */}
+                <div className="flex items-center justify-end gap-1.5 sm:gap-2 p-1">
+                  <BotaoAtualizarApp />
                   <ControleFonteAcessibilidade />
                   <PWAInstallButton />
                 </div>
@@ -1053,6 +1057,9 @@ export default function App() {
           onClose={() => setModalSupabaseDoctorAberto(false)}
         />
 
+        {/* Notificação Flutuante de Nova Versão PWA */}
+        <AlertaNovaVersaoPWA />
+
       </div>
     );
   }
@@ -1074,8 +1081,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-slate-900 antialiased relative">
-      {/* Barra Superior de Acessibilidade e Instalação na Tela de Login */}
-      <div className="absolute top-4 right-4 flex items-center gap-2.5 z-20">
+      {/* Barra Superior de Acessibilidade, Atualização e Instalação na Tela de Login */}
+      <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
+        <BotaoAtualizarApp />
         <ControleFonteAcessibilidade />
         <PWAInstallButton />
       </div>
@@ -1164,6 +1172,7 @@ export default function App() {
 
       <IndicadorConectividade />
       <OfflineIndicator />
+      <AlertaNovaVersaoPWA />
     </div>
   );
 }

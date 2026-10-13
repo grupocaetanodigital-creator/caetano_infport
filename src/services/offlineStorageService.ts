@@ -51,17 +51,19 @@ export function obterDataUltimoCache(chave: string, condominioId: string = 'glob
   return null;
 }
 
+import { inicializarDetectorAtualizacoesPwa } from './pwaUpdateService';
+
 /**
  * Registra o Service Worker do PWA usando a API padrão do navegador
+ * e inicializa o detector de atualizações automáticas
  */
 export async function registrarPwaServiceWorker(): Promise<void> {
-  // O Service Worker só deve ser ativado em build de produção para evitar conflitos no iframe de desenvolvimento
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env?.PROD) {
     try {
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      console.log('[PWA] INFPORT pronto para funcionamento offline na portaria! Escopo:', reg.scope);
+      await inicializarDetectorAtualizacoesPwa();
     } catch (e) {
       console.warn('[PWA] Falha ao inicializar Service Worker:', e);
     }
   }
 }
+
