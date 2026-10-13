@@ -261,7 +261,8 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
       cadastros: { visualizar: true, criar: true, editar: true, excluir: true, operadores: true, moradores: true, condominios: true, gerenciar_niveis: true },
       moradores: { visualizar: true, criar: true, editar: true, excluir: true, adicionar: true },
       historico_absoluto: { visualizar: true, criar: true, editar: true, excluir: true, ver_feed: true, ver_metricas: true, exportar_csv: true, limpar_dados: true },
-      configuracoes: { visualizar: true, criar: true, editar: true, excluir: true, gerenciar_niveis: true, feature_flags: true }
+      configuracoes: { visualizar: true, criar: true, editar: true, excluir: true, gerenciar_niveis: true, feature_flags: true },
+      bancada: { visualizar: true, criar: true, editar: true, excluir: true, lancar: true, baixa: true, zerar: true, historico: true }
     }
   },
   {
@@ -283,7 +284,8 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
       cadastros: { visualizar: true, criar: true, editar: true, excluir: false, operadores: true, moradores: true, condominios: false, gerenciar_niveis: false },
       moradores: { visualizar: true, criar: true, editar: true, excluir: false, adicionar: true },
       historico_absoluto: { visualizar: true, criar: false, editar: false, excluir: false, ver_feed: true, ver_metricas: true, exportar_csv: true, limpar_dados: false },
-      configuracoes: { visualizar: true, criar: false, editar: false, excluir: false, gerenciar_niveis: false, feature_flags: false }
+      configuracoes: { visualizar: true, criar: false, editar: false, excluir: false, gerenciar_niveis: false, feature_flags: false },
+      bancada: { visualizar: true, criar: true, editar: true, excluir: false, lancar: true, baixa: true, zerar: true, historico: true }
     }
   },
   {
@@ -305,7 +307,8 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
       cadastros: { visualizar: true, criar: true, editar: true, excluir: false, operadores: false, moradores: true, condominios: false, gerenciar_niveis: false },
       moradores: { visualizar: true, criar: true, editar: true, excluir: false, adicionar: true },
       historico_absoluto: { visualizar: true, criar: false, editar: false, excluir: false, ver_feed: true, ver_metricas: true, exportar_csv: false, limpar_dados: false },
-      configuracoes: { visualizar: false, criar: false, editar: false, excluir: false, gerenciar_niveis: false, feature_flags: false }
+      configuracoes: { visualizar: false, criar: false, editar: false, excluir: false, gerenciar_niveis: false, feature_flags: false },
+      bancada: { visualizar: true, criar: true, editar: true, excluir: false, lancar: true, baixa: true, zerar: false, historico: true }
     }
   },
   {
@@ -327,7 +330,8 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
       cadastros: { visualizar: true, criar: false, editar: false, excluir: false, operadores: false, moradores: false, condominios: false, gerenciar_niveis: false },
       moradores: { visualizar: true, criar: true, editar: false, excluir: false, adicionar: true },
       historico_absoluto: { visualizar: true, criar: false, editar: false, excluir: false, ver_feed: true, ver_metricas: false, exportar_csv: false, limpar_dados: false },
-      configuracoes: { visualizar: false, criar: false, editar: false, excluir: false, gerenciar_niveis: false, feature_flags: false }
+      configuracoes: { visualizar: false, criar: false, editar: false, excluir: false, gerenciar_niveis: false, feature_flags: false },
+      bancada: { visualizar: true, criar: true, editar: false, excluir: false, lancar: true, baixa: true, zerar: false, historico: false }
     }
   },
   {
@@ -343,6 +347,7 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
       rondas: { visualizar: true, criar: false, editar: false, excluir: false, iniciar_ronda: false, cadastrar_pontos: false, setores: false },
       autorizados: { visualizar: true, criar: false, editar: false, excluir: false, cadastrar: false, dar_entrada: false, dar_saida: false },
       materiais: { visualizar: true, criar: false, editar: false, excluir: false, cadastrar_equipamentos: false },
+      bancada: { visualizar: true, criar: false, editar: false, excluir: false, lancar: false, baixa: false, zerar: false, historico: true },
       manutencao: { visualizar: true, criar: true, editar: false, excluir: false, abrir_os: true, concluir: false },
       ocorrencias: { visualizar: true, criar: true, editar: false, excluir: false, resolver: false },
       passagem_posto: { visualizar: true, criar: false, editar: false, excluir: false, assumir_posto: false, relatorio: true },
@@ -637,13 +642,17 @@ export function verificarPermissao(
   if (modKey === 'prestadores') modKey = 'autorizados';
   if (modKey === 'passagem') modKey = 'passagem_posto';
 
-  const permissoesModulo: any = 
+  let permissoesModulo: any = 
     (nivelObj.permissoes as any)[modKey] || 
     (nivelObj.permissoes as any)[modulo] ||
     (modKey === 'autorizados' ? (nivelObj.permissoes as any)['prestadores'] : undefined) ||
-    (modKey === 'passagem_posto' ? (nivelObj.permissoes as any)['passagem'] : undefined);
+    (modKey === 'passagem_posto' ? (nivelObj.permissoes as any)['passagem'] : undefined) ||
+    (modKey === 'bancada' ? (nivelObj.permissoes as any)['encomendas'] : undefined);
 
   if (!permissoesModulo) {
+    if (modKey === 'bancada') {
+      return Boolean(nivelNum <= 3);
+    }
     return false;
   }
 

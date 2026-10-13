@@ -67,6 +67,12 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const [qtdVolumes, setQtdVolumes] = useState<number>(1);
   const [observacao, setObservacao] = useState<string>('');
   const [mostrarTecladoVirtual, setMostrarTecladoVirtual] = useState<boolean>(false);
+  // Forçar teclado numérico no celular: 'tel' é o padrão universal para abrir numpad 0-9 nativo
+  const [modoTeclado, setModoTeclado] = useState<'tel' | 'number' | 'text'>(() => {
+    const salvo = localStorage.getItem('infport_bancada_modo_teclado');
+    if (salvo === 'tel' || salvo === 'number' || salvo === 'text') return salvo;
+    return 'tel';
+  });
   const [feedbackUltimoLancamento, setFeedbackUltimoLancamento] = useState<{
     mensagem: string;
     tipo: 'novo' | 'incremento';
@@ -615,32 +621,103 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                   Lançamento de {rotuloUnidade} na {estruturaSelecionada || rotuloBloco}
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => setMostrarTecladoVirtual(!mostrarTecladoVirtual)}
-                  className={`text-[11px] font-bold px-2 py-0.5 rounded-md border transition ${
-                    mostrarTecladoVirtual
-                      ? 'bg-amber-600 text-white border-amber-600'
-                      : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-                  }`}
-                >
-                  {mostrarTecladoVirtual ? 'Ocultar Numpad' : 'Teclado Touch na Tela'}
-                </button>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {/* Seletor rápido de tipo de teclado para compatibilidade total com dispositivos móveis */}
+                  <div className="bg-slate-100 p-0.5 rounded-lg flex items-center border border-slate-300 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoTeclado('tel');
+                        localStorage.setItem('infport_bancada_modo_teclado', 'tel');
+                        inputUnidadeRef.current?.focus();
+                      }}
+                      title="Forçar teclado numérico puro do celular (tipo tel + inputmode numeric)"
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        modoTeclado === 'tel'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      📱 Numérico [tel]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoTeclado('number');
+                        localStorage.setItem('infport_bancada_modo_teclado', 'number');
+                        inputUnidadeRef.current?.focus();
+                      }}
+                      title="Teclado numérico nativo (tipo number)"
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        modoTeclado === 'number'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      # [number]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoTeclado('text');
+                        localStorage.setItem('infport_bancada_modo_teclado', 'text');
+                        inputUnidadeRef.current?.focus();
+                      }}
+                      title="Teclado padrão com letras e números"
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        modoTeclado === 'text'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ABC
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTecladoVirtual(!mostrarTecladoVirtual)}
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-md border transition cursor-pointer ${
+                      mostrarTecladoVirtual
+                        ? 'bg-amber-600 text-white border-amber-600'
+                        : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                    }`}
+                  >
+                    {mostrarTecladoVirtual ? 'Ocultar Numpad' : 'Numpad na Tela'}
+                  </button>
+                </div>
               </div>
 
               {/* FORMULÁRIO COM INPUT NUMÉRICO TOUCH EXCLUSIVO */}
               <form onSubmit={handleAdicionarUnidade} className="space-y-3">
                 <div>
                   <div className="relative">
-                    {/* INPUT ALFANUMÉRICO (SUPORTA 105A, 1507A, 102, CASA 04, ETC) */}
+                    {/* INPUT COM FORÇAMENTO EFETIVO DE TECLADO NUMÉRICO NO CELULAR (type="tel" / type="number" + inputMode="numeric") */}
                     <input
                       ref={inputUnidadeRef}
-                      type="text"
+                      type={modoTeclado}
+                      inputMode={modoTeclado === 'text' ? 'text' : 'numeric'}
+                      pattern={modoTeclado === 'text' ? undefined : '[0-9]*'}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      enterKeyHint="go"
                       autoFocus
                       required
-                      placeholder={`Digite a unidade (ex: 105A, 1507A, 102, 01)...`}
+                      placeholder={
+                        modoTeclado !== 'text'
+                          ? 'Digite o número do apto (ex: 102, 1507)...'
+                          : 'Digite a unidade (ex: 105A, 1507A, 102)...'
+                      }
                       value={unidadeDigitada}
-                      onChange={e => setUnidadeDigitada(e.target.value.toUpperCase())}
+                      onChange={e => {
+                        let val = e.target.value.toUpperCase();
+                        if (modoTeclado === 'number') {
+                          val = val.replace(/\D/g, '');
+                        }
+                        setUnidadeDigitada(val);
+                      }}
                       className="w-full text-2xl sm:text-3xl font-black font-mono uppercase text-slate-900 bg-amber-50/50 border-2 border-amber-400 focus:border-amber-600 focus:bg-white rounded-xl py-3 px-4 shadow-inner outline-none transition placeholder:text-slate-400 placeholder:text-base placeholder:font-normal"
                     />
 
