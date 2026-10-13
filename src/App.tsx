@@ -25,6 +25,8 @@ import EmblemaInfport from './components/EmblemaInfport';
 import LeitorNFC from './components/LeitorNFC';
 import ModalMeuPerfil from './components/ModalMeuPerfil';
 import SupabaseDoctorModal from './components/SupabaseDoctorModal';
+import BotaoNotificacoesLembretes from './components/BotaoNotificacoesLembretes';
+import ModalLembretesPortaria from './components/ModalLembretesPortaria';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
 import { registrarAtividade } from './services/auditoriaService';
@@ -73,6 +75,7 @@ export default function App() {
   const [modalLeitorNfcGlobal, setModalLeitorNfcGlobal] = useState(false);
   const [modalMeuPerfilAberto, setModalMeuPerfilAberto] = useState(false);
   const [modalSupabaseDoctorAberto, setModalSupabaseDoctorAberto] = useState(false);
+  const [modalLembretesAberto, setModalLembretesAberto] = useState(false);
   const [mostrarSenhaLogin, setMostrarSenhaLogin] = useState(false);
   const [lembrarAcesso, setLembrarAcesso] = useState(true);
   const [restaurandoSessao, setRestaurandoSessao] = useState(true);
@@ -815,10 +818,12 @@ export default function App() {
             />
           )}
 
-          {/* CABEÇALHO MOBILE */}
-          <header className="md:hidden bg-slate-900 text-white px-3 py-2 flex items-center justify-between sticky top-0 z-30 shadow-md border-b border-slate-800">
-            <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
-              <EmblemaInfport tamanho="sm" comBrilho />
+          {/* CABEÇALHO GLOBAL (MOBILE E DESKTOP COM NOTIFICAÇÕES NO TOPO DIREITO) */}
+          <header className="bg-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-md border-b border-slate-800">
+            <div className="flex items-center gap-2 sm:gap-3 overflow-hidden flex-1 mr-2">
+              <div className="shrink-0 flex items-center">
+                <EmblemaInfport tamanho="sm" comBrilho />
+              </div>
               <div className="min-w-0 flex-1">
                 {eSuperAdminGlobal && !eSindico ? (
                   <select
@@ -830,7 +835,7 @@ export default function App() {
                       const cObj = listaCondominios.find(c => c.id === novoId);
                       if (cObj) setCondominio(cObj);
                     }}
-                    className="bg-slate-800 text-emerald-400 font-extrabold text-[11px] px-1.5 py-0.5 rounded border border-slate-700 focus:outline-none max-w-full truncate"
+                    className="bg-slate-800 text-emerald-400 font-extrabold text-[11px] sm:text-xs px-2 py-1 rounded border border-slate-700 focus:outline-none max-w-full truncate"
                   >
                     <option value="">🏢 Todos (Global)</option>
                     {listaCondominios.map((c) => (
@@ -838,7 +843,7 @@ export default function App() {
                     ))}
                   </select>
                 ) : (
-                  <h1 className="font-extrabold text-xs text-white truncate leading-tight">
+                  <h1 className="font-extrabold text-xs sm:text-sm text-white truncate leading-tight">
                     {operadorContextoGlobal.condominio_nome || 'Condomínio'}
                   </h1>
                 )}
@@ -848,7 +853,20 @@ export default function App() {
               </div>
             </div>
 
-            {/* Apenas Logo, Nome do Condomínio e Operador permanecem no Cabeçalho */}
+            {/* Ações no Topo Superior Direito: Botão de Notificações/Lembretes e Ferramentas */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="hidden md:flex items-center gap-1.5">
+                <BotaoAtualizarApp />
+                <ControleFonteAcessibilidade />
+                <PWAInstallButton />
+              </div>
+
+              {/* Ícone de Notificações (Sino/Mensagens) com Alerta Piscante e Contador em Tempo Real */}
+              <BotaoNotificacoesLembretes
+                condominioId={condominioAtivoId || operador?.condominio_id || ''}
+                onAbrirPainel={() => setModalLembretesAberto(true)}
+              />
+            </div>
           </header>
 
           {moduloAtual !== 'dashboard' && !eSindico && (
@@ -1090,6 +1108,18 @@ export default function App() {
         <SupabaseDoctorModal
           isOpen={modalSupabaseDoctorAberto}
           onClose={() => setModalSupabaseDoctorAberto(false)}
+        />
+
+        {/* Modal Global de Lembretes & Mensagens da Portaria (Portaria ⇄ Moradores) */}
+        <ModalLembretesPortaria
+          aberto={modalLembretesAberto}
+          onFechar={() => setModalLembretesAberto(false)}
+          condominioId={condominioAtivoId || operador?.condominio_id || ''}
+          condominioNome={operadorContextoGlobal.condominio_nome}
+          operadorAtual={{
+            id: operador?.id,
+            nome: operador?.nome
+          }}
         />
 
         {/* Notificação Flutuante de Nova Versão PWA */}
