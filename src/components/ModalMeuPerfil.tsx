@@ -185,6 +185,8 @@ export default function ModalMeuPerfil({
                 <img 
                   src={fotoUrl} 
                   alt={nome} 
+                  loading="lazy"
+                  decoding="async"
                   className="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-500 shadow-sm" 
                 />
               ) : (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { uploadFotoComprimidaStorage } from '../services/imageUtils';
 import { 
   ShieldCheck, 
   PackagePlus, 
@@ -156,21 +157,17 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
-      const fileName = `${pasta}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { publicUrl, tamanhoOriginalKb, tamanhoComprimidoKb, taxaReducaoPct } = await uploadFotoComprimidaStorage({
+        file,
+        pasta,
+        maxWidth: 1000,
+        maxHeight: 1000,
+        qualidade: 0.75
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('encomendas')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('encomendas')
-        .getPublicUrl(fileName);
-
-      setUrlCallback(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto salva com sucesso!' });
+      setUrlCallback(publicUrl);
+      const detalheEconomia = taxaReducaoPct > 0 ? ` (${tamanhoOriginalKb}KB ➔ ${tamanhoComprimidoKb}KB, -${taxaReducaoPct}%)` : '';
+      setMensagem({ tipo: 'sucesso', texto: `Foto salva com sucesso!${detalheEconomia}` });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar foto: ' + err.message });
     } finally {
@@ -829,7 +826,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
 
                 {fotoEntradaUrl && (
                   <div className="mt-2 relative w-28 h-28 rounded-lg overflow-hidden border-2 border-emerald-500 shadow-sm">
-                    <img src={fotoEntradaUrl} alt="Objeto Guardado" className="w-full h-full object-cover" />
+                    <img src={fotoEntradaUrl} alt="Objeto Guardado" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 )}
               </div>
@@ -903,7 +900,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                     <h4 className="font-bold text-xs text-slate-900 mt-0.5">{item.descricao}</h4>
                   </div>
                   {item.foto_entrada_url && (
-                    <img src={item.foto_entrada_url} alt="Objeto" className="w-10 h-10 rounded-md object-cover border shrink-0" />
+                    <img src={item.foto_entrada_url} alt="Objeto" loading="lazy" decoding="async" className="w-10 h-10 rounded-md object-cover border shrink-0" />
                   )}
                 </div>
 
@@ -985,7 +982,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
 
                 {fotoSaidaUrl && (
                   <div className="mt-1 relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-400 shadow-2xs">
-                    <img src={fotoSaidaUrl} alt="Foto Retirada" className="w-full h-full object-cover" />
+                    <img src={fotoSaidaUrl} alt="Foto Retirada" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 )}
               </div>
@@ -1332,7 +1329,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                             className="relative group cursor-pointer w-14 h-14 rounded-lg overflow-hidden border border-slate-300 hover:border-purple-500 shrink-0"
                             title="Clique para ampliar foto de entrada"
                           >
-                            <img src={item.foto_entrada_url} alt="Entrada" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            <img src={item.foto_entrada_url} alt="Entrada" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
                             <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[8px] text-white text-center py-0.5 font-bold">
                               Entrada
                             </span>
@@ -1345,7 +1342,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                             className="relative group cursor-pointer w-14 h-14 rounded-lg overflow-hidden border border-emerald-400 hover:border-emerald-600 shrink-0"
                             title="Clique para ampliar comprovante de retirada"
                           >
-                            <img src={item.foto_saida_url} alt="Saída" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            <img src={item.foto_saida_url} alt="Saída" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
                             <span className="absolute bottom-0 inset-x-0 bg-emerald-900/80 text-[8px] text-white text-center py-0.5 font-bold">
                               Baixa
                             </span>
@@ -1527,7 +1524,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                     onClick={() => setFotoAmpliadaModal({ url: itemDossieModal.foto_entrada_url, titulo: `Foto de Entrada: ${itemDossieModal.codigo_custodia}` })}
                     className="h-28 rounded-xl overflow-hidden border border-slate-300 cursor-pointer hover:opacity-90"
                   >
-                    <img src={itemDossieModal.foto_entrada_url} alt="Entrada" className="w-full h-full object-cover" />
+                    <img src={itemDossieModal.foto_entrada_url} alt="Entrada" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 ) : (
                   <div className="h-28 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs italic">
@@ -1543,7 +1540,7 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                     onClick={() => setFotoAmpliadaModal({ url: itemDossieModal.foto_saida_url, titulo: `Comprovante de Devolução: ${itemDossieModal.codigo_custodia}` })}
                     className="h-28 rounded-xl overflow-hidden border border-emerald-400 cursor-pointer hover:opacity-90"
                   >
-                    <img src={itemDossieModal.foto_saida_url} alt="Saída" className="w-full h-full object-cover" />
+                    <img src={itemDossieModal.foto_saida_url} alt="Saída" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 ) : (
                   <div className="h-28 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs italic">
@@ -1620,6 +1617,8 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
               <img 
                 src={fotoAmpliadaModal.url} 
                 alt="Comprovante em Alta Resolução" 
+                loading="lazy" 
+                decoding="async" 
                 className="max-h-[75vh] w-auto object-contain rounded-xl"
               />
             </div>

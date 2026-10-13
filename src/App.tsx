@@ -612,6 +612,8 @@ export default function App() {
                   <img 
                     src={operador.foto_url} 
                     alt={operador.nome} 
+                    loading="lazy"
+                    decoding="async"
                     className="w-8 h-8 rounded-full object-cover border-2 border-emerald-400 shrink-0" 
                   />
                 ) : (
@@ -740,6 +742,8 @@ export default function App() {
                     <img 
                       src={operador.foto_url} 
                       alt={operador.nome} 
+                      loading="lazy"
+                      decoding="async"
                       className="w-9 h-9 rounded-full object-cover border-2 border-emerald-400 shrink-0" 
                     />
                   ) : (

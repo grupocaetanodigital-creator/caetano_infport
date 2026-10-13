@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import ModalLeitorDocumentoOCR from '../components/ModalLeitorDocumentoOCR';
 import { registrarAtividade } from '../services/auditoriaService';
+import { comprimirImagemBase64 } from '../services/imageUtils';
 import { 
   carregarCondominioConfig,
   isEstruturaCasas,
@@ -408,16 +409,18 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     setMensagem({ tipo: 'sucesso', texto: 'Dados do documento e foto extraídos com sucesso via OCR!' });
   };
 
-  // Upload manual de foto do rosto
-  const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload manual de foto do rosto otimizada
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFotoRosto(reader.result as string);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto do rosto carregada!' });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const b64 = await comprimirImagemBase64(file, 800, 800, 0.75);
+      setFotoRosto(b64);
+      setMensagem({ tipo: 'sucesso', texto: 'Foto do rosto otimizada e carregada com sucesso!' });
+    } catch (err: any) {
+      console.error('Erro ao processar foto:', err);
+      setMensagem({ tipo: 'erro', texto: 'Falha ao processar foto.' });
+    }
   };
 
   // Helper de datas de validade da liberação
@@ -1107,7 +1110,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                             className="w-14 h-14 rounded-2xl bg-slate-800 border-2 border-slate-700 overflow-hidden shrink-0 cursor-pointer flex items-center justify-center text-slate-500 relative group"
                           >
                             {(item.foto_rosto || item.foto_url) ? (
-                              <img src={item.foto_rosto || item.foto_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                              <img src={item.foto_rosto || item.foto_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
                             ) : (
                               <UserCheck className="w-7 h-7" />
                             )}
@@ -1302,7 +1305,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                         className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 cursor-pointer"
                       >
                         {(item.foto_rosto || item.foto_url) ? (
-                          <img src={item.foto_rosto || item.foto_url} alt="" className="w-full h-full object-cover" />
+                          <img src={item.foto_rosto || item.foto_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
                           <UserCheck className="w-6 h-6" />
                         )}
@@ -1436,7 +1439,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                         className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 cursor-pointer"
                       >
                         {(h.foto_rosto || h.foto_url) ? (
-                          <img src={h.foto_rosto || h.foto_url} alt="" className="w-full h-full object-cover" />
+                          <img src={h.foto_rosto || h.foto_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
                           <UserCheck className="w-5 h-5" />
                         )}
@@ -1570,7 +1573,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                       >
                         <div className="flex items-center gap-2">
                           {sug.foto_rosto ? (
-                            <img src={sug.foto_rosto} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                            <img src={sug.foto_rosto} alt="" loading="lazy" decoding="async" className="w-8 h-8 rounded-lg object-cover" />
                           ) : (
                             <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
                               <UserCheck className="w-4 h-4" />
@@ -1768,7 +1771,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 <div className="flex items-center gap-3">
                   <div className="w-16 h-16 rounded-2xl bg-slate-900 border-2 border-dashed border-slate-700 overflow-hidden shrink-0 flex items-center justify-center text-slate-500">
                     {fotoRosto ? (
-                      <img src={fotoRosto} alt="Foto Rosto" className="w-full h-full object-cover" />
+                      <img src={fotoRosto} alt="Foto Rosto" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <Camera className="w-6 h-6" />
                     )}
@@ -1934,7 +1937,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
             <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center text-slate-400 border border-slate-700">
                 {itemSelecionado.foto_rosto ? (
-                  <img src={itemSelecionado.foto_rosto} alt="" className="w-full h-full object-cover" />
+                  <img src={itemSelecionado.foto_rosto} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 ) : (
                   <UserCheck className="w-6 h-6" />
                 )}
@@ -2267,7 +2270,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
           className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 cursor-pointer animate-in fade-in"
         >
           <div className="max-w-md w-full max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl border border-slate-800 bg-slate-900 p-2">
-            <img src={modalVisualizarFoto} alt="Foto Expandida" className="w-full h-auto max-h-[80vh] object-contain rounded-2xl mx-auto" />
+            <img src={modalVisualizarFoto} alt="Foto Expandida" loading="lazy" decoding="async" className="w-full h-auto max-h-[80vh] object-contain rounded-2xl mx-auto" />
             <p className="text-center text-xs text-slate-400 pt-2">Clique em qualquer lugar para fechar</p>
           </div>
         </div>

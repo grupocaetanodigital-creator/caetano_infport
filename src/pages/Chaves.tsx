@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { uploadFotoComprimidaStorage } from '../services/imageUtils';
 import { 
   Key, 
   AlertTriangle, 
@@ -274,21 +275,17 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
-      const fileName = `${pasta}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { publicUrl, tamanhoOriginalKb, tamanhoComprimidoKb, taxaReducaoPct } = await uploadFotoComprimidaStorage({
+        file,
+        pasta,
+        maxWidth: 1000,
+        maxHeight: 1000,
+        qualidade: 0.75
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('encomendas')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('encomendas')
-        .getPublicUrl(fileName);
-
-      setUrlCallback(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada com sucesso!' });
+      setUrlCallback(publicUrl);
+      const detalheEconomia = taxaReducaoPct > 0 ? ` (${tamanhoOriginalKb}KB ➔ ${tamanhoComprimidoKb}KB, -${taxaReducaoPct}%)` : '';
+      setMensagem({ tipo: 'sucesso', texto: `Foto capturada e comprimida com sucesso!${detalheEconomia}` });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar foto: ' + err.message });
     } finally {
@@ -1260,7 +1257,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
                       {fotoDocTerceiroUrl && (
                         <div className="mt-1 w-16 h-16 rounded-lg overflow-hidden border border-amber-400 relative">
-                          <img src={fotoDocTerceiroUrl} alt="Doc Terceiro" className="w-full h-full object-cover" />
+                          <img src={fotoDocTerceiroUrl} alt="Doc Terceiro" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         </div>
                       )}
                     </div>
@@ -1332,7 +1329,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
                   {fotoRetiradaUrl && (
                     <div className="mt-1 w-14 h-14 rounded-lg overflow-hidden border border-emerald-500">
-                      <img src={fotoRetiradaUrl} alt="Foto Retirada" className="w-full h-full object-cover" />
+                      <img src={fotoRetiradaUrl} alt="Foto Retirada" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
@@ -1394,7 +1391,7 @@ export default function Chaves({ usuarioLogado }: ChavesProps) {
 
                 {fotoDevolucaoUrl && (
                   <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border border-emerald-500">
-                    <img src={fotoDevolucaoUrl} alt="Foto Devolução" className="w-full h-full object-cover" />
+                    <img src={fotoDevolucaoUrl} alt="Foto Devolução" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 )}
               </div>

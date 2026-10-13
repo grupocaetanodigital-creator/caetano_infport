@@ -404,7 +404,7 @@ export default function ModalLeitorDocumentoOCR({
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center gap-4">
               {fotoDocPreview ? (
                 <div className="relative w-28 h-20 bg-slate-900 rounded-xl overflow-hidden border border-slate-700 flex-shrink-0 shadow-md">
-                  <img src={fotoDocPreview} alt="Documento" className="w-full h-full object-cover" />
+                  <img src={fotoDocPreview} alt="Documento" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/90 text-emerald-400 px-1 py-0.5 rounded font-mono">
                     Doc
                   </span>
@@ -417,7 +417,7 @@ export default function ModalLeitorDocumentoOCR({
 
               {fotoRostoPreview && (
                 <div className="relative w-16 h-20 bg-slate-900 rounded-xl overflow-hidden border border-emerald-500/40 flex-shrink-0 shadow-md">
-                  <img src={fotoRostoPreview} alt="Face Recortada" className="w-full h-full object-cover" />
+                  <img src={fotoRostoPreview} alt="Face Recortada" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/90 text-emerald-400 px-1 py-0.5 rounded font-mono">
                     Face
                   </span>

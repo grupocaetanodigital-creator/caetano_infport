@@ -1487,6 +1487,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                             <img 
                               src={op.foto_url} 
                               alt={op.nome} 
+                              loading="lazy"
+                              decoding="async"
                               className="w-10 h-10 rounded-xl object-cover border-2 border-blue-400 shrink-0 shadow-2xs" 
                             />
                           ) : (
@@ -1933,7 +1935,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                                       title={`${m.nome} (${m.tipo || 'Morador'})`}
                                     >
                                       {m.foto_url ? (
-                                        <img src={m.foto_url} alt={m.nome} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                                        <img src={m.foto_url} alt={m.nome} loading="lazy" decoding="async" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                                       ) : (
                                         <span className="w-3.5 h-3.5 rounded-full bg-purple-200 text-purple-800 text-[8px] flex items-center justify-center font-black shrink-0">
                                           {m.nome ? m.nome.charAt(0).toUpperCase() : 'M'}
@@ -2045,6 +2047,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                                 <img 
                                   src={m.foto_url} 
                                   alt={m.nome} 
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-11 h-11 rounded-2xl object-cover shrink-0 border-2 border-purple-400 shadow-2xs" 
                                 />
                               ) : (
@@ -2554,7 +2558,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                 <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <div className="relative group shrink-0">
                     {fotoOperador ? (
-                      <img src={fotoOperador} alt="Foto Operador" className="w-14 h-14 rounded-xl object-cover border-2 border-blue-500 shadow-xs" />
+                      <img src={fotoOperador} alt="Foto Operador" loading="lazy" decoding="async" className="w-14 h-14 rounded-xl object-cover border-2 border-blue-500 shadow-xs" />
                     ) : (
                       <div className="w-14 h-14 rounded-xl bg-slate-800 text-blue-400 font-black text-lg flex items-center justify-center border border-slate-700">
                         {nomeOperador ? nomeOperador.charAt(0).toUpperCase() : 'OP'}
@@ -2705,7 +2709,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                     <div className="flex items-center gap-3.5 bg-purple-50/70 p-3 rounded-xl border border-purple-200">
                       <div className="relative group shrink-0">
                         {fotoMorador ? (
-                          <img src={fotoMorador} alt="Foto Morador" className="w-14 h-14 rounded-xl object-cover border-2 border-purple-500 shadow-xs" />
+                          <img src={fotoMorador} alt="Foto Morador" loading="lazy" decoding="async" className="w-14 h-14 rounded-xl object-cover border-2 border-purple-500 shadow-xs" />
                         ) : (
                           <div className="w-14 h-14 rounded-xl bg-purple-100 text-purple-800 font-black text-lg flex items-center justify-center border border-purple-300">
                             {nomeMorador ? nomeMorador.charAt(0).toUpperCase() : 'MO'}
@@ -3354,7 +3358,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           {m.foto_url ? (
-                            <img src={m.foto_url} alt={m.nome} className="w-10 h-10 rounded-xl object-cover shrink-0 border border-purple-300 shadow-2xs" />
+                            <img src={m.foto_url} alt={m.nome} loading="lazy" decoding="async" className="w-10 h-10 rounded-xl object-cover shrink-0 border border-purple-300 shadow-2xs" />
                           ) : (
                             <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 font-black text-xs flex items-center justify-center shrink-0 border border-purple-200">
                               {m.nome ? m.nome.slice(0, 2).toUpperCase() : 'MO'}

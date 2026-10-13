@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 import { supabase } from '../services/supabase';
+import { uploadFotoComprimidaStorage } from '../services/imageUtils';
 import LeitorNFC from '../components/LeitorNFC';
 import { 
   ShieldCheck, 
@@ -334,21 +335,17 @@ export default function Rondas({ usuarioLogado }: RondasProps) {
     setUploadingFoto(true);
 
     try {
-      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
-      const fileName = `rondas_evidencias/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { publicUrl, tamanhoOriginalKb, tamanhoComprimidoKb, taxaReducaoPct } = await uploadFotoComprimidaStorage({
+        file,
+        pasta: 'rondas_evidencias',
+        maxWidth: 1000,
+        maxHeight: 1000,
+        qualidade: 0.75
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('encomendas')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('encomendas')
-        .getPublicUrl(fileName);
-
-      setFotoPontoUrl(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada e enviada com sucesso!' });
+      setFotoPontoUrl(publicUrl);
+      const detalheEconomia = taxaReducaoPct > 0 ? ` (${tamanhoOriginalKb}KB ➔ ${tamanhoComprimidoKb}KB, -${taxaReducaoPct}%)` : '';
+      setMensagem({ tipo: 'sucesso', texto: `Foto capturada, comprimida e enviada com sucesso!${detalheEconomia}` });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao enviar foto: ' + err.message });
     } finally {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { verificarPermissao } from '../services/permissoesService';
+import { uploadFotoComprimidaStorage } from '../services/imageUtils';
 import { 
   Radio, 
   AlertTriangle, 
@@ -88,21 +89,17 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
-      const fileName = `avarias_materiais/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { publicUrl, tamanhoOriginalKb, tamanhoComprimidoKb, taxaReducaoPct } = await uploadFotoComprimidaStorage({
+        file,
+        pasta: 'avarias_materiais',
+        maxWidth: 1000,
+        maxHeight: 1000,
+        qualidade: 0.75
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('encomendas')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('encomendas')
-        .getPublicUrl(fileName);
-
-      setFotoAvariaUrl(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto da avaria registrada com sucesso!' });
+      setFotoAvariaUrl(publicUrl);
+      const detalheEconomia = taxaReducaoPct > 0 ? ` (${tamanhoOriginalKb}KB ➔ ${tamanhoComprimidoKb}KB, -${taxaReducaoPct}%)` : '';
+      setMensagem({ tipo: 'sucesso', texto: `Foto da avaria comprimida e registrada com sucesso!${detalheEconomia}` });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Falha ao enviar foto: ' + err.message });
     } finally {
@@ -377,6 +374,8 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
                     <img
                       src={m.foto_avaria_url}
                       alt="Foto da Avaria"
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-20 object-cover rounded-md mt-1 border"
                     />
                   )}
@@ -520,7 +519,7 @@ export default function Materiais({ usuarioLogado }: MateriaisProps) {
 
                     {fotoAvariaUrl && (
                       <div className="mt-1.5 w-16 h-16 rounded-lg overflow-hidden border border-red-400">
-                        <img src={fotoAvariaUrl} alt="Foto Defeito" className="w-full h-full object-cover" />
+                        <img src={fotoAvariaUrl} alt="Foto Defeito" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       </div>
                     )}
                   </div>

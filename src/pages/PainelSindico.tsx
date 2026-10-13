@@ -1393,6 +1393,8 @@ export default function PainelSindico({
               <img 
                 src={itemVisualizando.dados.foto_etiqueta_url || itemVisualizando.dados.foto_url || itemVisualizando.dados.foto_rosto} 
                 alt="Evidência" 
+                loading="lazy"
+                decoding="async"
                 className="max-h-[65vh] object-contain"
               />
             </div>

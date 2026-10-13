@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { registrarAtividade } from '../services/auditoriaService';
+import { uploadFotoComprimidaStorage } from '../services/imageUtils';
 import { 
   Package, 
   Truck, 
@@ -576,21 +577,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
-      const fileName = `${pastaDestino}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { publicUrl, tamanhoOriginalKb, tamanhoComprimidoKb, taxaReducaoPct } = await uploadFotoComprimidaStorage({
+        file,
+        pasta: pastaDestino,
+        maxWidth: 1000,
+        maxHeight: 1000,
+        qualidade: 0.75
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('encomendas')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('encomendas')
-        .getPublicUrl(fileName);
-
-      setUrlCallback(urlData.publicUrl);
-      setMensagem({ tipo: 'sucesso', texto: 'Foto capturada e salva com sucesso!' });
+      setUrlCallback(publicUrl);
+      const detalheEconomia = taxaReducaoPct > 0 ? ` (otimizada: ${tamanhoOriginalKb}KB ➔ ${tamanhoComprimidoKb}KB, -${taxaReducaoPct}%)` : '';
+      setMensagem({ tipo: 'sucesso', texto: `Foto capturada e salva com sucesso!${detalheEconomia}` });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Falha ao salvar foto: ' + err.message });
     } finally {
@@ -2450,7 +2447,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     </label>
                   ) : (
                     <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 p-1.5 flex justify-center">
-                      <img src={fotoEtiquetaUrl} alt="Etiqueta" className="max-h-28 rounded object-cover" />
+                      <img src={fotoEtiquetaUrl} alt="Etiqueta" loading="lazy" decoding="async" className="max-h-28 rounded object-cover" />
                       <button type="button" onClick={() => setFotoEtiquetaUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -2878,7 +2875,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       </label>
                     ) : (
                       <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
-                        <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-24 rounded object-cover" />
+                        <img src={fotoRetiranteUrl} alt="Comprovante" loading="lazy" decoding="async" className="max-h-24 rounded object-cover" />
                         <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -3027,7 +3024,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       </label>
                     ) : (
                       <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
-                        <img src={fotoRetiranteUrl} alt="Comprovante" className="max-h-24 rounded object-cover" />
+                        <img src={fotoRetiranteUrl} alt="Comprovante" loading="lazy" decoding="async" className="max-h-24 rounded object-cover" />
                         <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -3552,7 +3549,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                             >
                               {item.foto_etiqueta_url ? (
                                 <>
-                                  <img src={item.foto_etiqueta_url} alt="Etiqueta" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                  <img src={item.foto_etiqueta_url} alt="Etiqueta" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
                                   <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
                                     <Eye className="w-2.5 h-2.5" /> Ver Foto
                                   </span>
@@ -3585,7 +3582,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                             >
                               {item.foto_retirada_url ? (
                                 <>
-                                  <img src={item.foto_retirada_url} alt="Comprovante Retirada" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                  <img src={item.foto_retirada_url} alt="Comprovante Retirada" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
                                   <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
                                     <Eye className="w-2.5 h-2.5" /> Ver Foto
                                   </span>
@@ -3736,7 +3733,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
                   <div className="bg-slate-900 rounded-xl overflow-hidden h-56 flex items-center justify-center border border-slate-300">
                     {itemModalDossie.foto_etiqueta_url ? (
-                      <img src={itemModalDossie.foto_etiqueta_url} alt="Etiqueta no Recebimento" className="w-full h-full object-contain" />
+                      <img src={itemModalDossie.foto_etiqueta_url} alt="Etiqueta no Recebimento" loading="lazy" decoding="async" className="w-full h-full object-contain" />
                     ) : (
                       <div className="text-slate-500 text-center text-xs">
                         <Package className="w-8 h-8 mx-auto mb-1 opacity-40" />
@@ -3758,7 +3755,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
                   <div className="bg-slate-900 rounded-xl overflow-hidden h-56 flex items-center justify-center border border-slate-300">
                     {itemModalDossie.foto_retirada_url ? (
-                      <img src={itemModalDossie.foto_retirada_url} alt="Comprovante de Saída" className="w-full h-full object-contain" />
+                      <img src={itemModalDossie.foto_retirada_url} alt="Comprovante de Saída" loading="lazy" decoding="async" className="w-full h-full object-contain" />
                     ) : (
                       <div className="text-slate-500 text-center text-xs p-4">
                         <Clock className="w-8 h-8 mx-auto mb-1 text-amber-500 opacity-60" />
@@ -3867,7 +3864,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               </button>
             </div>
             <div className="flex justify-center bg-slate-100 rounded-xl overflow-hidden max-h-[70vh] border border-slate-200">
-              <img src={modalFotoAmpliada} alt="Etiqueta Ampliada" className="w-full h-auto object-contain max-h-[70vh]" />
+              <img src={modalFotoAmpliada} alt="Etiqueta Ampliada" loading="lazy" decoding="async" className="w-full h-auto object-contain max-h-[70vh]" />
             </div>
             <div className="flex justify-end pt-1">
               <button
