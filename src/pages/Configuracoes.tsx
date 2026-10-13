@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
+import GerenciamentoPermissoes from '../components/GerenciamentoPermissoes';
 import { generateMigrationSql } from '../services/databaseDoctor';
 import { SetorRonda, carregarSetoresRonda } from '../services/setoresRonda';
 import { 
@@ -74,7 +75,7 @@ interface ConfiguracoesProps {
 }
 
 export default function Configuracoes({ usuarioLogado, onConfigSalva }: ConfiguracoesProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'templates' | 'emergencia' | 'backup' | 'whats_modulos' | 'locais_triagem' | 'setores_ronda'>('flags');
+  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'permissoes_rbac' | 'templates' | 'emergencia' | 'backup' | 'whats_modulos' | 'locais_triagem' | 'setores_ronda'>('flags');
   const [loading, setLoading] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
@@ -933,6 +934,15 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         </button>
 
         <button
+          onClick={() => setAbaAtiva('permissoes_rbac')}
+          className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition ${
+            abaAtiva === 'permissoes_rbac' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-700 bg-emerald-50/80 hover:bg-emerald-100'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Níveis de Acesso & Permissões (RBAC)
+        </button>
+
+        <button
           onClick={() => setAbaAtiva('templates')}
           className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition ${
             abaAtiva === 'templates' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:bg-white/50'
@@ -986,6 +996,16 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
           <ShieldCheck className="w-3.5 h-3.5 text-blue-600" /> 11.7 Setores de Ronda
         </button>
       </div>
+
+      {/* ABA NÍVEIS DE ACESSO & PERMISSÕES (RBAC) */}
+      {abaAtiva === 'permissoes_rbac' && (
+        <div className="space-y-4">
+          <GerenciamentoPermissoes
+            condominioId={usuarioLogado?.condominio_id}
+            onAtualizacao={carregarConfiguracoes}
+          />
+        </div>
+      )}
 
       {/* ABA 11.1: PARAMETRIZAÇÃO */}
       {abaAtiva === 'flags' && (

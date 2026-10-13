@@ -27,7 +27,7 @@ import SupabaseDoctorModal from './components/SupabaseDoctorModal';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
 import { registrarAtividade } from './services/auditoriaService';
-import { carregarNiveisAcesso } from './services/permissoesService';
+import { carregarNiveisAcesso, verificarPermissao } from './services/permissoesService';
 import { 
   ShieldCheck, 
   Lock, 
@@ -97,6 +97,14 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
+  const [versaoPermissoes, setVersaoPermissoes] = useState(0);
+
+  useEffect(() => {
+    const handleAtualizacao = () => setVersaoPermissoes(v => v + 1);
+    window.addEventListener('niveis_acesso_atualizados', handleAtualizacao);
+    return () => window.removeEventListener('niveis_acesso_atualizados', handleAtualizacao);
+  }, []);
+
   const eSuperAdminGlobal = (operador?.login === 'admin' || operador?.perfil === 'admin_geral' || (Number(operador?.nivel_acesso) === 0 && (!operador?.condominio_id || operador?.condominio_id === 'global')));
   const eAdmin = eSuperAdminGlobal || operador?.perfil === 'admin' || operador?.nivel_acesso === 0;
   const eSindico = operador?.nivel_acesso === 4 || 
@@ -104,8 +112,6 @@ export default function App() {
                    operador?.perfil === 'Síndico' || 
                    operador?.funcao?.toLowerCase() === 'síndico' || 
                    operador?.funcao?.toLowerCase() === 'sindico';
-  const podeAcessarConfiguracoes = (eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1) && !eSindico;
-  const podeAcessarCadastros = !eSindico;
 
   useEffect(() => {
     let montado = true;
@@ -481,32 +487,39 @@ export default function App() {
     listaCondominios: eSuperAdminGlobal ? listaCondominios : (condominio ? [condominio] : [])
   } : null;
 
+  const podeAcessarConfiguracoes = Boolean(
+    !eSindico && (eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1 || verificarPermissao(operadorContextoGlobal, 'configuracoes', 'visualizar'))
+  );
+  const podeAcessarCadastros = Boolean(
+    !eSindico && (eAdmin || operador?.perfil === 'master' || operador?.nivel_acesso === 1 || verificarPermissao(operadorContextoGlobal, 'cadastros', 'visualizar'))
+  );
+
   const modulosDisponiveis = eSindico ? [
     { id: 'painel_sindico', titulo: 'Portal do Síndico', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }
   ] : [
     ...(eAdmin ? [{ id: 'painel_sindico', titulo: 'Portal Síndico (Visão)', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }] : []),
-    { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
-    { id: 'custodia', titulo: 'Custódia Itens', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-    { id: 'prestadores', titulo: 'Autorizados', icone: UserCheck, flag: Boolean(featureFlags.mod10_prestadores_servico), cor: 'bg-purple-50 text-purple-700 border-purple-200' },
-    { id: 'materiais', titulo: 'Materiais Posto', icone: ClipboardList, flag: Boolean(featureFlags.mod04_materiais_posto), cor: 'bg-teal-50 text-teal-700 border-teal-200' },
-    { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-    { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
-    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
-    { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
-    { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+    { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas && verificarPermissao(operadorContextoGlobal, 'encomendas', 'visualizar')), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
+    { id: 'custodia', titulo: 'Custódia Itens', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens && verificarPermissao(operadorContextoGlobal, 'custodia', 'visualizar')), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { id: 'prestadores', titulo: 'Autorizados', icone: UserCheck, flag: Boolean(featureFlags.mod10_prestadores_servico && (verificarPermissao(operadorContextoGlobal, 'autorizados', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'prestadores', 'visualizar'))), cor: 'bg-purple-50 text-purple-700 border-purple-200' },
+    { id: 'materiais', titulo: 'Materiais Posto', icone: ClipboardList, flag: Boolean(featureFlags.mod04_materiais_posto && verificarPermissao(operadorContextoGlobal, 'materiais', 'visualizar')), cor: 'bg-teal-50 text-teal-700 border-teal-200' },
+    { id: 'chaves', titulo: 'Quadro Chaves', icone: Key, flag: Boolean(featureFlags.mod05_quadro_chaves && verificarPermissao(operadorContextoGlobal, 'chaves', 'visualizar')), cor: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+    { id: 'manutencao', titulo: 'Manutenção OS', icone: Wrench, flag: Boolean(featureFlags.mod06_gestao_manutencao && verificarPermissao(operadorContextoGlobal, 'manutencao', 'visualizar')), cor: 'bg-orange-50 text-orange-600 border-orange-200' },
+    { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda && verificarPermissao(operadorContextoGlobal, 'rondas', 'visualizar')), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
+    { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias && verificarPermissao(operadorContextoGlobal, 'ocorrencias', 'visualizar')), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
+    { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto && (verificarPermissao(operadorContextoGlobal, 'passagem_posto', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'passagem', 'visualizar'))), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
     ...(podeAcessarCadastros ? [{ id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' }] : []),
-    { id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    ...(verificarPermissao(operadorContextoGlobal, 'historico_absoluto', 'visualizar') ? [{ id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' }] : []),
   ];
 
-  // Se o módulo ativo no momento for desativado nas flags, redireciona para o dashboard
+  // Se o módulo ativo no momento for desativado nas flags ou bloqueado pelo perfil, redireciona para o dashboard
   useEffect(() => {
-    if (moduloAtual !== 'dashboard' && moduloAtual !== 'configuracoes') {
+    if (moduloAtual !== 'dashboard' && moduloAtual !== 'painel_sindico') {
       const modAtivo = modulosDisponiveis.find(m => m.id === moduloAtual);
-      if (modAtivo && !modAtivo.flag) {
+      if (!modAtivo || !modAtivo.flag) {
         setModuloAtual('dashboard');
       }
     }
-  }, [featureFlags, moduloAtual]);
+  }, [featureFlags, moduloAtual, versaoPermissoes, operador]);
 
   if (podeAcessarConfiguracoes) {
     modulosDisponiveis.push({ id: 'configuracoes', titulo: 'Configurações', icone: Settings, flag: true, cor: 'bg-slate-800 text-white border-slate-900' });

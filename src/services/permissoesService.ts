@@ -339,8 +339,13 @@ export const NIVEIS_PADRAO: NivelAcessoItem[] = [
 ];
 
 const STORAGE_KEY_NIVEIS = 'infport_niveis_acesso_v1';
+let cacheNiveisMemoria: NivelAcessoItem[] | null = null;
 
 export function obterNiveisLocal(): NivelAcessoItem[] {
+  if (cacheNiveisMemoria && Array.isArray(cacheNiveisMemoria) && cacheNiveisMemoria.length > 0) {
+    return cacheNiveisMemoria;
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY_NIVEIS);
     if (raw) {
@@ -350,21 +355,30 @@ export function obterNiveisLocal(): NivelAcessoItem[] {
         const mapa = new Map<string, NivelAcessoItem>();
         NIVEIS_PADRAO.forEach(n => mapa.set(n.id, n));
         parsed.forEach((n: NivelAcessoItem) => mapa.set(n.id, n));
-        return Array.from(mapa.values());
+        const consolidados = Array.from(mapa.values());
+        cacheNiveisMemoria = consolidados;
+        return consolidados;
       }
     }
   } catch (e) {
     console.warn('Erro ao ler níveis locais:', e);
   }
+  cacheNiveisMemoria = [...NIVEIS_PADRAO];
   return [...NIVEIS_PADRAO];
 }
 
 export function salvarNiveisLocal(niveis: NivelAcessoItem[]) {
+  cacheNiveisMemoria = niveis;
   try {
     localStorage.setItem(STORAGE_KEY_NIVEIS, JSON.stringify(niveis));
-    window.dispatchEvent(new CustomEvent('niveis_acesso_atualizados', { detail: niveis }));
   } catch (e) {
     console.warn('Erro ao salvar níveis locais:', e);
+  }
+  // Notifica imediatamente toda a aplicação para reavaliação de permissões
+  try {
+    window.dispatchEvent(new CustomEvent('niveis_acesso_atualizados', { detail: niveis }));
+  } catch (e) {
+    // ignore
   }
 }
 
@@ -404,7 +418,15 @@ export async function carregarNiveisAcesso(condominioId?: string): Promise<Nivel
 
 export async function salvarNivelAcesso(nivel: NivelAcessoItem, condominioId?: string): Promise<void> {
   const atuais = obterNiveisLocal();
-  const targetCondo = condominioId || nivel.condominio_id;
+  let targetCondo = condominioId || nivel.condominio_id;
+  if (!targetCondo || targetCondo === 'global') {
+    try {
+      const { data: c } = await supabase.from('condominios').select('id').limit(1).maybeSingle();
+      if (c?.id) targetCondo = c.id;
+    } catch (e) {
+      // ignore
+    }
+  }
 
   const nivelParaSalvar: NivelAcessoItem = {
     ...nivel,
@@ -542,7 +564,7 @@ export function clonarPermissoes(permissoesOrigem: PermissoesModulo): Permissoes
  */
 export function verificarPermissao(
   operador: any,
-  modulo: keyof PermissoesModulo,
+  modulo: keyof PermissoesModulo | string,
   acao: string
 ): boolean {
   if (!operador) return false;
@@ -550,7 +572,7 @@ export function verificarPermissao(
   const nivelNum = Number(operador.nivel_acesso ?? operador.nivel ?? 3);
   const perfilStr = String(operador.perfil || '').toLowerCase();
   const idNivel = operador.nivel_acesso_custom_id || 
-                  (operador.nivel_acesso !== undefined ? `nivel_${operador.nivel_acesso}` : null) ||
+                  (operador.nivel_acesso !== undefined && operador.nivel_acesso !== null ? `nivel_${operador.nivel_acesso}` : null) ||
                   (operador.perfil ? `nivel_${operador.perfil}` : 'nivel_3');
 
   // REGRA ESTRITA DE SEGURANÇA: Nível 3 (Operador/Porteiro) NUNCA pode excluir materiais do posto
@@ -575,15 +597,15 @@ export function verificarPermissao(
   const todos = obterNiveisLocal();
   let nivelObj = todos.find(n => n.id === idNivel);
 
-  if (!nivelObj && operador.nivel_acesso !== undefined) {
+  if (!nivelObj && operador.nivel_acesso !== undefined && operador.nivel_acesso !== null) {
     nivelObj = todos.find(n => n.id === `nivel_${operador.nivel_acesso}`);
   }
 
   if (!nivelObj) {
-    if (perfilStr.includes('master') || nivelNum === 1) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_1');
-    else if (perfilStr.includes('superv') || nivelNum === 2) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_2');
-    else if (perfilStr.includes('sind') || nivelNum === 4) nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_4');
-    else nivelObj = NIVEIS_PADRAO.find(n => n.id === 'nivel_3');
+    if (perfilStr.includes('master') || nivelNum === 1) nivelObj = todos.find(n => n.id === 'nivel_1') || NIVEIS_PADRAO.find(n => n.id === 'nivel_1');
+    else if (perfilStr.includes('superv') || nivelNum === 2) nivelObj = todos.find(n => n.id === 'nivel_2') || NIVEIS_PADRAO.find(n => n.id === 'nivel_2');
+    else if (perfilStr.includes('sind') || nivelNum === 4) nivelObj = todos.find(n => n.id === 'nivel_4') || NIVEIS_PADRAO.find(n => n.id === 'nivel_4');
+    else nivelObj = todos.find(n => n.id === 'nivel_3') || NIVEIS_PADRAO.find(n => n.id === 'nivel_3');
   }
 
   // Fallback seguro de menor privilégio: se não encontrou o perfil, ações destrutivas são SEMPRE negadas
@@ -594,33 +616,48 @@ export function verificarPermissao(
     return false;
   }
 
-  const permissoesModulo: any = (nivelObj.permissoes as any)[modulo];
+  // Normalização de sinônimos de módulos (ex: prestadores <-> autorizados, passagem <-> passagem_posto)
+  let modKey = String(modulo).toLowerCase();
+  if (modKey === 'prestadores') modKey = 'autorizados';
+  if (modKey === 'passagem') modKey = 'passagem_posto';
+
+  const permissoesModulo: any = 
+    (nivelObj.permissoes as any)[modKey] || 
+    (nivelObj.permissoes as any)[modulo] ||
+    (modKey === 'autorizados' ? (nivelObj.permissoes as any)['prestadores'] : undefined) ||
+    (modKey === 'passagem_posto' ? (nivelObj.permissoes as any)['passagem'] : undefined);
+
   if (!permissoesModulo) {
     return false;
   }
 
-  // Se for Nível 3 e o módulo for materiais, bloqueia exclusão independentemente de customizações errôneas
-  if (modulo === 'materiais' && acao === 'excluir' && (nivelNum >= 3 || idNivel === 'nivel_3')) {
+  // Se o módulo está explicitamente bloqueado para visualização, nenhuma ação dentro dele é permitida
+  if (acao !== 'visualizar' && permissoesModulo.visualizar === false) {
     return false;
   }
 
+  // Se a verificação for apenas a visualização geral do módulo
+  if (acao === 'visualizar') {
+    return Boolean(permissoesModulo.visualizar ?? true);
+  }
+
+  // Se a ação direta estiver explicitamente configurada na matriz (true ou false)
   if (permissoesModulo[acao] !== undefined) {
     return Boolean(permissoesModulo[acao]);
   }
 
   // Aliases e fallbacks inteligentes para compatibilidade com perfis
-  if (modulo === 'chaves') {
+  if (modKey === 'chaves') {
     if (acao === 'excluir') return Boolean(permissoesModulo.excluir ?? false);
     if (acao === 'cadastrar') return Boolean(permissoesModulo.cadastrar ?? permissoesModulo.criar ?? false);
     if (acao === 'editar') return Boolean(permissoesModulo.editar ?? permissoesModulo.cadastrar ?? false);
     if (acao === 'emprestar') return Boolean(permissoesModulo.emprestar ?? permissoesModulo.criar ?? true);
     if (acao === 'devolver') return Boolean(permissoesModulo.devolver ?? permissoesModulo.editar ?? true);
-    if (acao === 'visualizar') return Boolean(permissoesModulo.visualizar ?? true);
   }
 
-  if (modulo === 'encomendas') {
+  if (modKey === 'encomendas') {
     if (acao === 'cadastrar_entregador') return Boolean(permissoesModulo.cadastrar_entregador ?? permissoesModulo.criar ?? false);
-    if (acao === 'entrada_lote') return Boolean(permissoesModulo.entrada_lote ?? permissoesModulo.criar_lote ?? permissoesModulo.criar ?? permissoesModulo.visualizar ?? false);
+    if (acao === 'entrada_lote') return Boolean(permissoesModulo.entrada_lote ?? permissoesModulo.criar_lote ?? permissoesModulo.criar ?? false);
     if (acao === 'criar_lote') return Boolean(permissoesModulo.criar_lote ?? permissoesModulo.entrada_lote ?? permissoesModulo.criar ?? false);
     if (acao === 'triagem') return Boolean(permissoesModulo.triagem ?? permissoesModulo.criar ?? false);
     if (acao === 'baixa') return Boolean(permissoesModulo.baixa ?? permissoesModulo.criar ?? false);
@@ -629,6 +666,53 @@ export function verificarPermissao(
     if (acao === 'dossie') return Boolean(permissoesModulo.dossie ?? permissoesModulo.visualizar ?? false);
     if (acao === 'editar_lotes') return Boolean(permissoesModulo.editar_lotes ?? permissoesModulo.editar ?? false);
     if (acao === 'excluir_lotes') return Boolean(permissoesModulo.excluir_lotes ?? permissoesModulo.excluir ?? false);
+  }
+
+  if (modKey === 'autorizados' || modKey === 'prestadores') {
+    if (acao === 'cadastrar') return Boolean(permissoesModulo.cadastrar ?? permissoesModulo.criar ?? false);
+    if (acao === 'dar_entrada') return Boolean(permissoesModulo.dar_entrada ?? permissoesModulo.criar ?? true);
+    if (acao === 'dar_saida') return Boolean(permissoesModulo.dar_saida ?? permissoesModulo.editar ?? true);
+  }
+
+  if (modKey === 'custodia') {
+    if (acao === 'receber') return Boolean(permissoesModulo.receber ?? permissoesModulo.criar ?? false);
+    if (acao === 'baixa') return Boolean(permissoesModulo.baixa ?? permissoesModulo.editar ?? false);
+    if (acao === 'auditoria') return Boolean(permissoesModulo.auditoria ?? permissoesModulo.visualizar ?? false);
+  }
+
+  if (modKey === 'manutencao') {
+    if (acao === 'abrir_os') return Boolean(permissoesModulo.abrir_os ?? permissoesModulo.criar ?? false);
+    if (acao === 'concluir') return Boolean(permissoesModulo.concluir ?? permissoesModulo.editar ?? false);
+  }
+
+  if (modKey === 'rondas') {
+    if (acao === 'iniciar_ronda') return Boolean(permissoesModulo.iniciar_ronda ?? permissoesModulo.criar ?? true);
+    if (acao === 'cadastrar_pontos') return Boolean(permissoesModulo.cadastrar_pontos ?? permissoesModulo.criar ?? permissoesModulo.editar ?? false);
+    if (acao === 'setores') return Boolean(permissoesModulo.setores ?? permissoesModulo.editar ?? false);
+  }
+
+  if (modKey === 'passagem_posto' || modKey === 'passagem') {
+    if (acao === 'assumir_posto') return Boolean(permissoesModulo.assumir_posto ?? permissoesModulo.criar ?? true);
+    if (acao === 'relatorio') return Boolean(permissoesModulo.relatorio ?? permissoesModulo.visualizar ?? true);
+  }
+
+  if (modKey === 'cadastros') {
+    if (acao === 'operadores') return Boolean(permissoesModulo.operadores ?? permissoesModulo.editar ?? false);
+    if (acao === 'moradores') return Boolean(permissoesModulo.moradores ?? permissoesModulo.editar ?? false);
+    if (acao === 'condominios') return Boolean(permissoesModulo.condominios ?? permissoesModulo.editar ?? false);
+    if (acao === 'gerenciar_niveis') return Boolean(permissoesModulo.gerenciar_niveis ?? permissoesModulo.editar ?? false);
+  }
+
+  if (modKey === 'historico_absoluto') {
+    if (acao === 'ver_feed') return Boolean(permissoesModulo.ver_feed ?? permissoesModulo.visualizar ?? true);
+    if (acao === 'ver_metricas') return Boolean(permissoesModulo.ver_metricas ?? permissoesModulo.visualizar ?? true);
+    if (acao === 'exportar_csv') return Boolean(permissoesModulo.exportar_csv ?? permissoesModulo.visualizar ?? false);
+    if (acao === 'limpar_dados') return Boolean(permissoesModulo.limpar_dados ?? permissoesModulo.excluir ?? false);
+  }
+
+  if (modKey === 'configuracoes') {
+    if (acao === 'gerenciar_niveis') return Boolean(permissoesModulo.gerenciar_niveis ?? permissoesModulo.editar ?? false);
+    if (acao === 'feature_flags') return Boolean(permissoesModulo.feature_flags ?? permissoesModulo.editar ?? false);
   }
 
   if (acao === 'criar_lote') return Boolean(permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? false);
