@@ -13,7 +13,8 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
-  Filter
+  Filter,
+  Layers
 } from 'lucide-react';
 import { ConsolidacaoPosto } from '../pages/PassagemPosto';
 
@@ -30,10 +31,11 @@ export default function TabelasResumoPosto({
   onConferirItem,
   statusConferencia = {}
 }: TabelasResumoPostoProps) {
-  const [tabelaAtiva, setTabelaAtiva] = useState<'geral' | 'encomendas' | 'rondas' | 'chaves' | 'ocorrencias' | 'custodia' | 'prestadores' | 'materiais'>('geral');
+  const [tabelaAtiva, setTabelaAtiva] = useState<'geral' | 'encomendas' | 'bancada' | 'rondas' | 'chaves' | 'ocorrencias' | 'custodia' | 'prestadores' | 'materiais'>('geral');
   const [filtroTexto, setFiltroTexto] = useState('');
 
   const enc = consolidacao.encomendas;
+  const ban = consolidacao.bancada;
   const ron = consolidacao.rondas;
   const cha = consolidacao.chaves;
   const oco = consolidacao.ocorrencias;
@@ -64,6 +66,17 @@ export default function TabelasResumoPosto({
         >
           <Package className="w-3 h-3" />
           <span>Encomendas ({enc.totalRetidasNoPosto})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTabelaAtiva('bancada')}
+          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+            tabelaAtiva === 'bancada' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-amber-50'
+          }`}
+        >
+          <Layers className="w-3 h-3" />
+          <span>Bancada ({ban?.totalVolumes || 0})</span>
         </button>
 
         <button
@@ -188,6 +201,42 @@ export default function TabelasResumoPosto({
                       type="button"
                       onClick={() => setTabelaAtiva('encomendas')}
                       className="text-purple-700 hover:text-purple-900 font-bold text-xs underline"
+                    >
+                      Ver Detalhes
+                    </button>
+                  </td>
+                </tr>
+
+                {/* Bancada (Balcão Físico) */}
+                <tr className="hover:bg-slate-50/80 transition">
+                  <td className="p-3 font-bold text-amber-950 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-amber-600" />
+                    Bancada de Portaria (Balcão)
+                  </td>
+                  <td className="p-3">
+                    <strong>{ban?.totalVolumes || 0}</strong> volume(s) físicos • <strong>{ban?.totalUnidades || 0}</strong> unidade(s)
+                  </td>
+                  <td className="p-3">
+                    {ban && ban.estruturasResumo && ban.estruturasResumo.length > 0 ? (
+                      <span className="text-amber-900 font-medium">
+                        Disponíveis na bancada: {ban.estruturasResumo.map(g => `${g.estrutura} (${g.totalVolumes} vol)`).join(' • ')}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 font-medium">✓ Bancada livre / sem volumes pendentes</span>
+                    )}
+                  </td>
+                  <td className="p-3 text-center">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      (ban?.totalVolumes || 0) > 0 ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {(ban?.totalVolumes || 0) > 0 ? `${ban?.totalVolumes} Vol.` : 'Livre'}
+                    </span>
+                  </td>
+                  <td className="p-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setTabelaAtiva('bancada')}
+                      className="text-amber-700 hover:text-amber-900 font-bold text-xs underline"
                     >
                       Ver Detalhes
                     </button>
@@ -468,6 +517,61 @@ export default function TabelasResumoPosto({
           ) : (
             <div className="text-center p-6 bg-slate-50 rounded-xl text-slate-500 text-xs">
               ✓ Todos os lotes de entrega (RE) foram triados e registrados no sistema.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2.1 TABELA ESPECÍFICA: BANCADA DE PORTARIA & CONFERÊNCIA DE BALCÃO */}
+      {tabelaAtiva === 'bancada' && (
+        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden shadow-sm space-y-4 p-4">
+          <div className="flex justify-between items-center border-b pb-2">
+            <h4 className="font-bold text-amber-950 text-sm flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-600" />
+              Conferência Física da Bancada (Volumes no Balcão por Torre e Unidade)
+            </h4>
+            <span className="text-xs bg-amber-50 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-full font-bold">
+              Total Físico: {ban?.totalVolumes || 0} volume(s) em {ban?.totalUnidades || 0} unidade(s)
+            </span>
+          </div>
+
+          {ban && ban.estruturasResumo && ban.estruturasResumo.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {ban.estruturasResumo.map(grupo => (
+                  <div key={grupo.estrutura} className="bg-amber-50/50 rounded-xl border border-amber-200 p-3 space-y-2">
+                    <div className="flex justify-between items-center border-b border-amber-200/80 pb-1.5">
+                      <strong className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-amber-600" />
+                        {grupo.estrutura}
+                      </strong>
+                      <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                        {grupo.totalVolumes} vol. ({grupo.totalUnidades} un.)
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-amber-100 max-h-48 overflow-y-auto pr-1">
+                      {grupo.itens.map(item => (
+                        <div key={item.id} className="py-1.5 flex justify-between items-center text-xs">
+                          <div>
+                            <span className="font-black text-slate-900">Unidade {item.unidade}</span>
+                            {item.observacao && (
+                              <p className="text-[10px] text-slate-500 italic">{item.observacao}</p>
+                            )}
+                          </div>
+                          <span className="font-bold text-amber-950 bg-white px-1.5 py-0.5 rounded border border-amber-200 font-mono text-[11px]">
+                            {item.volumes} vol.
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center p-6 bg-slate-50 rounded-xl text-slate-500 text-xs">
+              ✓ Bancada limpa. Nenhum volume físico retido na portaria neste momento.
             </div>
           )}
         </div>

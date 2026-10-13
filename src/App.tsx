@@ -10,6 +10,7 @@ import Rondas from './pages/Rondas';
 import Ocorrencias from './pages/Ocorrencias';
 import PassagemPosto from './pages/PassagemPosto';
 import PrestadoresObras from './pages/PrestadoresObras';
+import Bancada from './pages/Bancada';
 import Configuracoes from './pages/Configuracoes';
 import HistoricoAbsoluto from './pages/HistoricoAbsoluto';
 import PainelSindico from './pages/PainelSindico';
@@ -58,7 +59,8 @@ import {
   Eye,
   EyeOff,
   History,
-  UserCheck
+  UserCheck,
+  Layers
 } from 'lucide-react';
 
 const CHAVE_SESSAO = 'infport_sessao_ativa_v1';
@@ -90,7 +92,8 @@ export default function App() {
     mod07_gestao_ronda: true,
     mod08_livro_ocorrencias: true,
     mod09_passagem_posto: true,
-    mod10_prestadores_servico: true
+    mod10_prestadores_servico: true,
+    mod11_bancada_conferencia: true
   });
 
   const [moduloAtual, setModuloAtual] = useState('dashboard');
@@ -308,7 +311,8 @@ export default function App() {
       mod07_gestao_ronda: true,
       mod08_livro_ocorrencias: true,
       mod09_passagem_posto: true,
-      mod10_prestadores_servico: true
+      mod10_prestadores_servico: true,
+      mod11_bancada_conferencia: true
     });
   };
 
@@ -328,7 +332,8 @@ export default function App() {
             ...prev,
             ...parsed,
             mod02_gestao_encomendas: parsed.mod02_gestao_encomendas ?? true,
-            mod03_custodia_itens: parsed.mod03_custodia_itens ?? true
+            mod03_custodia_itens: parsed.mod03_custodia_itens ?? true,
+            mod11_bancada_conferencia: parsed.mod11_bancada_conferencia ?? true
           }));
         } catch {
           // ignore
@@ -357,7 +362,8 @@ export default function App() {
           mod07_gestao_ronda: data.mod07_gestao_ronda ?? ff.mod07_gestao_ronda ?? true,
           mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? ff.mod08_livro_ocorrencias ?? true,
           mod09_passagem_posto: data.mod09_passagem_posto ?? ff.mod09_passagem_posto ?? true,
-          mod10_prestadores_servico: data.mod10_prestadores_servico ?? ff.mod10_prestadores_servico ?? true
+          mod10_prestadores_servico: data.mod10_prestadores_servico ?? ff.mod10_prestadores_servico ?? true,
+          mod11_bancada_conferencia: data.mod11_bancada_conferencia ?? ff.mod11_bancada_conferencia ?? true
         };
 
         setFeatureFlags(novasFlags);
@@ -507,6 +513,7 @@ export default function App() {
     { id: 'rondas', titulo: 'Rondas QR', icone: QrCode, flag: Boolean(featureFlags.mod07_gestao_ronda && verificarPermissao(operadorContextoGlobal, 'rondas', 'visualizar')), cor: 'bg-slate-100 text-slate-800 border-slate-300' },
     { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias && verificarPermissao(operadorContextoGlobal, 'ocorrencias', 'visualizar')), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
     { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto && (verificarPermissao(operadorContextoGlobal, 'passagem_posto', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'passagem', 'visualizar'))), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+    { id: 'bancada', titulo: 'Bancada (Balcão)', icone: Layers, flag: Boolean(featureFlags.mod11_bancada_conferencia && (verificarPermissao(operadorContextoGlobal, 'bancada', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'encomendas', 'visualizar'))), cor: 'bg-amber-50 text-amber-800 border-amber-200' },
     ...(podeAcessarCadastros ? [{ id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' }] : []),
     ...(verificarPermissao(operadorContextoGlobal, 'historico_absoluto', 'visualizar') ? [{ id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' }] : []),
   ];
@@ -930,6 +937,9 @@ export default function App() {
                 )}
                 {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
                   <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
+                )}
+                {moduloAtual === 'bancada' && featureFlags.mod11_bancada_conferencia && (
+                  <Bancada usuarioLogado={operadorContextoGlobal} />
                 )}
                 {moduloAtual === 'cadastros' && podeAcessarCadastros && (
                   <Cadastros usuarioLogado={operadorContextoGlobal} />

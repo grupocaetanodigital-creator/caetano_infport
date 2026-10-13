@@ -39,7 +39,8 @@ import {
   Table,
   CheckCircle,
   XCircle,
-  FileText
+  FileText,
+  Layers
 } from 'lucide-react';
 import { 
   carregarCondominioConfig, 
@@ -49,6 +50,12 @@ import {
 import TabelasResumoPosto from '../components/TabelasResumoPosto';
 import { dispararNotificacaoModuloWhatsApp, carregarConfigWhatsApp, formatarLinkWhatsApp } from '../services/configWhatsappService';
 import { registrarAtividade } from '../services/auditoriaService';
+import { 
+  carregarItensBancada, 
+  agruparItensPorEstrutura, 
+  ItemBancada, 
+  EstruturaResumoBancada 
+} from '../services/bancadaService';
 
 interface PassagemPostoProps {
   usuarioLogado?: any;
@@ -199,6 +206,14 @@ export interface ConsolidacaoPosto {
       fotoUrl?: string;
     }>;
   };
+
+  // 8. Bancada (Balcão Físico)
+  bancada?: {
+    totalVolumes: number;
+    totalUnidades: number;
+    estruturasResumo: EstruturaResumoBancada[];
+    itens: ItemBancada[];
+  };
 }
 
 const estadoInicialConsolidacao: ConsolidacaoPosto = {
@@ -213,6 +228,12 @@ const estadoInicialConsolidacao: ConsolidacaoPosto = {
     qtdPacotesRetiradosPlantao: 0,
     totalRetidasNoPosto: 0,
     lotesPendentes: []
+  },
+  bancada: {
+    totalVolumes: 0,
+    totalUnidades: 0,
+    estruturasResumo: [],
+    itens: []
   },
   rondas: {
     totalExecutadasPlantao: 0,
@@ -277,9 +298,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   // Modal para ver relatório histórico completo
   const [modalHistoricoDetalhes, setModalHistoricoDetalhes] = useState<any | null>(null);
 
-  // 1. Auditoria Obrigatória dos 7 Módulos do Sistema
+  // 1. Auditoria Obrigatória dos 8 Módulos do Sistema
   const [auditModulos, setAuditModulos] = useState<Record<string, { status: 'ok' | 'divergente' | null; obs: string }>>({
     encomendas: { status: null, obs: '' },
+    bancada: { status: null, obs: '' },
     rondas: { status: null, obs: '' },
     chaves: { status: null, obs: '' },
     prestadores: { status: null, obs: '' },
@@ -288,9 +310,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     ocorrencias: { status: null, obs: '' }
   });
 
-  // 2. Checklist Físico Obrigatório da Guarita (8 itens com C ou NC sem pré-marcação)
+  // 2. Checklist Físico Obrigatório da Guarita (9 itens com C ou NC sem pré-marcação)
   const [auditFisico, setAuditFisico] = useState<Record<string, { status: 'C' | 'NC' | null; obs: string }>>({
     encomendasOk: { status: null, obs: '' },
+    bancadaOk: { status: null, obs: '' },
     custodiaOk: { status: null, obs: '' },
     chavesOk: { status: null, obs: '' },
     materiaisOk: { status: null, obs: '' },
@@ -302,6 +325,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>({
     encomendasOk: true,
+    bancadaOk: true,
     custodiaOk: true,
     materiaisOk: true,
     chavesOk: true,
@@ -315,7 +339,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   const totalModulosAvaliados = Object.values(auditModulos).filter(m => m.status !== null).length;
   const totalFisicosAvaliados = Object.values(auditFisico).filter(f => f.status !== null).length;
   const totalGeralAuditado = totalModulosAvaliados + totalFisicosAvaliados;
-  const checklistCompletoValido = totalModulosAvaliados === 7 && totalFisicosAvaliados === 8;
+  const checklistCompletoValido = totalModulosAvaliados === Object.keys(auditModulos).length && totalFisicosAvaliados === Object.keys(auditFisico).length;
 
   useEffect(() => {
     if (usuarioLogado?.condominio_id) {
@@ -358,6 +382,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     // Reinicia checklist sem itens pré-marcados para forçar checagem 100% confiável
     setAuditModulos({
       encomendas: { status: null, obs: '' },
+      bancada: { status: null, obs: '' },
       rondas: { status: null, obs: '' },
       chaves: { status: null, obs: '' },
       prestadores: { status: null, obs: '' },
@@ -367,6 +392,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     });
     setAuditFisico({
       encomendasOk: { status: null, obs: '' },
+      bancadaOk: { status: null, obs: '' },
       custodiaOk: { status: null, obs: '' },
       chavesOk: { status: null, obs: '' },
       materiaisOk: { status: null, obs: '' },
@@ -468,6 +494,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         .select('id')
         .eq('condominio_id', condId)
         .eq('status', 'retido');
+
+      // 1.6 MÓDULO 11 - CONFERÊNCIA FÍSICA DE BANCADA (BALCÃO)
+      const itensBancada = await carregarItensBancada(condId);
+      const estruturasResumoBancada = agruparItensPorEstrutura(itensBancada);
+      const totalVolumesBancada = itensBancada.reduce((acc, it) => acc + (it.volumes || 1), 0);
+      const totalUnidadesBancada = itensBancada.length;
 
       // 2. MÓDULO 07 - RONDAS PATRIMONIAIS
       const { data: rondasPlantaoData } = await supabase
@@ -704,6 +736,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
           totalRetidasNoPosto: todosRetidosPosto?.length || 0,
           lotesPendentes: lotesPendentesFormatados
         },
+        bancada: {
+          totalVolumes: totalVolumesBancada,
+          totalUnidades: totalUnidadesBancada,
+          estruturasResumo: estruturasResumoBancada,
+          itens: itensBancada
+        },
         rondas: {
           totalExecutadasPlantao: rondasPlantao.length,
           concluidas: concluidasRondas,
@@ -791,9 +829,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
   const avancarParaEtapa2 = () => {
     if (!checklistCompletoValido) {
+      const faltam = (Object.keys(auditModulos).length + Object.keys(auditFisico).length) - totalGeralAuditado;
       setMensagem({
         tipo: 'erro',
-        texto: `Atenção: É obrigatório clicar e auditar todos os 7 módulos do sistema e os 8 itens físicos da guarita antes de avançar! Faltam ${15 - totalGeralAuditado} itens.`
+        texto: `Atenção: É obrigatório auditar todos os módulos do sistema e os itens físicos da guarita (incluindo a bancada) antes de avançar! Faltam ${faltam} itens.`
       });
       return;
     }
@@ -803,6 +842,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
     const nomesModulos: Record<string, string> = {
       encomendas: 'Módulo 01: Encomendas & RE',
+      bancada: 'Módulo 11: Bancada & Balcão Físico',
       rondas: 'Módulo 02: Rondas Patrimoniais',
       chaves: 'Módulo 05: Quadro de Chaves',
       prestadores: 'Módulo 06: Autorizados & Prestadores',
@@ -813,6 +853,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
     const nomesFisicos: Record<string, string> = {
       encomendasOk: 'Volumes físicos de encomendas conferidos com saldo retido',
+      bancadaOk: 'Volumes físicos na bancada conferidos conforme detalhamento por torre',
       custodiaOk: 'Itens de custódia na portaria conferidos',
       chavesOk: 'Quadro de chaves confere com devoluções e retiradas ativas',
       materiaisOk: 'HTs, celulares e lanternas testados e carregando',
@@ -995,6 +1036,23 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     if (enc.lotesPendentes && enc.lotesPendentes.length > 0) {
       texto += `  _Lotes que faltam triar:_\n` +
         enc.lotesPendentes.map((l: any) => `  ↳ ${l.codigo} (${l.entregadorEmpresa || 'Entregador'}): faltam ${l.qtdDeclarada - l.qtdTriada} de ${l.qtdDeclarada} vol.`).join('\n') + `\n`;
+    }
+    texto += `\n`;
+
+    // 1.1 Bancada / Balcão Físico
+    const ban = c.bancada || {};
+    const totalVolumesBancada = ban.totalVolumes ?? 0;
+    const totalUnidadesBancada = ban.totalUnidades ?? 0;
+    texto += `📦 *MÓDULO 11 - CONFERÊNCIA DE BANCADA (VOLUMES FÍSICOS NO BALCÃO)*\n` +
+      `• Total de volumes na bancada: *${totalVolumesBancada} volume(s)* em *${totalUnidadesBancada} unidade(s)*\n`;
+    if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
+      texto += `  _Discriminação física conferida por torre/bloco e unidade:_\n`;
+      ban.estruturasResumo.forEach((g: any) => {
+        const apsStr = (g.unidades || []).map((u: any) => `Ap. ${u.unidade}${u.volumes > 1 ? ` (${u.volumes} vol)` : ''}${u.observacao ? ` [${u.observacao}]` : ''}`).join(', ');
+        texto += `  ↳ *${g.estrutura}* (${g.totalVolumes} vol): ${apsStr || 'Nenhum'}\n`;
+      });
+    } else {
+      texto += `• Situação: *Bancada livre / sem volumes retidos*\n`;
     }
     texto += `\n`;
 
@@ -1604,27 +1662,49 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('ocorrencias')}
-                      className={`p-3 rounded-xl border text-left transition col-span-2 ${
+                      className={`p-3 rounded-xl border text-left transition ${
                         moduloAtivo === 'ocorrencias' ? 'ring-2 ring-red-600 bg-red-50/50 border-red-300' : 'bg-white hover:bg-slate-50 border-slate-200'
                       }`}
                     >
                       <div className="flex items-center justify-between text-red-700 mb-1">
                         <span className="text-[10px] font-bold uppercase flex items-center gap-1">
-                          <ShieldAlert className="w-3.5 h-3.5" /> Livro de Ocorrências Pendentes
+                          <ShieldAlert className="w-3.5 h-3.5" /> Livro de Ocorrências
                         </span>
                         <Wrench className="w-4 h-4" />
                       </div>
                       <div className="text-xs font-bold text-slate-900">
-                        {consolidacao.ocorrencias.totalPendentes} ocorrência(s) não resolvida(s)
+                        {consolidacao.ocorrencias.totalPendentes} ocorrência(s)
                       </div>
                       <div className="text-[10px]">
                         {consolidacao.ocorrencias.totalPendentes > 0 ? (
                           <span className="text-red-700 font-bold">
-                            Mesmo de dias anteriores (sai até ser resolvida!)
+                            Pendências ativas
                           </span>
                         ) : (
                           <span className="text-emerald-600">Nenhuma pendência</span>
                         )}
+                      </div>
+                    </button>
+
+                    {/* Bancada (Balcão Físico) */}
+                    <button
+                      type="button"
+                      onClick={() => setModuloAtivo('bancada')}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        moduloAtivo === 'bancada' ? 'ring-2 ring-amber-600 bg-amber-50/50 border-amber-300' : 'bg-white hover:bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-amber-700 mb-1">
+                        <span className="text-[10px] font-bold uppercase flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5" /> Bancada (Balcão)
+                        </span>
+                        <Layers className="w-4 h-4" />
+                      </div>
+                      <div className="text-xs font-bold text-slate-900">
+                        {consolidacao.bancada?.totalVolumes || 0} volume(s)
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {consolidacao.bancada?.totalUnidades || 0} unidade(s) sob custódia
                       </div>
                     </button>
                   </div>
@@ -1640,6 +1720,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         {moduloAtivo === 'custodia' && <><Box className="w-4 h-4 text-sky-600" /> Detalhamento: Objetos de Custódia</>}
                         {moduloAtivo === 'materiais' && <><Radio className="w-4 h-4 text-emerald-600" /> Detalhamento: Inventário e Equipamentos</>}
                         {moduloAtivo === 'ocorrencias' && <><AlertTriangle className="w-4 h-4 text-red-600" /> Detalhamento: Ocorrências Pendentes (Sem importar a data!)</>}
+                        {moduloAtivo === 'bancada' && <><Layers className="w-4 h-4 text-amber-600" /> Detalhamento: Volumes Físicos na Bancada (Por Torre & Unidade)</>}
                         {moduloAtivo === 'todos' && <><ShieldCheck className="w-4 h-4 text-emerald-600" /> Visão Consolidada Completa</>}
                       </span>
 
@@ -1702,6 +1783,56 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                                   </div>
                                   <div className="text-amber-900 font-bold">
                                     Faltam {lote.qtdDeclarada - lote.qtdTriada} de {lote.qtdDeclarada} vol.
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SEÇÃO 1.1: BANCADA (CONFERÊNCIA DETALHADA POR TORRE E APARTAMENTO) */}
+                    {(moduloAtivo === 'todos' || moduloAtivo === 'bancada') && (
+                      <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-sm space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <strong className="text-xs text-amber-950 flex items-center gap-1.5 font-bold uppercase">
+                            <Layers className="w-4 h-4 text-amber-600" /> Módulo 11 - Bancada & Balcão Físico
+                          </strong>
+                          <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md">
+                            {consolidacao.bancada?.totalVolumes || 0} volume(s) em {consolidacao.bancada?.totalUnidades || 0} unidade(s)
+                          </span>
+                        </div>
+
+                        {(!consolidacao.bancada?.estruturasResumo || consolidacao.bancada.estruturasResumo.length === 0) ? (
+                          <p className="text-xs text-slate-500 italic py-1">
+                            Bancada limpa. Nenhum volume físico retido no balcão no momento da passagem.
+                          </p>
+                        ) : (
+                          <div className="space-y-2 mt-1">
+                            <p className="text-[11px] font-bold text-slate-600">
+                              Volumes físicos conferidos separados por torre e apartamento:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {consolidacao.bancada.estruturasResumo.map(g => (
+                                <div key={g.estrutura} className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 text-xs">
+                                  <div className="flex justify-between items-center font-black text-amber-950 mb-1 border-b border-amber-200 pb-1">
+                                    <span>{g.estrutura}</span>
+                                    <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-bold">
+                                      {g.totalVolumes} vol. ({g.totalUnidades} un.)
+                                    </span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {g.itens.map(it => (
+                                      <div key={it.id} className="flex justify-between items-center text-slate-800">
+                                        <span className="font-bold text-[11px]">
+                                          Unidade {it.unidade} {it.observacao ? <em className="text-[10px] text-slate-500 font-normal">({it.observacao})</em> : ''}
+                                        </span>
+                                        <span className="font-mono text-[10px] bg-white px-1.5 py-0.2 rounded border border-amber-200 font-bold">
+                                          {it.volumes} vol.
+                                        </span>
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                               ))}
@@ -2508,6 +2639,66 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                             </div>
                           )}
                         </div>
+
+                        {/* 1.8 Bancada (Balcão Físico) */}
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.bancada?.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.bancada?.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Layers className="w-3.5 h-3.5 text-amber-600" /> Módulo 11: Bancada & Balcão Físico
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.bancada?.totalVolumes || 0} volume(s) em {consolidacao.bancada?.totalUnidades || 0} unidade(s) na guarita
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('bancada', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.bancada?.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('bancada', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.bancada?.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
+                          </div>
+
+                          {auditModulos.bancada?.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência na Bancada:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.bancada?.obs || ''}
+                                onChange={(e) => setObsModuloAudit('bancada', e.target.value)}
+                                placeholder="Descreva o pacote faltante, avariado ou sem identificação..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -2525,6 +2716,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         {[
                           { key: 'encomendasOk', texto: 'Volumes físicos de encomendas conferidos com saldo retido' },
+                          { key: 'bancadaOk', texto: 'Volumes físicos na bancada conferidos conforme detalhamento por torre' },
                           { key: 'custodiaOk', texto: 'Itens de custódia na portaria conferidos' },
                           { key: 'chavesOk', texto: 'Quadro de chaves confere com devoluções e retiradas ativas' },
                           { key: 'materiaisOk', texto: 'HTs, celulares e lanternas testados e carregando' },

@@ -35,7 +35,8 @@ import {
   X,
   ListChecks,
   Share2,
-  ExternalLink
+  ExternalLink,
+  Layers
 } from 'lucide-react';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
@@ -201,6 +202,13 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       titulo: 'Módulo 10 - Autorizados (Visitas, Diaristas e Obras)', 
       desc: 'Pré-autorizações com vigência e entrada com 1 toque sem exigência de docs', 
       icon: HardHat 
+    },
+    { 
+      key: 'mod11_bancada_conferencia', 
+      moduloNum: '11',
+      titulo: 'Módulo 11 - Bancada de Portaria & Conferência de Balcão', 
+      desc: 'Lançamento rápido e organizado dos volumes físicos na guarita por torre/bloco e auditoria de balcão', 
+      icon: Layers 
     }
   ];
 
@@ -550,7 +558,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         mod07_gestao_ronda: Boolean(config.mod07_gestao_ronda),
         mod08_livro_ocorrencias: Boolean(config.mod08_livro_ocorrencias),
         mod09_passagem_posto: Boolean(config.mod09_passagem_posto),
-        mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico)
+        mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico),
+        mod11_bancada_conferencia: Boolean(config.mod11_bancada_conferencia ?? true)
       };
 
       // Salva imediatamente no localStorage para resposta offline e instantânea
@@ -571,7 +580,8 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
           mod07_gestao_ronda: Boolean(config.mod07_gestao_ronda),
           mod08_livro_ocorrencias: Boolean(config.mod08_livro_ocorrencias),
           mod09_passagem_posto: Boolean(config.mod09_passagem_posto),
-          mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico)
+          mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico),
+          mod11_bancada_conferencia: Boolean(config.mod11_bancada_conferencia ?? true)
         };
 
         if (config.id) {

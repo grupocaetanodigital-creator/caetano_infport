@@ -82,6 +82,12 @@ export interface PermissoesModulo {
     gerenciar_niveis?: boolean;
     feature_flags?: boolean;
   };
+  bancada?: PermissaoModuloPadrao & {
+    lancar?: boolean;
+    baixa?: boolean;
+    zerar?: boolean;
+    historico?: boolean;
+  };
 }
 
 export interface NivelAcessoItem {
@@ -221,6 +227,16 @@ export const MODULOS_DEFINICAO_RBAC: ModuloDefinicaoInfo[] = [
     acoesEspecificas: [
       { id: 'gerenciar_niveis', label: 'Gerenciar Níveis (RBAC)' },
       { id: 'feature_flags', label: 'Feature Flags (Módulos)' }
+    ]
+  },
+  {
+    id: 'bancada',
+    nome: 'Bancada (Balcão Físico)',
+    acoesEspecificas: [
+      { id: 'lancar', label: 'Lançar Unidades na Bancada' },
+      { id: 'baixa', label: 'Dar Baixa / Entregar Volumes' },
+      { id: 'zerar', label: 'Zerar / Nova Conferência' },
+      { id: 'historico', label: 'Ver Histórico de Auditoria' }
     ]
   }
 ];
@@ -713,6 +729,14 @@ export function verificarPermissao(
   if (modKey === 'configuracoes') {
     if (acao === 'gerenciar_niveis') return Boolean(permissoesModulo.gerenciar_niveis ?? permissoesModulo.editar ?? false);
     if (acao === 'feature_flags') return Boolean(permissoesModulo.feature_flags ?? permissoesModulo.editar ?? false);
+  }
+
+  if (modKey === 'bancada') {
+    if (acao === 'visualizar') return Boolean(permissoesModulo.visualizar ?? true);
+    if (acao === 'lancar') return Boolean(permissoesModulo.lancar ?? permissoesModulo.criar ?? true);
+    if (acao === 'baixa') return Boolean(permissoesModulo.baixa ?? permissoesModulo.editar ?? true);
+    if (acao === 'zerar') return Boolean(permissoesModulo.zerar ?? permissoesModulo.excluir ?? (nivelNum <= 2));
+    if (acao === 'historico') return Boolean(permissoesModulo.historico ?? permissoesModulo.visualizar ?? true);
   }
 
   if (acao === 'criar_lote') return Boolean(permissoesModulo.criar ?? permissoesModulo.entrada_lote ?? false);
