@@ -195,6 +195,22 @@ export const CANONICAL_SCHEMA_MAP: TableDiagnostic[] = [
     category: 'Módulo 11 - Configurações',
     status: 'checking',
     notes: 'Agenda e botão de pânico rápido.'
+  },
+  {
+    canonicalName: 'lembretes_portaria',
+    duplicateOrLegacyNames: [],
+    purpose: 'Bloco de mensagens e lembretes da portaria (Portaria ⇄ Moradores)',
+    category: 'Comunicação & Mensagens',
+    status: 'checking',
+    notes: 'Isolamento por condominio_id, unidade_bloco, tipo, lido (booleano) e Realtime.'
+  },
+  {
+    canonicalName: 'bancada_volumes',
+    duplicateOrLegacyNames: [],
+    purpose: 'Controle de volumes físicos retidos no balcão da guarita',
+    category: 'Módulo 11 - Bancada',
+    status: 'checking',
+    notes: 'Volumes agrupados por estrutura e unidade física.'
   }
 ];
 
