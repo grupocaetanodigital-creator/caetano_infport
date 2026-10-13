@@ -84,6 +84,7 @@ export interface ConsolidacaoPosto {
       qtdTriada: number;
       status: string;
     }>;
+    retidasPorBloco?: Record<string, { total: number; unidades: string[] }>;
   };
 
   // 2. Rondas
@@ -491,9 +492,23 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       // 1.5 Total de encomendas físicas retidas no posto aguardando moradores retirarem
       const { data: todosRetidosPosto } = await supabase
         .from('encomendas_itens')
-        .select('id')
+        .select('id, bloco, unidade, observacoes, created_at')
         .eq('condominio_id', condId)
         .eq('status', 'retido');
+
+      const retidasAgrupadasPorBloco: Record<string, { total: number; unidades: string[] }> = {};
+      (todosRetidosPosto || []).forEach((enc: any) => {
+        const bloco = (enc.bloco || 'Torre A').trim();
+        const uni = String(enc.unidade || '').trim().toUpperCase();
+        if (!uni) return;
+        if (!retidasAgrupadasPorBloco[bloco]) {
+          retidasAgrupadasPorBloco[bloco] = { total: 0, unidades: [] };
+        }
+        retidasAgrupadasPorBloco[bloco].total += 1;
+        if (!retidasAgrupadasPorBloco[bloco].unidades.includes(uni)) {
+          retidasAgrupadasPorBloco[bloco].unidades.push(uni);
+        }
+      });
 
       // 1.6 MÓDULO 11 - CONFERÊNCIA FÍSICA DE BANCADA (BALCÃO)
       const itensBancada = await carregarItensBancada(condId);
@@ -734,7 +749,8 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
           qtdPacotesTriadosPlantao: itensTriadosPlantao?.length || 0,
           qtdPacotesRetiradosPlantao: itensRetiradosPlantao?.length || 0,
           totalRetidasNoPosto: todosRetidosPosto?.length || 0,
-          lotesPendentes: lotesPendentesFormatados
+          lotesPendentes: lotesPendentesFormatados,
+          retidasPorBloco: retidasAgrupadasPorBloco
         },
         bancada: {
           totalVolumes: totalVolumesBancada,
@@ -841,11 +857,11 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     const divergenciasColetadas: string[] = [];
 
     const nomesModulos: Record<string, string> = {
-      encomendas: 'Módulo 01: Encomendas & RE',
+      encomendas: 'Módulo 02: Encomendas & RE',
       bancada: 'Módulo 11: Bancada & Balcão Físico',
-      rondas: 'Módulo 02: Rondas Patrimoniais',
+      rondas: 'Módulo 07: Rondas Patrimoniais',
       chaves: 'Módulo 05: Quadro de Chaves',
-      prestadores: 'Módulo 06: Autorizados & Prestadores',
+      prestadores: 'Módulo 10: Autorizados & Prestadores',
       custodia: 'Módulo 03: Custódia na Portaria',
       materiais: 'Módulo 04: Equipamentos & Materiais',
       ocorrencias: 'Módulo 08: Livro de Ocorrências'
@@ -1037,6 +1053,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       texto += `  _Lotes que faltam triar:_\n` +
         enc.lotesPendentes.map((l: any) => `  ↳ ${l.codigo} (${l.entregadorEmpresa || 'Entregador'}): faltam ${l.qtdDeclarada - l.qtdTriada} de ${l.qtdDeclarada} vol.`).join('\n') + `\n`;
     }
+    if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
+      texto += `  _Relação de encomendas retidas no sistema (Módulo 02):_\n`;
+      Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
+        texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n  ↳ ${info.unidades.join(', ')}\n`;
+      });
+    }
     texto += `\n`;
 
     // 1.1 Bancada / Balcão Físico
@@ -1046,10 +1068,24 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     texto += `📦 *MÓDULO 11 - CONFERÊNCIA DE BANCADA (VOLUMES FÍSICOS NO BALCÃO)*\n` +
       `• Total de volumes na bancada: *${totalVolumesBancada} volume(s)* em *${totalUnidadesBancada} unidade(s)*\n`;
     if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
-      texto += `  _Discriminação física conferida por torre/bloco e unidade:_\n`;
+      texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
       ban.estruturasResumo.forEach((g: any) => {
-        const apsStr = (g.unidades || []).map((u: any) => `Ap. ${u.unidade}${u.volumes > 1 ? ` (${u.volumes} vol)` : ''}${u.observacao ? ` [${u.observacao}]` : ''}`).join(', ');
-        texto += `  ↳ *${g.estrutura}* (${g.totalVolumes} vol): ${apsStr || 'Nenhum'}\n`;
+        const lista = g.itens || g.unidades || [];
+        const apsStr = lista.map((u: any) => {
+          const uni = u.unidade || u;
+          const vol = (u.volumes && u.volumes > 1) ? ` (${u.volumes} vol)` : '';
+          const obs = u.observacao ? ` [${u.observacao}]` : '';
+          return `${uni}${vol}${obs}`;
+        }).join(', ');
+        const totalVols = g.totalVolumes ?? lista.reduce((acc: number, it: any) => acc + (it.volumes || 1), 0);
+        texto += `  *${(g.estrutura || 'TORRE A').toUpperCase()}*, TOTAL ${totalVols}:\n`;
+        texto += `  ↳ ${apsStr || 'Nenhum'}\n`;
+      });
+    } else if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
+      texto += `  _Discriminação de encomendas retidas conferidas no posto:_\n`;
+      Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
+        texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n`;
+        texto += `  ↳ ${info.unidades.join(', ')}\n`;
       });
     } else {
       texto += `• Situação: *Bancada livre / sem volumes retidos*\n`;
@@ -2231,7 +2267,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div>
                               <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
-                                <Package className="w-3.5 h-3.5 text-purple-600" /> Módulo 01: RE & Encomendas Recebidas
+                                <Package className="w-3.5 h-3.5 text-purple-600" /> Módulo 02: RE & Encomendas Recebidas
                               </strong>
                               <span className="text-[11px] text-slate-500">
                                 {consolidacao.encomendas.totalRePlantao} REs recebidas • {consolidacao.encomendas.reFaltandoTriagem} lote(s) pendentes de triagem ({consolidacao.encomendas.qtdFaltaTriagem} vol.)
@@ -2291,7 +2327,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div>
                               <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
-                                <Footprints className="w-3.5 h-3.5 text-indigo-600" /> Módulo 02: Rondas Patrimoniais
+                                <Footprints className="w-3.5 h-3.5 text-indigo-600" /> Módulo 07: Rondas Patrimoniais
                               </strong>
                               <span className="text-[11px] text-slate-500">
                                 {consolidacao.rondas.totalExecutadasPlantao} executadas ({consolidacao.rondas.concluidas} concluídas) • {consolidacao.rondas.temDivergencias ? '🚨 Constam divergências no plantão' : '✓ Sem falhas'}
@@ -2411,7 +2447,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div>
                               <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
-                                <HardHat className="w-3.5 h-3.5 text-blue-600" /> Módulo 06: Autorizados & Prestadores (Dentro e Liberados)
+                                <HardHat className="w-3.5 h-3.5 text-blue-600" /> Módulo 10: Autorizados & Prestadores (Dentro e Liberados)
                               </strong>
                               <span className="text-[11px] text-slate-500">
                                 {consolidacao.prestadores.totalPresentes} pessoas DENTRO do condomínio • {consolidacao.prestadores.totalLiberados ?? (consolidacao.prestadores.listaLiberados?.length || 0)} cadastros LIBERADOS ativos

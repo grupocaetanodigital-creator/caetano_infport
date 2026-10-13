@@ -490,7 +490,129 @@ export function agruparItensPorEstrutura(itens: ItemBancada[]): EstruturaResumoB
 }
 
 /**
+ * Sincroniza e importa encomendas físicas retidas do Módulo 02 (encomendas_itens)
+ * diretamente para a bancada com 1 toque
+ */
+export async function sincronizarComEncomendasRetidas(
+  condominioId: string,
+  operadorNome: string = 'Portaria'
+): Promise<{ importados: number; totalAtual: number; itens: ItemBancada[] }> {
+  if (!condominioId) return { importados: 0, totalAtual: 0, itens: [] };
+
+  const itensAtuais = await carregarItensBancada(condominioId);
+
+  // Busca encomendas pendentes de retirada no Módulo 02
+  const { data: encomendasRetidas, error } = await supabase
+    .from('encomendas_itens')
+    .select('id, bloco, unidade, observacoes, created_at')
+    .eq('condominio_id', condominioId)
+    .eq('status', 'retido');
+
+  if (error || !encomendasRetidas || encomendasRetidas.length === 0) {
+    return { importados: 0, totalAtual: itensAtuais.reduce((a, b) => a + (b.volumes || 1), 0), itens: itensAtuais };
+  }
+
+  // Agrupa as encomendas retidas por estrutura e unidade
+  const mapaRetidas = new Map<string, { volumes: number; observacoes: string[]; estrutura: string; unidade: string }>();
+
+  encomendasRetidas.forEach(enc => {
+    const estr = (enc.bloco || 'Torre A').trim();
+    const uni = String(enc.unidade || '').trim().toUpperCase();
+    if (!uni) return;
+
+    const chave = `${estr.toLowerCase()}_${uni.toLowerCase()}`;
+    if (!mapaRetidas.has(chave)) {
+      mapaRetidas.set(chave, {
+        volumes: 0,
+        observacoes: [],
+        estrutura: estr,
+        unidade: uni
+      });
+    }
+    const reg = mapaRetidas.get(chave)!;
+    reg.volumes += 1;
+    if (enc.observacoes && !reg.observacoes.includes(enc.observacoes)) {
+      reg.observacoes.push(enc.observacoes);
+    }
+  });
+
+  let importadosCount = 0;
+
+  // Itera sobre o mapa e adiciona ou ajusta na bancada
+  for (const [, val] of mapaRetidas) {
+    const idxExistente = itensAtuais.findIndex(
+      it =>
+        it.estrutura.toLowerCase() === val.estrutura.toLowerCase() &&
+        it.unidade.toLowerCase() === val.unidade.toLowerCase()
+    );
+
+    if (idxExistente >= 0) {
+      // Se na bancada tiver menos que as retidas registradas no RE, atualiza
+      if (itensAtuais[idxExistente].volumes < val.volumes) {
+        itensAtuais[idxExistente].volumes = val.volumes;
+        itensAtuais[idxExistente].updated_at = new Date().toISOString();
+        importadosCount += (val.volumes - itensAtuais[idxExistente].volumes);
+        try {
+          await supabase
+            .from('bancada_volumes')
+            .update({ volumes: val.volumes, updated_at: new Date().toISOString() })
+            .eq('id', itensAtuais[idxExistente].id);
+        } catch {
+          // offline
+        }
+      }
+    } else {
+      // Novo lançamento importado do RE
+      const novoItem: ItemBancada = {
+        id: `bancada_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        condominio_id: condominioId,
+        estrutura: val.estrutura,
+        unidade: val.unidade,
+        volumes: val.volumes,
+        observacao: val.observacoes.length > 0 ? val.observacoes.join(' | ') : undefined,
+        tipo_volume: 'Encomenda RE',
+        operador_nome: operadorNome,
+        created_at: new Date().toISOString()
+      };
+      itensAtuais.push(novoItem);
+      importadosCount += val.volumes;
+
+      try {
+        await supabase.from('bancada_volumes').insert({
+          id: novoItem.id,
+          condominio_id: condominioId,
+          estrutura: novoItem.estrutura,
+          unidade: novoItem.unidade,
+          volumes: novoItem.volumes,
+          observacao: novoItem.observacao,
+          tipo_volume: novoItem.tipo_volume,
+          operador_nome: operadorNome,
+          status: 'ativo',
+          created_at: novoItem.created_at
+        });
+      } catch {
+        // offline
+      }
+    }
+  }
+
+  // Ordena por estrutura e unidade
+  itensAtuais.sort((a, b) => {
+    const compEstr = a.estrutura.localeCompare(b.estrutura, undefined, { numeric: true });
+    if (compEstr !== 0) return compEstr;
+    return a.unidade.localeCompare(b.unidade, undefined, { numeric: true });
+  });
+
+  salvarCacheLocal(CACHE_KEY_ITENS, itensAtuais, condominioId);
+  notificarAtualizacaoBancada(condominioId);
+
+  const totalFinal = itensAtuais.reduce((a, b) => a + (b.volumes || 1), 0);
+  return { importados: importadosCount, totalAtual: totalFinal, itens: itensAtuais };
+}
+
+/**
  * Gera texto formatado para envio no WhatsApp da portaria com o resumo detalhado da bancada
+ * Formato padrão: TORRE A, TOTAL 20, 105A, 1507A...
  */
 export function gerarTextoResumoBancadaWhats(
   itens: ItemBancada[],
@@ -513,15 +635,15 @@ export function gerarTextoResumoBancadaWhats(
     texto += `✅ *Nenhum volume físico pendente na bancada no momento.*\n`;
   } else {
     agrupado.forEach(g => {
-      texto += `\n📌 *${g.estrutura}* (${g.totalVolumes} vol. em ${g.totalUnidades} un.):\n`;
       const listaUnidadesStr = g.itens
         .map(it => {
-          const obsStr = it.observacao ? ` _(${it.observacao})_` : '';
-          const volStr = it.volumes > 1 ? ` (*${it.volumes} vol.*)` : '';
-          return `• Unidade ${it.unidade}${volStr}${obsStr}`;
+          const obsStr = it.observacao ? ` [${it.observacao}]` : '';
+          const volStr = it.volumes > 1 ? ` (${it.volumes} vol)` : '';
+          return `${it.unidade}${volStr}${obsStr}`;
         })
-        .join('\n');
-      texto += `${listaUnidadesStr}\n`;
+        .join(', ');
+      texto += `\n*${g.estrutura.toUpperCase()}*, TOTAL ${g.totalVolumes}:\n`;
+      texto += `↳ ${listaUnidadesStr}\n`;
     });
   }
 
@@ -529,3 +651,4 @@ export function gerarTextoResumoBancadaWhats(
   texto += `_Conferência gerada pelo sistema INFPORT_`;
   return texto;
 }
+

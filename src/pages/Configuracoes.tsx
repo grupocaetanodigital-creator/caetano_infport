@@ -36,7 +36,10 @@ import {
   ListChecks,
   Share2,
   ExternalLink,
-  Layers
+  Layers,
+  Users,
+  History,
+  Building2
 } from 'lucide-react';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
@@ -94,8 +97,11 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   const [modalSetoresRondaAberto, setModalSetoresRondaAberto] = useState(false);
   const [pontosRondaLista, setPontosRondaLista] = useState<any[]>([]);
 
+  const [condominioConfigId, setCondominioConfigId] = useState<string>(usuarioLogado?.condominio_id || '');
+
   const [config, setConfig] = useState<Record<string, any>>({
     id: null,
+    mod01_cadastros_base: true,
     mod02_gestao_encomendas: true,
     mod03_custodia_itens: true,
     mod04_materiais_posto: true,
@@ -104,7 +110,10 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     mod07_gestao_ronda: true,
     mod08_livro_ocorrencias: true,
     mod09_passagem_posto: true,
-    mod10_prestadores_servico: true
+    mod10_prestadores_servico: true,
+    mod11_bancada_conferencia: true,
+    mod12_historico_absoluto: true,
+    mod_portal_sindico: true
   });
 
   const [templates, setTemplates] = useState<any[]>([]);
@@ -140,6 +149,13 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   });
 
   const modulosVisual = [
+    { 
+      key: 'mod01_cadastros_base', 
+      moduloNum: '01',
+      titulo: 'Módulo 01 - Cadastros Base do Sistema', 
+      desc: 'Moradores, unidades/casas, condomínios, operadores e controle de acesso', 
+      icon: Users 
+    },
     { 
       key: 'mod02_gestao_encomendas', 
       moduloNum: '02',
@@ -209,18 +225,33 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       titulo: 'Módulo 11 - Bancada de Portaria & Conferência de Balcão', 
       desc: 'Lançamento rápido e organizado dos volumes físicos na guarita por torre/bloco e auditoria de balcão', 
       icon: Layers 
+    },
+    { 
+      key: 'mod12_historico_absoluto', 
+      moduloNum: '12',
+      titulo: 'Módulo 12 - Histórico Absoluto & Auditoria', 
+      desc: 'Registro imutável de todas as ações, auditoria de expurgo e feed de segurança', 
+      icon: History 
+    },
+    { 
+      key: 'mod_portal_sindico', 
+      moduloNum: '13',
+      titulo: 'Módulo 13 - Portal do Síndico', 
+      desc: 'Painel de gestão, auditoria e consulta exclusivo para síndicos e administradores', 
+      icon: ShieldAlert 
     }
   ];
 
   useEffect(() => {
     carregarCondominios();
-    if (usuarioLogado?.condominio_id) {
-      carregarConfiguracoes();
+    const targetCondo = condominioConfigId || usuarioLogado?.condominio_id;
+    if (targetCondo) {
+      carregarConfiguracoes(targetCondo);
       carregarTemplates();
       carregarContatosEmergencia();
       carregarLocaisArmazenamento();
       carregarSetoresRondaConfig();
-      carregarConfigWhatsApp(usuarioLogado.condominio_id).then(cfg => {
+      carregarConfigWhatsApp(targetCondo).then(cfg => {
         setWhatsModulos(cfg);
       });
     }
@@ -234,7 +265,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     return () => {
       window.removeEventListener('setores_ronda_atualizados', handleSetoresAtualizados);
     };
-  }, [usuarioLogado?.condominio_id]);
+  }, [usuarioLogado?.condominio_id, condominioConfigId]);
 
   const carregarSetoresRondaConfig = async () => {
     try {
@@ -262,6 +293,11 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       if (error) throw error;
       setListaCondominios(data || []);
 
+      if (!condominioConfigId && data && data.length > 0) {
+        const idPadrao = usuarioLogado?.condominio_id || data[0].id;
+        setCondominioConfigId(idPadrao);
+      }
+
       if (!condominioBackupId && data && data.length > 0) {
         setCondominioBackupId(data[0].id);
       }
@@ -270,18 +306,19 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     }
   };
 
-  const carregarConfiguracoes = async () => {
+  const carregarConfiguracoes = async (condoIdAlvo?: string) => {
+    const targetCondoId = condoIdAlvo || condominioConfigId || usuarioLogado?.condominio_id || (listaCondominios.length > 0 ? listaCondominios[0].id : '');
+    if (!targetCondoId) return;
+
     try {
       // 1. Tenta cache do localStorage primeiro para resposta instantânea
-      const cached = localStorage.getItem(`infport_flags_${usuarioLogado.condominio_id}`);
+      const cached = localStorage.getItem(`infport_flags_${targetCondoId}`);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
           setConfig(prev => ({
             ...prev,
-            ...parsed,
-            mod02_gestao_encomendas: parsed.mod02_gestao_encomendas ?? true,
-            mod03_custodia_itens: parsed.mod03_custodia_itens ?? true
+            ...parsed
           }));
         } catch {
           // ignore
@@ -291,7 +328,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       const { data, error } = await supabase
         .from('configuracoes')
         .select('*')
-        .eq('condominio_id', usuarioLogado.condominio_id)
+        .eq('condominio_id', targetCondoId)
         .maybeSingle();
 
       if (error) throw error;
@@ -299,21 +336,31 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       if (data) {
         const flagsJson = typeof data.feature_flags === 'object' && data.feature_flags !== null ? data.feature_flags : {};
 
+        const resolver = (chave: string, padrao: boolean = true) => {
+          if (flagsJson[chave] !== undefined && flagsJson[chave] !== null) return Boolean(flagsJson[chave]);
+          if (data[chave] !== undefined && data[chave] !== null) return Boolean(data[chave]);
+          return padrao;
+        };
+
         const novasConfig = {
           id: data.id,
-          mod02_gestao_encomendas: data.mod02_gestao_encomendas ?? flagsJson.mod02_gestao_encomendas ?? true,
-          mod03_custodia_itens: data.mod03_custodia_itens ?? flagsJson.mod03_custodia_itens ?? true,
-          mod04_materiais_posto: data.mod04_materiais_posto ?? data.mod04_materials_posto ?? flagsJson.mod04_materiais_posto ?? true,
-          mod05_quadro_chaves: data.mod05_quadro_chaves ?? flagsJson.mod05_quadro_chaves ?? true,
-          mod06_gestao_manutencao: data.mod06_gestao_manutencao ?? flagsJson.mod06_gestao_manutencao ?? true,
-          mod07_gestao_ronda: data.mod07_gestao_ronda ?? flagsJson.mod07_gestao_ronda ?? true,
-          mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? flagsJson.mod08_livro_ocorrencias ?? true,
-          mod09_passagem_posto: data.mod09_passagem_posto ?? flagsJson.mod09_passagem_posto ?? true,
-          mod10_prestadores_servico: data.mod10_prestadores_servico ?? flagsJson.mod10_prestadores_servico ?? true
+          mod01_cadastros_base: resolver('mod01_cadastros_base'),
+          mod02_gestao_encomendas: resolver('mod02_gestao_encomendas'),
+          mod03_custodia_itens: resolver('mod03_custodia_itens'),
+          mod04_materiais_posto: resolver('mod04_materiais_posto'),
+          mod05_quadro_chaves: resolver('mod05_quadro_chaves'),
+          mod06_gestao_manutencao: resolver('mod06_gestao_manutencao'),
+          mod07_gestao_ronda: resolver('mod07_gestao_ronda'),
+          mod08_livro_ocorrencias: resolver('mod08_livro_ocorrencias'),
+          mod09_passagem_posto: resolver('mod09_passagem_posto'),
+          mod10_prestadores_servico: resolver('mod10_prestadores_servico'),
+          mod11_bancada_conferencia: resolver('mod11_bancada_conferencia'),
+          mod12_historico_absoluto: resolver('mod12_historico_absoluto'),
+          mod_portal_sindico: resolver('mod_portal_sindico')
         };
 
         setConfig(novasConfig);
-        localStorage.setItem(`infport_flags_${usuarioLogado.condominio_id}`, JSON.stringify(novasConfig));
+        localStorage.setItem(`infport_flags_${targetCondoId}`, JSON.stringify(novasConfig));
       }
     } catch (err) {
       console.error('Erro ao carregar configurações:', err);
@@ -540,7 +587,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     setLoading(true);
     setMensagem({ tipo: '', texto: '' });
 
-    const targetCondoId = usuarioLogado?.condominio_id;
+    const targetCondoId = condominioConfigId || usuarioLogado?.condominio_id || (listaCondominios.length > 0 ? listaCondominios[0].id : '');
     if (!targetCondoId) {
       setMensagem({ tipo: 'erro', texto: 'Nenhum condomínio ativo selecionado para salvar.' });
       setLoading(false);
@@ -548,8 +595,9 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
     }
 
     try {
-      // Objeto com as flags dos módulos perfeitamente isoladas
+      // Objeto com as flags de todos os 13 módulos perfeitamente isoladas
       const featureFlagsJson = {
+        mod01_cadastros_base: config.mod01_cadastros_base !== undefined ? Boolean(config.mod01_cadastros_base) : true,
         mod02_gestao_encomendas: Boolean(config.mod02_gestao_encomendas),
         mod03_custodia_itens: Boolean(config.mod03_custodia_itens),
         mod04_materiais_posto: Boolean(config.mod04_materiais_posto),
@@ -559,29 +607,36 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         mod08_livro_ocorrencias: Boolean(config.mod08_livro_ocorrencias),
         mod09_passagem_posto: Boolean(config.mod09_passagem_posto),
         mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico),
-        mod11_bancada_conferencia: Boolean(config.mod11_bancada_conferencia ?? true)
+        mod11_bancada_conferencia: config.mod11_bancada_conferencia !== undefined ? Boolean(config.mod11_bancada_conferencia) : true,
+        mod12_historico_absoluto: config.mod12_historico_absoluto !== undefined ? Boolean(config.mod12_historico_absoluto) : true,
+        mod_portal_sindico: config.mod_portal_sindico !== undefined ? Boolean(config.mod_portal_sindico) : true
       };
 
       // Salva imediatamente no localStorage para resposta offline e instantânea
       localStorage.setItem(`infport_flags_${targetCondoId}`, JSON.stringify(featureFlagsJson));
 
+      // Atualiza o estado local imediatamente com as flags salvas para garantir consistência
+      setConfig(prev => ({
+        ...prev,
+        ...featureFlagsJson
+      }));
+
       let salvou = false;
 
-      // 1. Tenta salvar no Supabase incluindo colunas explícitas
+      // 1. Tenta salvar no Supabase incluindo colunas explícitas compatíveis
       try {
         const payloadCompleto: any = {
           condominio_id: targetCondoId,
           feature_flags: featureFlagsJson,
-          mod02_gestao_encomendas: Boolean(config.mod02_gestao_encomendas),
-          mod03_custodia_itens: Boolean(config.mod03_custodia_itens),
-          mod04_materiais_posto: Boolean(config.mod04_materiais_posto),
-          mod05_quadro_chaves: Boolean(config.mod05_quadro_chaves),
-          mod06_gestao_manutencao: Boolean(config.mod06_gestao_manutencao),
-          mod07_gestao_ronda: Boolean(config.mod07_gestao_ronda),
-          mod08_livro_ocorrencias: Boolean(config.mod08_livro_ocorrencias),
-          mod09_passagem_posto: Boolean(config.mod09_passagem_posto),
-          mod10_prestadores_servico: Boolean(config.mod10_prestadores_servico),
-          mod11_bancada_conferencia: Boolean(config.mod11_bancada_conferencia ?? true)
+          mod02_gestao_encomendas: Boolean(featureFlagsJson.mod02_gestao_encomendas),
+          mod03_custodia_itens: Boolean(featureFlagsJson.mod03_custodia_itens),
+          mod04_materiais_posto: Boolean(featureFlagsJson.mod04_materiais_posto),
+          mod05_quadro_chaves: Boolean(featureFlagsJson.mod05_quadro_chaves),
+          mod06_gestao_manutencao: Boolean(featureFlagsJson.mod06_gestao_manutencao),
+          mod07_gestao_ronda: Boolean(featureFlagsJson.mod07_gestao_ronda),
+          mod08_livro_ocorrencias: Boolean(featureFlagsJson.mod08_livro_ocorrencias),
+          mod09_passagem_posto: Boolean(featureFlagsJson.mod09_passagem_posto),
+          mod10_prestadores_servico: Boolean(featureFlagsJson.mod10_prestadores_servico)
         };
 
         if (config.id) {
@@ -639,6 +694,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       }));
 
       setMensagem({ tipo: 'sucesso', texto: 'Parametrização dos módulos salva com sucesso!' });
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
 
       if (onConfigSalva) onConfigSalva(featureFlagsJson);
     } catch (err: any) {
@@ -1034,12 +1090,36 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 shadow-sm transition whitespace-nowrap"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 shadow-sm transition whitespace-nowrap cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 {loading ? 'Salvando...' : 'Salvar Alterações'}
               </button>
             </div>
+
+            {listaCondominios.length > 1 && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 p-3 rounded-xl mb-5">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-700 uppercase">
+                    Condomínio a Parametrizar:
+                  </span>
+                </div>
+                <select
+                  value={condominioConfigId || usuarioLogado?.condominio_id || ''}
+                  onChange={(e) => {
+                    const novoId = e.target.value;
+                    setCondominioConfigId(novoId);
+                    carregarConfiguracoes(novoId);
+                  }}
+                  className="bg-white border border-slate-300 text-xs font-bold p-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs w-full sm:w-auto cursor-pointer"
+                >
+                  {listaCondominios.map((c) => (
+                    <option key={c.id} value={c.id}>🏢 {c.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {modulosVisual.map((modulo) => {

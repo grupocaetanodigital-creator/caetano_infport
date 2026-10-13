@@ -84,6 +84,7 @@ export default function App() {
   const [drawerMobileAberto, setDrawerMobileAberto] = useState(false);
 
   const [featureFlags, setFeatureFlags] = useState({
+    mod01_cadastros_base: true,
     mod02_gestao_encomendas: true,
     mod03_custodia_itens: true,
     mod04_materiais_posto: true,
@@ -93,7 +94,9 @@ export default function App() {
     mod08_livro_ocorrencias: true,
     mod09_passagem_posto: true,
     mod10_prestadores_servico: true,
-    mod11_bancada_conferencia: true
+    mod11_bancada_conferencia: true,
+    mod12_historico_absoluto: true,
+    mod_portal_sindico: true
   });
 
   const [moduloAtual, setModuloAtual] = useState('dashboard');
@@ -303,6 +306,7 @@ export default function App() {
 
   const resetarFeatureFlagsPadrao = () => {
     setFeatureFlags({
+      mod01_cadastros_base: true,
       mod02_gestao_encomendas: true,
       mod03_custodia_itens: true,
       mod04_materiais_posto: true,
@@ -312,7 +316,9 @@ export default function App() {
       mod08_livro_ocorrencias: true,
       mod09_passagem_posto: true,
       mod10_prestadores_servico: true,
-      mod11_bancada_conferencia: true
+      mod11_bancada_conferencia: true,
+      mod12_historico_absoluto: true,
+      mod_portal_sindico: true
     });
   };
 
@@ -330,10 +336,7 @@ export default function App() {
           const parsed = JSON.parse(cacheLocal);
           setFeatureFlags(prev => ({
             ...prev,
-            ...parsed,
-            mod02_gestao_encomendas: parsed.mod02_gestao_encomendas ?? true,
-            mod03_custodia_itens: parsed.mod03_custodia_itens ?? true,
-            mod11_bancada_conferencia: parsed.mod11_bancada_conferencia ?? true
+            ...parsed
           }));
         } catch {
           // ignore
@@ -353,17 +356,26 @@ export default function App() {
           ? data.feature_flags 
           : {};
 
+        const resolverFlag = (chave: string, padrao: boolean = true) => {
+          if (ff[chave] !== undefined && ff[chave] !== null) return Boolean(ff[chave]);
+          if (data[chave] !== undefined && data[chave] !== null) return Boolean(data[chave]);
+          return padrao;
+        };
+
         const novasFlags = {
-          mod02_gestao_encomendas: data.mod02_gestao_encomendas ?? ff.mod02_gestao_encomendas ?? true,
-          mod03_custodia_itens: data.mod03_custodia_itens ?? ff.mod03_custodia_itens ?? true,
-          mod04_materiais_posto: data.mod04_materiais_posto ?? ff.mod04_materiais_posto ?? true,
-          mod05_quadro_chaves: data.mod05_quadro_chaves ?? ff.mod05_quadro_chaves ?? true,
-          mod06_gestao_manutencao: data.mod06_gestao_manutencao ?? ff.mod06_gestao_manutencao ?? true,
-          mod07_gestao_ronda: data.mod07_gestao_ronda ?? ff.mod07_gestao_ronda ?? true,
-          mod08_livro_ocorrencias: data.mod08_livro_ocorrencias ?? ff.mod08_livro_ocorrencias ?? true,
-          mod09_passagem_posto: data.mod09_passagem_posto ?? ff.mod09_passagem_posto ?? true,
-          mod10_prestadores_servico: data.mod10_prestadores_servico ?? ff.mod10_prestadores_servico ?? true,
-          mod11_bancada_conferencia: data.mod11_bancada_conferencia ?? ff.mod11_bancada_conferencia ?? true
+          mod01_cadastros_base: resolverFlag('mod01_cadastros_base'),
+          mod02_gestao_encomendas: resolverFlag('mod02_gestao_encomendas'),
+          mod03_custodia_itens: resolverFlag('mod03_custodia_itens'),
+          mod04_materiais_posto: resolverFlag('mod04_materiais_posto'),
+          mod05_quadro_chaves: resolverFlag('mod05_quadro_chaves'),
+          mod06_gestao_manutencao: resolverFlag('mod06_gestao_manutencao'),
+          mod07_gestao_ronda: resolverFlag('mod07_gestao_ronda'),
+          mod08_livro_ocorrencias: resolverFlag('mod08_livro_ocorrencias'),
+          mod09_passagem_posto: resolverFlag('mod09_passagem_posto'),
+          mod10_prestadores_servico: resolverFlag('mod10_prestadores_servico'),
+          mod11_bancada_conferencia: resolverFlag('mod11_bancada_conferencia'),
+          mod12_historico_absoluto: resolverFlag('mod12_historico_absoluto'),
+          mod_portal_sindico: resolverFlag('mod_portal_sindico')
         };
 
         setFeatureFlags(novasFlags);
@@ -503,7 +515,7 @@ export default function App() {
   const modulosDisponiveis = eSindico ? [
     { id: 'painel_sindico', titulo: 'Portal do Síndico', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }
   ] : [
-    ...(eAdmin ? [{ id: 'painel_sindico', titulo: 'Portal Síndico (Visão)', icone: ShieldCheck, flag: true, cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }] : []),
+    ...(eAdmin ? [{ id: 'painel_sindico', titulo: 'Portal Síndico (Visão)', icone: ShieldCheck, flag: Boolean(featureFlags.mod_portal_sindico ?? true), cor: 'bg-emerald-950 text-emerald-300 border-emerald-700' }] : []),
     { id: 'encomendas', titulo: 'Encomendas', icone: Package, flag: Boolean(featureFlags.mod02_gestao_encomendas && verificarPermissao(operadorContextoGlobal, 'encomendas', 'visualizar')), cor: 'bg-blue-50 text-blue-600 border-blue-200' },
     { id: 'custodia', titulo: 'Custódia Itens', icone: PackageCheck, flag: Boolean(featureFlags.mod03_custodia_itens && verificarPermissao(operadorContextoGlobal, 'custodia', 'visualizar')), cor: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     { id: 'prestadores', titulo: 'Autorizados', icone: UserCheck, flag: Boolean(featureFlags.mod10_prestadores_servico && (verificarPermissao(operadorContextoGlobal, 'autorizados', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'prestadores', 'visualizar'))), cor: 'bg-purple-50 text-purple-700 border-purple-200' },
@@ -514,8 +526,8 @@ export default function App() {
     { id: 'ocorrencias', titulo: 'Ocorrências', icone: BookOpen, flag: Boolean(featureFlags.mod08_livro_ocorrencias && verificarPermissao(operadorContextoGlobal, 'ocorrencias', 'visualizar')), cor: 'bg-rose-50 text-rose-600 border-rose-200' },
     { id: 'passagem', titulo: 'Passagem Posto', icone: Repeat, flag: Boolean(featureFlags.mod09_passagem_posto && (verificarPermissao(operadorContextoGlobal, 'passagem_posto', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'passagem', 'visualizar'))), cor: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
     { id: 'bancada', titulo: 'Bancada (Balcão)', icone: Layers, flag: Boolean(featureFlags.mod11_bancada_conferencia && (verificarPermissao(operadorContextoGlobal, 'bancada', 'visualizar') || verificarPermissao(operadorContextoGlobal, 'encomendas', 'visualizar'))), cor: 'bg-amber-50 text-amber-800 border-amber-200' },
-    ...(podeAcessarCadastros ? [{ id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: true, cor: 'bg-slate-100 text-slate-700 border-slate-300' }] : []),
-    ...(verificarPermissao(operadorContextoGlobal, 'historico_absoluto', 'visualizar') ? [{ id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: true, cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' }] : []),
+    ...(podeAcessarCadastros ? [{ id: 'cadastros', titulo: 'Cadastros Base', icone: Database, flag: Boolean(featureFlags.mod01_cadastros_base ?? true), cor: 'bg-slate-100 text-slate-700 border-slate-300' }] : []),
+    ...(verificarPermissao(operadorContextoGlobal, 'historico_absoluto', 'visualizar') ? [{ id: 'historico_absoluto', titulo: 'Histórico Absoluto', icone: History, flag: Boolean(featureFlags.mod12_historico_absoluto ?? true), cor: 'bg-indigo-50 text-indigo-700 border-indigo-200' }] : []),
   ];
 
   // Se o módulo ativo no momento for desativado nas flags ou bloqueado pelo perfil, redireciona para o dashboard
@@ -941,10 +953,10 @@ export default function App() {
                 {moduloAtual === 'bancada' && featureFlags.mod11_bancada_conferencia && (
                   <Bancada usuarioLogado={operadorContextoGlobal} />
                 )}
-                {moduloAtual === 'cadastros' && podeAcessarCadastros && (
+                {moduloAtual === 'cadastros' && podeAcessarCadastros && Boolean(featureFlags.mod01_cadastros_base ?? true) && (
                   <Cadastros usuarioLogado={operadorContextoGlobal} />
                 )}
-                {moduloAtual === 'historico_absoluto' && (
+                {moduloAtual === 'historico_absoluto' && Boolean(featureFlags.mod12_historico_absoluto ?? true) && (
                   <HistoricoAbsoluto 
                     operadorLogado={operadorContextoGlobal} 
                     condominioAtivo={objCondominioSelecionado || condominio || { id: condominioAtivoId, nome: 'Condomínio Ativo' }} 

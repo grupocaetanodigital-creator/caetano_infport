@@ -551,8 +551,8 @@ export default function TabelasResumoPosto({
                     </div>
 
                     <div className="divide-y divide-amber-100 max-h-48 overflow-y-auto pr-1">
-                      {grupo.itens.map(item => (
-                        <div key={item.id} className="py-1.5 flex justify-between items-center text-xs">
+                      {(grupo.itens || (grupo as any).unidades || []).map((item: any, idx: number) => (
+                        <div key={item.id || idx} className="py-1.5 flex justify-between items-center text-xs">
                           <div>
                             <span className="font-black text-slate-900">Unidade {item.unidade}</span>
                             {item.observacao && (
@@ -560,7 +560,7 @@ export default function TabelasResumoPosto({
                             )}
                           </div>
                           <span className="font-bold text-amber-950 bg-white px-1.5 py-0.5 rounded border border-amber-200 font-mono text-[11px]">
-                            {item.volumes} vol.
+                            {item.volumes || 1} vol.
                           </span>
                         </div>
                       ))}

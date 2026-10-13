@@ -807,6 +807,70 @@ WHERE NOT EXISTS (
 );
 
 -- ==============================================================================
+-- 21. TABELAS DO MÓDULO 11: BANCADA DE PORTARIA & BALCÃO
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS bancada_volumes (
+  id TEXT PRIMARY KEY,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  estrutura TEXT NOT NULL DEFAULT 'Geral',
+  unidade TEXT NOT NULL DEFAULT '00',
+  volumes INTEGER NOT NULL DEFAULT 1,
+  observacao TEXT,
+  tipo_volume TEXT DEFAULT 'Volume',
+  operador_nome TEXT,
+  operador_id TEXT,
+  status TEXT NOT NULL DEFAULT 'ativo',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE bancada_volumes
+  ADD COLUMN IF NOT EXISTS estrutura TEXT NOT NULL DEFAULT 'Geral',
+  ADD COLUMN IF NOT EXISTS unidade TEXT NOT NULL DEFAULT '00',
+  ADD COLUMN IF NOT EXISTS volumes INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS observacao TEXT,
+  ADD COLUMN IF NOT EXISTS tipo_volume TEXT DEFAULT 'Volume',
+  ADD COLUMN IF NOT EXISTS operador_nome TEXT,
+  ADD COLUMN IF NOT EXISTS operador_id TEXT,
+  ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ativo',
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+CREATE TABLE IF NOT EXISTS bancada_conferencias (
+  id TEXT PRIMARY KEY,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  operador_nome TEXT NOT NULL,
+  operador_id TEXT,
+  data_hora TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  total_volumes INTEGER NOT NULL DEFAULT 0,
+  total_unidades INTEGER NOT NULL DEFAULT 0,
+  estruturas_resumo JSONB NOT NULL DEFAULT '[]'::jsonb,
+  observacoes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE configuracoes
+  ADD COLUMN IF NOT EXISTS mod01_cadastros_base BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod11_bancada_conferencia BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod12_historico_absoluto BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS mod_portal_sindico BOOLEAN DEFAULT true;
+
+CREATE INDEX IF NOT EXISTS idx_bancada_volumes_condominio ON bancada_volumes(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_bancada_volumes_status ON bancada_volumes(status);
+CREATE INDEX IF NOT EXISTS idx_bancada_volumes_estrutura_unidade ON bancada_volumes(condominio_id, estrutura, unidade);
+CREATE INDEX IF NOT EXISTS idx_bancada_conferencias_condominio ON bancada_conferencias(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_bancada_conferencias_data_hora ON bancada_conferencias(data_hora DESC);
+
+ALTER TABLE bancada_volumes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bancada_conferencias ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Acesso total bancada_volumes" ON bancada_volumes;
+CREATE POLICY "Acesso total bancada_volumes" ON bancada_volumes FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acesso total bancada_conferencias" ON bancada_conferencias;
+CREATE POLICY "Acesso total bancada_conferencias" ON bancada_conferencias FOR ALL USING (true) WITH CHECK (true);
+
+-- ==============================================================================
 -- 22. REALTIME & RECARREGAR O SCHEMA CACHE DO POSTGREST
 -- ==============================================================================
 DO $$
@@ -819,6 +883,22 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE historico_absoluto;
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'bancada_volumes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE bancada_volumes;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'bancada_conferencias'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE bancada_conferencias;
+  END IF;
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
@@ -827,3 +907,4 @@ COMMIT;
 
 -- Recarrega o cache do PostgREST imediatamente para aplicar as novas colunas
 NOTIFY pgrst, 'reload schema';
+

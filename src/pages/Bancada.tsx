@@ -34,6 +34,7 @@ import {
   obterHistoricoConferencias,
   agruparItensPorEstrutura,
   gerarTextoResumoBancadaWhats,
+  sincronizarComEncomendasRetidas,
   ConferenciaBancadaSnapshot
 } from '../services/bancadaService';
 import {
@@ -84,6 +85,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const [historicoSnapshots, setHistoricoSnapshots] = useState<ConferenciaBancadaSnapshot[]>([]);
   const [snapshotVisualizar, setSnapshotVisualizar] = useState<ConferenciaBancadaSnapshot | null>(null);
   const [copiadoWhats, setCopiadoWhats] = useState<boolean>(false);
+  const [sincronizandoRE, setSincronizandoRE] = useState<boolean>(false);
   const [novaEstruturaNome, setNovaEstruturaNome] = useState<string>('');
   const [modalNovaEstrutura, setModalNovaEstrutura] = useState<boolean>(false);
 
@@ -314,6 +316,35 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
     setModalNovaEstrutura(false);
   };
 
+  // Sincroniza e importa encomendas retidas do Módulo 02 com 1 clique
+  const handleSincronizarRE = async () => {
+    if (!condominioId) return;
+    setSincronizandoRE(true);
+    try {
+      const res = await sincronizarComEncomendasRetidas(condominioId, nomeOperador);
+      setItens(res.itens);
+      if (res.importados > 0) {
+        setFeedbackUltimoLancamento({
+          mensagem: `✓ ${res.importados} volume(s) de encomendas pendentes sincronizados com a bancada!`,
+          tipo: 'novo',
+          unidade: 'Módulo 02',
+          estrutura: 'Sincronizado'
+        });
+      } else {
+        setFeedbackUltimoLancamento({
+          mensagem: `Bancada já está alinhada com as encomendas retidas do Módulo 02.`,
+          tipo: 'incremento',
+          unidade: 'OK',
+          estrutura: 'Alinhado'
+        });
+      }
+    } catch (e) {
+      console.error('Erro ao sincronizar:', e);
+    } finally {
+      setSincronizandoRE(false);
+    }
+  };
+
   // Filtro para a Visão Geral
   const itensFiltradosVisaoGeral = useMemo(() => {
     if (!termoBusca.trim()) return itensAgrupados;
@@ -362,6 +393,17 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
           {/* BOTÕES DE AÇÃO PRINCIPAIS */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSincronizarRE}
+              disabled={sincronizandoRE}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition active:scale-95 cursor-pointer border border-purple-400/30"
+              title="Importar e sincronizar encomendas retidas do Módulo 02 com a bancada"
+            >
+              <RefreshCw className={`w-4 h-4 ${sincronizandoRE ? 'animate-spin' : ''}`} />
+              {sincronizandoRE ? 'Sincronizando...' : 'Sincronizar c/ Encomendas (RE)'}
+            </button>
+
             <button
               type="button"
               onClick={handleCopiarWhatsApp}
@@ -590,18 +632,16 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               <form onSubmit={handleAdicionarUnidade} className="space-y-3">
                 <div>
                   <div className="relative">
-                    {/* INPUT EXCLUSIVAMENTE NUMÉRICO: ABRE DIRETAMENTE O TECLADO NUMÉRICO NO TOUCH */}
+                    {/* INPUT ALFANUMÉRICO (SUPORTA 105A, 1507A, 102, CASA 04, ETC) */}
                     <input
                       ref={inputUnidadeRef}
-                      type="number"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
+                      type="text"
                       autoFocus
                       required
-                      placeholder={`Digite o número da unidade (ex: 1405, 102, 01)...`}
+                      placeholder={`Digite a unidade (ex: 105A, 1507A, 102, 01)...`}
                       value={unidadeDigitada}
-                      onChange={e => setUnidadeDigitada(e.target.value)}
-                      className="w-full text-2xl sm:text-3xl font-black text-slate-900 bg-amber-50/50 border-2 border-amber-400 focus:border-amber-600 focus:bg-white rounded-xl py-3 px-4 shadow-inner outline-none transition placeholder:text-slate-400 placeholder:text-base placeholder:font-normal"
+                      onChange={e => setUnidadeDigitada(e.target.value.toUpperCase())}
+                      className="w-full text-2xl sm:text-3xl font-black font-mono uppercase text-slate-900 bg-amber-50/50 border-2 border-amber-400 focus:border-amber-600 focus:bg-white rounded-xl py-3 px-4 shadow-inner outline-none transition placeholder:text-slate-400 placeholder:text-base placeholder:font-normal"
                     />
 
                     {unidadeDigitada && (
@@ -656,9 +696,23 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                   </div>
                 </div>
 
-                {/* TECLADO NUMÉRICO VIRTUAL (TOUCH SCREEN NA TELA) */}
+                {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL (TOUCH SCREEN NA TELA) */}
                 {mostrarTecladoVirtual && (
-                  <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-300 shadow-inner mt-2">
+                  <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-300 shadow-inner mt-2 space-y-2">
+                    {/* Linha de Letras Rápidas para Unidades com Letras (ex: 105A, 1507A, Bloco B) */}
+                    <div className="flex items-center gap-1.5 justify-between">
+                      {['A', 'B', 'C', 'D', 'E', 'F'].map(letra => (
+                        <button
+                          key={letra}
+                          type="button"
+                          onClick={() => tocarNumeroVirtual(letra)}
+                          className="flex-1 h-9 bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-sm rounded-lg border border-amber-300 shadow-2xs active:scale-95 transition"
+                        >
+                          {letra}
+                        </button>
+                      ))}
+                    </div>
+
                     <div className="grid grid-cols-3 gap-1.5">
                       {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
                         <button
