@@ -400,17 +400,16 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               title="Importar e sincronizar encomendas retidas do Módulo 02 com a bancada"
             >
               <RefreshCw className={`w-4 h-4 ${sincronizandoRE ? 'animate-spin' : ''}`} />
-              {sincronizandoRE ? 'Sincronizando...' : 'Sincronizar c/ Encomendas (RE)'}
+              <span>{sincronizandoRE ? 'Sincronizando...' : 'Enco (RE)'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleCopiarWhatsApp}
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition active:scale-95 cursor-pointer border border-emerald-400/30"
-              title="Copiar lista estruturada pronta para o grupo de WhatsApp"
+              className="p-2 sm:px-3 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 cursor-pointer border border-emerald-400/30"
+              title="Copiar lista estruturada para o grupo de WhatsApp"
             >
               {copiadoWhats ? <Check className="w-4 h-4 text-emerald-200" /> : <Share2 className="w-4 h-4" />}
-              {copiadoWhats ? 'Copiado p/ Whats!' : 'Copiar p/ WhatsApp'}
             </button>
 
             <button
@@ -430,7 +429,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               title="Zerar balcão para iniciar nova contagem"
             >
               <RotateCcw className="w-4 h-4" />
-              Zerar / Nova Contagem
+              <span>Zerar</span>
             </button>
           </div>
         </div>
@@ -439,7 +438,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4 pt-4 border-t border-amber-500/40">
           <div className="bg-amber-900/40 border border-amber-400/30 rounded-xl p-2.5 sm:p-3">
             <span className="text-[11px] font-bold text-amber-200 uppercase tracking-wider block">
-              Total na Bancada
+              Total
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
               <span className="text-2xl sm:text-3xl font-black text-white">
@@ -451,7 +450,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
           <div className="bg-amber-900/40 border border-amber-400/30 rounded-xl p-2.5 sm:p-3">
             <span className="text-[11px] font-bold text-amber-200 uppercase tracking-wider block">
-              Unidades Atendidas
+              Unidades
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
               <span className="text-2xl sm:text-3xl font-black text-white">
@@ -463,7 +462,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
           <div className="bg-amber-900/40 border border-amber-400/30 rounded-xl p-2.5 sm:p-3">
             <span className="text-[11px] font-bold text-amber-200 uppercase tracking-wider block">
-              {rotuloBloco}s com Volumes
+              Blocos
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
               <span className="text-2xl sm:text-3xl font-black text-white">
@@ -475,7 +474,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
           <div className="bg-amber-900/40 border border-amber-400/30 rounded-xl p-2.5 sm:p-3">
             <span className="text-[11px] font-bold text-amber-200 uppercase tracking-wider block">
-              Operador Atual
+              Operador
             </span>
             <div className="flex items-center gap-1.5 mt-1 truncate">
               <User className="w-4 h-4 text-amber-300 flex-shrink-0" />
