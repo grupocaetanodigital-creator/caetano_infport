@@ -65,13 +65,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const [unidadeDigitada, setUnidadeDigitada] = useState<string>('');
   const [qtdVolumes, setQtdVolumes] = useState<number>(1);
   const [observacao, setObservacao] = useState<string>('');
-  const [mostrarTecladoVirtual, setMostrarTecladoVirtual] = useState<boolean>(false);
-  // Forçar teclado numérico no celular: 'tel' é o padrão universal para abrir numpad 0-9 nativo
-  const [modoTeclado, setModoTeclado] = useState<'tel' | 'number' | 'text'>(() => {
-    const salvo = localStorage.getItem('infport_bancada_modo_teclado');
-    if (salvo === 'tel' || salvo === 'number' || salvo === 'text') return salvo;
-    return 'tel';
-  });
+
   const [feedbackUltimoLancamento, setFeedbackUltimoLancamento] = useState<{
     mensagem: string;
     tipo: 'novo' | 'incremento';
@@ -243,20 +237,17 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
     }
   };
 
-  // Teclado virtual Touch (para telas touch de portaria)
+  // Teclado virtual Touch Numpad Exclusivo
   const tocarNumeroVirtual = (num: string) => {
     setUnidadeDigitada(prev => prev + num);
-    inputUnidadeRef.current?.focus();
   };
 
   const apagarUltimoDigito = () => {
     setUnidadeDigitada(prev => prev.slice(0, -1));
-    inputUnidadeRef.current?.focus();
   };
 
   const limparDigitos = () => {
     setUnidadeDigitada('');
-    inputUnidadeRef.current?.focus();
   };
 
   // Ajuste rápido de volumes (+ e -)
@@ -603,136 +594,129 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                   Lançamento de {rotuloUnidade} na {estruturaSelecionada || rotuloBloco}
                 </span>
 
-                <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                  {/* Seletor rápido de tipo de teclado para compatibilidade total com dispositivos móveis */}
-                  <div className="bg-slate-100 p-0.5 rounded-lg flex items-center border border-slate-300 shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModoTeclado('tel');
-                        localStorage.setItem('infport_bancada_modo_teclado', 'tel');
-                        inputUnidadeRef.current?.focus();
-                      }}
-                      title="Forçar teclado numérico puro do celular (tipo tel + inputmode numeric)"
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        modoTeclado === 'tel'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      📱 Numérico [tel]
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModoTeclado('number');
-                        localStorage.setItem('infport_bancada_modo_teclado', 'number');
-                        inputUnidadeRef.current?.focus();
-                      }}
-                      title="Teclado numérico nativo (tipo number)"
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        modoTeclado === 'number'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      # [number]
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModoTeclado('text');
-                        localStorage.setItem('infport_bancada_modo_teclado', 'text');
-                        inputUnidadeRef.current?.focus();
-                      }}
-                      title="Teclado padrão com letras e números"
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        modoTeclado === 'text'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      ABC
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setMostrarTecladoVirtual(!mostrarTecladoVirtual)}
-                    className={`text-[11px] font-bold px-2 py-0.5 rounded-md border transition cursor-pointer ${
-                      mostrarTecladoVirtual
-                        ? 'bg-amber-600 text-white border-amber-600'
-                        : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-                    }`}
-                  >
-                    {mostrarTecladoVirtual ? 'Ocultar Numpad' : 'Numpad na Tela'}
-                  </button>
-                </div>
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2.5 py-0.5 rounded-lg flex items-center gap-1.5 shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+                  Numpad Touch Exclusivo
+                </span>
               </div>
 
               {/* FORMULÁRIO COM INPUT NUMÉRICO TOUCH EXCLUSIVO */}
               <form onSubmit={handleAdicionarUnidade} className="space-y-3">
                 <div>
                   <div className="relative">
-                    {/* INPUT COM FORÇAMENTO EFETIVO DE TECLADO NUMÉRICO NO CELULAR (type="tel" / type="number" + inputMode="numeric") */}
+                    {/* INPUT COM USO EXCLUSIVO DO NUMPAD (inputMode="none" + readOnly={true} NÃO ABRE TECLADO DO DISPOSITIVO) */}
                     <input
                       ref={inputUnidadeRef}
-                      type={modoTeclado}
-                      inputMode={modoTeclado === 'text' ? 'text' : 'numeric'}
-                      pattern={modoTeclado === 'text' ? undefined : '[0-9]*'}
+                      type="text"
+                      inputMode="none"
+                      readOnly={true}
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="characters"
                       spellCheck={false}
-                      enterKeyHint="go"
-                      autoFocus
-                      required
-                      placeholder={
-                        modoTeclado !== 'text'
-                          ? 'Digite o número do apto (ex: 102, 1507)...'
-                          : 'Digite a unidade (ex: 105A, 1507A, 102)...'
-                      }
+                      placeholder={`Toque no Numpad abaixo para digitar o ${rotuloUnidade.toLowerCase()}...`}
                       value={unidadeDigitada}
-                      onChange={e => {
-                        let val = e.target.value.toUpperCase();
-                        if (modoTeclado === 'number') {
-                          val = val.replace(/\D/g, '');
+                      tabIndex={0}
+                      onKeyDown={e => {
+                        // Suporte a teclado físico ou leitor de código de barras no computador caso conectado
+                        if (e.key === 'Backspace') {
+                          e.preventDefault();
+                          apagarUltimoDigito();
+                        } else if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAdicionarUnidade();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          limparDigitos();
+                        } else if (/^[0-9a-zA-Z]$/.test(e.key)) {
+                          e.preventDefault();
+                          tocarNumeroVirtual(e.key.toUpperCase());
                         }
-                        setUnidadeDigitada(val);
                       }}
-                      className="w-full text-2xl sm:text-3xl font-black font-mono uppercase text-slate-900 bg-amber-50/50 border-2 border-amber-400 focus:border-amber-600 focus:bg-white rounded-xl py-3 px-4 shadow-inner outline-none transition placeholder:text-slate-400 placeholder:text-base placeholder:font-normal"
+                      className="w-full text-2xl sm:text-3xl font-black font-mono uppercase text-slate-900 bg-amber-50/50 border-2 border-amber-400 focus:border-amber-600 focus:bg-white rounded-xl py-3 px-4 shadow-inner outline-none transition placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm placeholder:font-normal cursor-pointer select-none text-center"
                     />
 
                     {unidadeDigitada && (
                       <button
                         type="button"
                         onClick={limparDigitos}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-1.5 cursor-pointer transition active:scale-95"
+                        title="Limpar digitação"
                       >
                         <Delete className="w-5 h-5" />
                       </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                  <p className="text-[11px] text-slate-500 mt-1 flex items-center justify-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                    Pressione <kbd className="bg-slate-100 px-1 py-0.5 rounded border border-slate-300 font-mono text-[10px] font-bold">Enter</kbd> ou toque em Adicionar para lançar sequencialmente.
+                    Utilize exclusivamente os botões do Numpad abaixo para digitar o número.
                   </p>
+                </div>
+
+                {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL EXCLUSIVO (SEMPRE ATIVO NA TELA) */}
+                <div className="bg-slate-100 p-2.5 sm:p-3 rounded-2xl border border-slate-300 shadow-inner space-y-2">
+                  {/* Linha de Letras Rápidas para Unidades com Letras (ex: 105A, 1507A, Bloco B) */}
+                  <div className="flex items-center gap-1.5 justify-between">
+                    {['A', 'B', 'C', 'D', 'E', 'F'].map(letra => (
+                      <button
+                        key={letra}
+                        type="button"
+                        onClick={() => tocarNumeroVirtual(letra)}
+                        className="flex-1 h-10 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-950 font-black text-sm rounded-xl border border-amber-300 shadow-2xs active:scale-95 transition cursor-pointer select-none touch-manipulation"
+                      >
+                        {letra}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Grade Numérica 3x3 + 0 + Ações Rápidas */}
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => tocarNumeroVirtual(d)}
+                        className="h-12 sm:h-14 bg-white hover:bg-amber-50 active:bg-amber-200 text-slate-900 rounded-xl text-2xl font-black shadow-xs border border-slate-300 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
+                      >
+                        {d}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={limparDigitos}
+                      className="h-12 sm:h-14 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 rounded-xl text-xs sm:text-sm font-black shadow-xs border border-rose-200 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
+                    >
+                      Limpar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => tocarNumeroVirtual('0')}
+                      className="h-12 sm:h-14 bg-white hover:bg-amber-50 active:bg-amber-200 text-slate-900 rounded-xl text-2xl font-black shadow-xs border border-slate-300 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
+                    >
+                      0
+                    </button>
+                    <button
+                      type="button"
+                      onClick={apagarUltimoDigito}
+                      className="h-12 sm:h-14 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-800 rounded-xl text-base font-black shadow-xs border border-amber-300 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
+                      title="Apagar último caractere"
+                    >
+                      <Delete className="w-6 h-6" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* QUANTIDADE DE VOLUMES E OBSERVAÇÃO OPCIONAL */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1">
-                  {/* CHIPS DE VOLUMES (+1, +2, +3) */}
+                  {/* CHIPS DE VOLUMES (+1, +2, +3, +4) */}
                   <div className="sm:col-span-5 flex items-center gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                     <span className="text-[11px] font-black text-slate-600 uppercase px-1">Qtd:</span>
                     {[1, 2, 3, 4].map(q => (
                       <button
                         key={q}
                         type="button"
-                        onClick={() => {
-                          setQtdVolumes(q);
-                          inputUnidadeRef.current?.focus();
-                        }}
-                        className={`flex-1 py-1 text-xs font-black rounded-lg transition ${
+                        onClick={() => setQtdVolumes(q)}
+                        className={`flex-1 py-1 text-xs font-black rounded-lg transition cursor-pointer ${
                           qtdVolumes === q
                             ? 'bg-amber-600 text-white shadow-xs'
                             : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
@@ -754,59 +738,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                     />
                   </div>
                 </div>
-
-                {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL (TOUCH SCREEN NA TELA) */}
-                {mostrarTecladoVirtual && (
-                  <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-300 shadow-inner mt-2 space-y-2">
-                    {/* Linha de Letras Rápidas para Unidades com Letras (ex: 105A, 1507A, Bloco B) */}
-                    <div className="flex items-center gap-1.5 justify-between">
-                      {['A', 'B', 'C', 'D', 'E', 'F'].map(letra => (
-                        <button
-                          key={letra}
-                          type="button"
-                          onClick={() => tocarNumeroVirtual(letra)}
-                          className="flex-1 h-9 bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-sm rounded-lg border border-amber-300 shadow-2xs active:scale-95 transition"
-                        >
-                          {letra}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => tocarNumeroVirtual(d)}
-                          className="h-12 bg-white hover:bg-slate-50 active:bg-amber-100 rounded-xl text-xl font-black text-slate-800 shadow-xs border border-slate-200 active:scale-95 transition flex items-center justify-center cursor-pointer"
-                        >
-                          {d}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={limparDigitos}
-                        className="h-12 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 rounded-xl text-xs font-black shadow-xs border border-rose-200 active:scale-95 transition flex items-center justify-center"
-                      >
-                        Limpar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => tocarNumeroVirtual('0')}
-                        className="h-12 bg-white hover:bg-slate-50 active:bg-amber-100 rounded-xl text-xl font-black text-slate-800 shadow-xs border border-slate-200 active:scale-95 transition flex items-center justify-center cursor-pointer"
-                      >
-                        0
-                      </button>
-                      <button
-                        type="button"
-                        onClick={apagarUltimoDigito}
-                        className="h-12 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-800 rounded-xl text-sm font-black shadow-xs border border-amber-200 active:scale-95 transition flex items-center justify-center"
-                      >
-                        <Delete className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 {/* BOTÃO PRINCIPAL DE ADICIONAR */}
                 <button
