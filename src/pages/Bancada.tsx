@@ -7,7 +7,6 @@ import {
   Trash2,
   RefreshCw,
   Share2,
-  Printer,
   History,
   Search,
   Building,
@@ -380,9 +379,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="bg-amber-400/20 text-amber-100 border border-amber-300/30 text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider">
-                Módulo 11 • Controle Físico
-              </span>
               <span className="bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 Em Tempo Real
@@ -392,9 +388,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               <Layers className="w-6 h-6 text-amber-200" />
               Bancada de Portaria & Conferência de Balcão
             </h1>
-            <p className="text-xs sm:text-sm text-amber-100/90 mt-1 max-w-2xl">
-              Lançamento rápido e auditoria física dos volumes retidos na bancada para conferência contínua e Passagem de Posto precisa.
-            </p>
           </div>
 
           {/* BOTÕES DE AÇÃO PRINCIPAIS */}
@@ -418,16 +411,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
             >
               {copiadoWhats ? <Check className="w-4 h-4 text-emerald-200" /> : <Share2 className="w-4 h-4" />}
               {copiadoWhats ? 'Copiado p/ Whats!' : 'Copiar p/ WhatsApp'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer border border-white/20"
-              title="Imprimir conferência da bancada"
-            >
-              <Printer className="w-4 h-4" />
-              Imprimir
             </button>
 
             <button
