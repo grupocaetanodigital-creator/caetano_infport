@@ -644,6 +644,25 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                   </div>
                 </div>
 
+                {/* QUANTIDADE DE VOLUMES (LOGO ABAIXO DO CAMPO DE DIGITAÇÃO) */}
+                <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-black text-slate-600 uppercase px-1.5">Qtd Volumes:</span>
+                  {[1, 2, 3, 4].map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setQtdVolumes(q)}
+                      className={`flex-1 py-1.5 text-xs font-black rounded-lg transition cursor-pointer ${
+                        qtdVolumes === q
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {q} vol
+                    </button>
+                  ))}
+                </div>
+
                 {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL EXCLUSIVO (SEMPRE ATIVO NA TELA) */}
                 <div className="bg-slate-100 p-2.5 sm:p-3 rounded-2xl border border-slate-300 shadow-inner space-y-2">
                   {/* Linha de Letras Rápidas para Unidades com Letras (ex: 105A, 1507A, Bloco B) */}
@@ -695,25 +714,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                       <Delete className="w-6 h-6" />
                     </button>
                   </div>
-                </div>
-
-                {/* QUANTIDADE DE VOLUMES */}
-                <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                  <span className="text-[11px] font-black text-slate-600 uppercase px-1.5">Qtd Volumes:</span>
-                  {[1, 2, 3, 4].map(q => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => setQtdVolumes(q)}
-                      className={`flex-1 py-1.5 text-xs font-black rounded-lg transition cursor-pointer ${
-                        qtdVolumes === q
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                      }`}
-                    >
-                      {q} vol
-                    </button>
-                  ))}
                 </div>
 
                 {/* BOTÃO PRINCIPAL DE ADICIONAR */}
