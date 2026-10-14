@@ -282,7 +282,8 @@ export async function marcarComoLido(
       operador_id: operadorId || '',
       operador_nome: nome,
       acao: 'LEMBRETE_CIENTE',
-      detalhes: `Lembrete ID ${id} marcado como ciente pelo operador.`,
+      descricao: `Lembrete ID ${id} marcado como ciente pelo operador ${nome}.`,
+      detalhes: { lembreteId: id, acao: 'marcar_lido' },
       modulo: 'lembretes_portaria',
       condominio_id: condominioId
     }).catch(() => {});
@@ -340,7 +341,8 @@ export async function marcarTodosComoLidos(
       operador_id: operadorId || '',
       operador_nome: nome,
       acao: 'TODOS_LEMBRETES_LIDOS',
-      detalhes: `${total} lembretes marcados como lidos de uma só vez.`,
+      descricao: `${total} lembretes marcados como lidos de uma só vez pelo operador ${nome}.`,
+      detalhes: { totalAtualizados: total },
       modulo: 'lembretes_portaria',
       condominio_id: condominioId
     }).catch(() => {});

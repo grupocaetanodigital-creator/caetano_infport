@@ -43,8 +43,10 @@ import {
   Lock,
   SlidersHorizontal,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  PenTool
 } from 'lucide-react';
+import CampoAssinaturaDigital from '../components/CampoAssinaturaDigital';
 import { verificarPermissao, carregarNiveisAcesso } from '../services/permissoesService';
 import { 
   carregarCondominioConfig, 
@@ -205,6 +207,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [modalBaixaAberta, setModalBaixaAberta] = useState(false);
   const [nomeRetirante, setNomeRetirante] = useState('');
   const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
+  const [assinaturaDigitalUrl, setAssinaturaDigitalUrl] = useState('');
   const [baixaConcluidaWhats, setBaixaConcluidaWhats] = useState<any | null>(null);
 
   // Estados para Edição e Troca Dinâmica de Local Físico
@@ -1678,8 +1681,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) possuem permissão para realizar Baixa de Pacotes.' });
       return;
     }
-    if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione e marque os pacotes no checklist, informe o nome do retirante e tire a foto da entrega.' });
+    if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || (!fotoRetiranteUrl.trim() && !assinaturaDigitalUrl.trim())) {
+      setMensagem({ 
+        tipo: 'erro', 
+        texto: 'Selecione e marque os pacotes no checklist, informe o nome do retirante e colete a assinatura digital do morador ou a foto da entrega.' 
+      });
       return;
     }
     setLoading(true);
@@ -1691,10 +1697,35 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         baixaParentesco ? `[${baixaParentesco}]` : ''
       ].filter(Boolean).join(' ');
 
+      // Se houver assinatura digital desenhada (data:image), comprime e salva no storage
+      let urlAssinaturaFinal = assinaturaDigitalUrl.trim();
+      if (urlAssinaturaFinal.startsWith('data:image/')) {
+        try {
+          const fetchRes = await fetch(urlAssinaturaFinal);
+          const blobAssinatura = await fetchRes.blob();
+          const uploadRes = await uploadFotoComprimidaStorage({
+            file: blobAssinatura,
+            pasta: 'assinaturas_encomendas',
+            maxWidth: 900,
+            maxHeight: 450,
+            qualidade: 0.85
+          });
+          if (uploadRes?.publicUrl) {
+            urlAssinaturaFinal = uploadRes.publicUrl;
+          }
+        } catch (errUpload) {
+          console.warn('Upload de assinatura digital usou fallback:', errUpload);
+        }
+      }
+
+      const comprovantePrincipal = fotoRetiranteUrl.trim() || urlAssinaturaFinal;
+      const comprovanteAssinatura = urlAssinaturaFinal || fotoRetiranteUrl.trim();
+
       const payloadUpdate: any = {
         status: 'entregue',
         retirado_por: retiranteFormatado,
-        foto_retirada_url: fotoRetiranteUrl.trim(),
+        foto_retirada_url: comprovantePrincipal,
+        foto_comprovante_url: comprovanteAssinatura,
         data_retirada: new Date().toISOString(),
         operador_baixa_id: usuarioLogado?.login || usuarioLogado?.id || 'Operador'
       };
@@ -1708,17 +1739,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       const primeiroItem = todosItensRetidos.find(i => i.id === itensSelecionadosIds[0]);
 
-      // Registra baixa / entrega no Histórico Absoluto
+      // Registra baixa / entrega no Histórico Absoluto com detalhes de assinatura
       registrarAtividade({
         modulo: 'Encomendas',
         acao: 'BAIXA',
-        descricao: `Entregou ${itensSelecionadosIds.length} encomenda(s) para o retirante: ${retiranteFormatado}.${baixaObsEspecial ? ` Obs: ${baixaObsEspecial}` : ''}${baixaNotificarSupervisor ? ' [AUDITORIA SUPERVISÃO SOLICITADA]' : ''}`,
+        descricao: `Entregou ${itensSelecionadosIds.length} encomenda(s) para o retirante: ${retiranteFormatado}.${urlAssinaturaFinal ? ' [ASSINATURA DIGITAL COLETADA]' : ''}${baixaObsEspecial ? ` Obs: ${baixaObsEspecial}` : ''}${baixaNotificarSupervisor ? ' [AUDITORIA SUPERVISÃO SOLICITADA]' : ''}`,
         detalhes: {
           totalItens: itensSelecionadosIds.length,
           itensIds: itensSelecionadosIds,
           retiradoPor: retiranteFormatado,
           docRetirante: baixaDocRetirante,
           vinculo: baixaParentesco,
+          temAssinaturaDigital: Boolean(urlAssinaturaFinal),
+          temFoto: Boolean(fotoRetiranteUrl),
           obsEspecial: baixaObsEspecial,
           notificadoSupervisor: baixaNotificarSupervisor
         },
@@ -1738,7 +1771,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       }).join('\n');
 
       const rotuloUnidPrimeiro = formatarIdentificacaoUnidade(primeiroItem?.unidade, primeiroItem?.bloco, condoConfig?.tipo_estrutura);
-      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: ${rotuloUnidPrimeiro}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${retiranteFormatado}\n• Comprovante da Entrega: ${fotoRetiranteUrl}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+      const comprovanteWhats = fotoRetiranteUrl.trim() || urlAssinaturaFinal || 'Assinatura digital coletada na portaria';
+      const infoAssinaturaWhats = urlAssinaturaFinal ? `• Assinatura Digital: Confirmada no sistema\n` : '';
+
+      const textoCruzado = `✅ *CONFIRMAÇÃO DE RETIRADA DE ENCOMENDA*\nUnidade: ${rotuloUnidPrimeiro}\n\nInformamos que o(s) seguinte(s) pacote(s) foram RETIRADOS da portaria:\n• Volumes Entregues (${itensSelecionadosIds.length}):\n${volumesDetalhados}\n• Quem Retirou: ${retiranteFormatado}\n${infoAssinaturaWhats}• Comprovante da Entrega: ${comprovanteWhats}\n\nOperador Responsável: ${usuarioLogado?.login || 'Portaria'}\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
 
       setBaixaConcluidaWhats({
         link: telMorador ? `https://wa.me/55${telMorador}?text=${encodeURIComponent(textoCruzado)}` : `https://wa.me/?text=${encodeURIComponent(textoCruzado)}`
@@ -1747,12 +1783,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setItensSelecionadosIds([]);
       setItensCandidatosEntrega([]);
       setModalBaixaAberta(false);
-      setNomeRetirante(''); setFotoRetiranteUrl('');
+      setNomeRetirante(''); setFotoRetiranteUrl(''); setAssinaturaDigitalUrl('');
       setBaixaDocRetirante(''); setBaixaParentesco('Titular / Morador');
       setBaixaObsEspecial(''); setBaixaNotificarSupervisor(false);
       setMostrarOpcoesBaixa(false);
       carregarDadosBase();
-      setMensagem({ tipo: 'sucesso', texto: 'Baixa de saída realizada com sucesso!' });
+      setMensagem({ tipo: 'sucesso', texto: 'Baixa de saída realizada com sucesso com assinatura digital registrada!' });
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: err.message });
     } finally {
@@ -2856,13 +2892,31 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     />
                   </div>
 
+                  {/* CAMPO DE ASSINATURA DIGITAL (Touch / Tela) */}
+                  <CampoAssinaturaDigital
+                    valor={assinaturaDigitalUrl}
+                    onChange={setAssinaturaDigitalUrl}
+                    onLimpar={() => setAssinaturaDigitalUrl('')}
+                    nomeRetirante={nomeRetirante}
+                    obrigatorio={!fotoRetiranteUrl}
+                    altura={130}
+                  />
+
+                  {/* FOTO DO COMPROVANTE (Opcional ou Complementar) */}
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Comprovante de Entrega (Foto) *</label>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center justify-between">
+                      <span>Foto do Comprovante / Retirante</span>
+                      {assinaturaDigitalUrl ? (
+                        <span className="text-[10px] text-emerald-600 font-semibold lowercase">(opcional com assinatura)</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 lowercase">(ou foto se não assinar)</span>
+                      )}
+                    </label>
                     {!fotoRetiranteUrl ? (
-                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition">
+                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-lg p-2 flex items-center justify-center gap-2 transition">
                         <Camera className="w-4 h-4 text-emerald-600" />
                         <span className="text-xs font-bold text-slate-700">
-                          {uploadingFoto ? 'Enviando...' : 'Foto Assinatura / Retirante'}
+                          {uploadingFoto ? 'Enviando...' : '📷 Foto do Pacote / Morador'}
                         </span>
                         <input 
                           type="file" 
@@ -3005,14 +3059,30 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     />
                   </div>
 
+                  {/* CAMPO DE ASSINATURA DIGITAL (Touch / Tela) */}
+                  <CampoAssinaturaDigital
+                    valor={assinaturaDigitalUrl}
+                    onChange={setAssinaturaDigitalUrl}
+                    onLimpar={() => setAssinaturaDigitalUrl('')}
+                    nomeRetirante={nomeRetirante}
+                    obrigatorio={!fotoRetiranteUrl}
+                    altura={145}
+                  />
+
+                  {/* FOTO DO COMPROVANTE (Opcional ou Complementar) */}
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase">
-                      Comprovante de Entrega (Foto) *
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
+                      <span>Foto do Comprovante / Retirante</span>
+                      {assinaturaDigitalUrl ? (
+                        <span className="text-[10px] text-emerald-600 font-semibold lowercase">(opcional com assinatura)</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 lowercase">(ou anexe foto se não assinar)</span>
+                      )}
                     </label>
                     {!fotoRetiranteUrl ? (
-                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50 cursor-pointer rounded-lg p-3 flex items-center justify-center gap-2 transition text-xs font-bold text-slate-700">
+                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition text-xs font-bold text-slate-700">
                         <Camera className="w-4 h-4 text-emerald-600" />
-                        <span>{uploadingFoto ? 'Enviando...' : '📷 Foto Assinatura / Retirante'}</span>
+                        <span>{uploadingFoto ? 'Enviando...' : '📷 Foto do Pacote / Morador'}</span>
                         <input 
                           type="file" 
                           accept="image/*" 
@@ -3772,6 +3842,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     )}
                   </p>
                 </div>
+
+                {/* Assinatura Digital Coletada (se houver e for distinta da foto de saída) */}
+                {itemModalDossie.foto_comprovante_url && itemModalDossie.foto_comprovante_url !== itemModalDossie.foto_retirada_url && (
+                  <div className="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200 space-y-2 sm:col-span-2">
+                    <strong className="text-xs font-black text-emerald-950 uppercase flex items-center gap-1.5">
+                      <PenTool className="w-4 h-4 text-emerald-700" /> Assinatura Digital do Retirante
+                    </strong>
+                    <div className="bg-white rounded-xl overflow-hidden h-36 flex items-center justify-center border border-emerald-300 p-2">
+                      <img src={itemModalDossie.foto_comprovante_url} alt="Assinatura Digital" loading="lazy" decoding="async" className="max-h-32 object-contain" />
+                    </div>
+                    <p className="text-[11px] text-emerald-800 font-medium">
+                      Assinatura capturada na tela da portaria no ato da entrega para <strong>{itemModalDossie.retirado_por}</strong>.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Relatório Texto Formatado */}

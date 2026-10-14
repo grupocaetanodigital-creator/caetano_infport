@@ -488,9 +488,60 @@ export default function App() {
     setDrawerMobileAberto(false);
   };
 
-  const handleTrocarOperador = (novoOperador: any) => {
+  const handleTrocarOperador = async (novoOperador: any) => {
+    if (!novoOperador) return;
+
+    // 1. Atualiza estado do operador ativo em memória
     setOperador(novoOperador);
-    mudarModulo('dashboard');
+
+    // 2. EFETIVA O LOGIN NO DISPOSITIVO (PERSISTÊNCIA NO LOCALSTORAGE)
+    // Garante que recarregamentos de página, abas em segundo plano e WhatsApp não desfaçam a troca!
+    localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+      operadorId: novoOperador.id,
+      login: novoOperador.login,
+      condominioId: novoOperador.condominio_id,
+      salvoEm: new Date().toISOString()
+    }));
+
+    if (novoOperador.condominio_id) {
+      setCondominioAtivoId(novoOperador.condominio_id);
+      localStorage.setItem('infport_condominio_ativo_id', novoOperador.condominio_id);
+      try {
+        const { data: cData } = await supabase
+          .from('condominios')
+          .select('*')
+          .eq('id', novoOperador.condominio_id)
+          .maybeSingle();
+        if (cData) {
+          setCondominio(cData);
+        }
+      } catch (err) {
+        console.error('Erro ao sincronizar condomínio após troca de operador:', err);
+      }
+      carregarNiveisAcesso(novoOperador.condominio_id);
+    }
+
+    // 3. Registra assunção de plantão no Histórico Absoluto
+    registrarAtividade({
+      modulo: 'Passagem de Posto',
+      acao: 'TROCA_OPERADOR_EFETIVADA',
+      descricao: `Operador ${novoOperador.nome || novoOperador.login} assumiu oficialmente o posto (Login efetivado e autenticado no dispositivo).`,
+      detalhes: { operadorId: novoOperador.id, perfil: novoOperador.perfil, condominioId: novoOperador.condominio_id },
+      operador_nome: novoOperador.nome || novoOperador.login,
+      operador_id: novoOperador.id,
+      operador_login: novoOperador.login,
+      condominio_id: novoOperador.condominio_id
+    });
+
+    // 4. Notifica globalmente outros módulos e componentes da troca
+    window.dispatchEvent(new CustomEvent('infport:operador_trocado', { detail: novoOperador }));
+
+    // 5. Redireciona para o painel principal do novo operador
+    const ehSindicoOp = novoOperador.nivel_acesso === 4 || 
+                        novoOperador.perfil === 'sindico' || 
+                        novoOperador.funcao?.toLowerCase() === 'síndico' || 
+                        novoOperador.funcao?.toLowerCase() === 'sindico';
+    mudarModulo(ehSindicoOp ? 'painel_sindico' : 'dashboard');
   };
 
   const objCondominioSelecionado = listaCondominios.find(c => c.id === condominioAtivoId);

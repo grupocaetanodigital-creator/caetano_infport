@@ -40,7 +40,9 @@ import {
   CheckCircle,
   XCircle,
   FileText,
-  Layers
+  Layers,
+  EyeOff,
+  Sparkles
 } from 'lucide-react';
 import { 
   carregarCondominioConfig, 
@@ -289,6 +291,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   const [divergencia, setDivergencia] = useState('');
   const [temDivergencia, setTemDivergencia] = useState(false);
 
+  // Estados de operadores para autenticação, seleção rápida e efetivação no posto (Etapa 3)
+  const [listaOperadores, setListaOperadores] = useState<any[]>([]);
+  const [operadorSelecionadoEntrante, setOperadorSelecionadoEntrante] = useState<any | null>(null);
+  const [mostrarSenhaEntrante, setMostrarSenhaEntrante] = useState(false);
+  const [modalSucessoTroca, setModalSucessoTroca] = useState<any | null>(null);
+
   // Módulo ativo para visualização detalhada na etapa 1
   const [moduloAtivo, setModuloAtivo] = useState<string>('todos');
   const [visualizacaoModal, setVisualizacaoModal] = useState<'tabelas' | 'cards'>('tabelas');
@@ -299,7 +307,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   // Modal para ver relatório histórico completo
   const [modalHistoricoDetalhes, setModalHistoricoDetalhes] = useState<any | null>(null);
 
-  // 1. Auditoria Obrigatória dos 8 Módulos do Sistema
+  // 1. Auditoria Obrigatória dos 8 Módulos do Sistema (Sem checklist físico redundante)
   const [auditModulos, setAuditModulos] = useState<Record<string, { status: 'ok' | 'divergente' | null; obs: string }>>({
     encomendas: { status: null, obs: '' },
     bancada: { status: null, obs: '' },
@@ -309,19 +317,6 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     custodia: { status: null, obs: '' },
     materiais: { status: null, obs: '' },
     ocorrencias: { status: null, obs: '' }
-  });
-
-  // 2. Checklist Físico Obrigatório da Guarita (9 itens com C ou NC sem pré-marcação)
-  const [auditFisico, setAuditFisico] = useState<Record<string, { status: 'C' | 'NC' | null; obs: string }>>({
-    encomendasOk: { status: null, obs: '' },
-    bancadaOk: { status: null, obs: '' },
-    custodiaOk: { status: null, obs: '' },
-    chavesOk: { status: null, obs: '' },
-    materiaisOk: { status: null, obs: '' },
-    rondasOk: { status: null, obs: '' },
-    prestadoresOk: { status: null, obs: '' },
-    ocorrenciasCientes: { status: null, obs: '' },
-    limpezaOk: { status: null, obs: '' }
   });
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>({
@@ -336,17 +331,57 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     limpezaOk: true
   });
 
-  // Totalizadores de auditoria obrigatória
+  // Totalizadores de auditoria obrigatória dos 8 módulos
   const totalModulosAvaliados = Object.values(auditModulos).filter(m => m.status !== null).length;
-  const totalFisicosAvaliados = Object.values(auditFisico).filter(f => f.status !== null).length;
-  const totalGeralAuditado = totalModulosAvaliados + totalFisicosAvaliados;
-  const checklistCompletoValido = totalModulosAvaliados === Object.keys(auditModulos).length && totalFisicosAvaliados === Object.keys(auditFisico).length;
+  const totalModulosObrigatorios = Object.keys(auditModulos).length; // 8 módulos
+  const checklistCompletoValido = totalModulosAvaliados === totalModulosObrigatorios;
+
+  const marcarTodosModulosOk = () => {
+    setAuditModulos(prev => {
+      const atualizado: Record<string, { status: 'ok' | 'divergente' | null; obs: string }> = {};
+      Object.keys(prev).forEach(key => {
+        atualizado[key] = {
+          status: 'ok',
+          obs: ''
+        };
+      });
+      return atualizado;
+    });
+  };
+
+  const carregarOperadores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('operadores')
+        .select('id, nome, login, perfil, foto_url, nivel_acesso, condominio_id, ativo')
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar operadores para passagem:', error);
+        return;
+      }
+
+      if (data) {
+        const condId = usuarioLogado?.condominio_id;
+        const opsDoPosto = data.filter(op => {
+          if (op.id === usuarioLogado?.id) return false;
+          if (!condId) return true;
+          return op.condominio_id === condId || !op.condominio_id || op.condominio_id === '00000000-0000-0000-0000-000000000001' || op.perfil === 'admin' || op.nivel_acesso === 0;
+        });
+        setListaOperadores(opsDoPosto.length > 0 ? opsDoPosto : data.filter(op => op.id !== usuarioLogado?.id));
+      }
+    } catch (err) {
+      console.error('Erro ao carregar lista de operadores:', err);
+    }
+  };
 
   useEffect(() => {
     if (usuarioLogado?.condominio_id) {
       carregarPassagens();
       carregarConfigEConsolidar(usuarioLogado.condominio_id);
     }
+    carregarOperadores();
   }, [usuarioLogado?.condominio_id]);
 
   const carregarConfigEConsolidar = async (condId: string) => {
@@ -380,7 +415,11 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     setEtapa(1);
     setMensagem({ tipo: '', texto: '' });
     setModuloAtivo('todos');
-    // Reinicia checklist sem itens pré-marcados para forçar checagem 100% confiável
+    setOperadorSelecionadoEntrante(null);
+    setLoginEntrante('');
+    setSenhaEntrante('');
+    setMostrarSenhaEntrante(false);
+    // Reinicia auditoria dos 8 módulos operacionais sem itens pré-marcados
     setAuditModulos({
       encomendas: { status: null, obs: '' },
       bancada: { status: null, obs: '' },
@@ -391,20 +430,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       materiais: { status: null, obs: '' },
       ocorrencias: { status: null, obs: '' }
     });
-    setAuditFisico({
-      encomendasOk: { status: null, obs: '' },
-      bancadaOk: { status: null, obs: '' },
-      custodiaOk: { status: null, obs: '' },
-      chavesOk: { status: null, obs: '' },
-      materiaisOk: { status: null, obs: '' },
-      rondasOk: { status: null, obs: '' },
-      prestadoresOk: { status: null, obs: '' },
-      ocorrenciasCientes: { status: null, obs: '' },
-      limpezaOk: { status: null, obs: '' }
-    });
     setTemDivergencia(false);
     setDivergencia('');
     setObservacoes('');
+    carregarOperadores();
     await consolidarModulosPosto();
   };
 
@@ -823,37 +852,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     }));
   };
 
-  const marcarFisicoAudit = (itemKey: string, status: 'C' | 'NC') => {
-    setAuditFisico(prev => ({
-      ...prev,
-      [itemKey]: {
-        ...prev[itemKey],
-        status: prev[itemKey]?.status === status ? null : status
-      }
-    }));
-  };
-
-  const setObsFisicoAudit = (itemKey: string, obs: string) => {
-    setAuditFisico(prev => ({
-      ...prev,
-      [itemKey]: {
-        ...prev[itemKey],
-        obs
-      }
-    }));
-  };
-
   const avancarParaEtapa2 = () => {
     if (!checklistCompletoValido) {
-      const faltam = (Object.keys(auditModulos).length + Object.keys(auditFisico).length) - totalGeralAuditado;
+      const faltam = totalModulosObrigatorios - totalModulosAvaliados;
       setMensagem({
         tipo: 'erro',
-        texto: `Atenção: É obrigatório auditar todos os módulos do sistema e os itens físicos da guarita (incluindo a bancada) antes de avançar! Faltam ${faltam} itens.`
+        texto: `Atenção: É obrigatório auditar todos os 8 módulos operacionais do posto antes de avançar! Faltam ${faltam} módulo(s).`
       });
       return;
     }
 
-    // Coleta todas as divergências apontadas nos módulos e itens físicos com NC
+    // Coleta todas as divergências apontadas nos módulos
     const divergenciasColetadas: string[] = [];
 
     const nomesModulos: Record<string, string> = {
@@ -867,27 +876,9 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       ocorrencias: 'Módulo 08: Livro de Ocorrências'
     };
 
-    const nomesFisicos: Record<string, string> = {
-      encomendasOk: 'Volumes físicos de encomendas conferidos com saldo retido',
-      bancadaOk: 'Volumes físicos na bancada conferidos conforme detalhamento por torre',
-      custodiaOk: 'Itens de custódia na portaria conferidos',
-      chavesOk: 'Quadro de chaves confere com devoluções e retiradas ativas',
-      materiaisOk: 'HTs, celulares e lanternas testados e carregando',
-      rondasOk: 'Relatório de rondas e divergências GPS/NFC verificado',
-      prestadoresOk: 'Prestadores e crachás ativos no condomínio conferidos',
-      ocorrenciasCientes: 'Ciente de todas as ocorrências pendentes',
-      limpezaOk: 'Guarita e bancadas limpas e organizadas'
-    };
-
     Object.entries(auditModulos).forEach(([key, val]) => {
       if (val.status === 'divergente') {
-        divergenciasColetadas.push(`• [${nomesModulos[key] || key}] ${val.obs.trim() || 'Divergência apontada no módulo.'}`);
-      }
-    });
-
-    Object.entries(auditFisico).forEach(([key, val]) => {
-      if (val.status === 'NC') {
-        divergenciasColetadas.push(`• [Não Conforme: ${nomesFisicos[key] || key}] ${val.obs.trim() || 'Item não conforme constatado na vistoria.'}`);
+        divergenciasColetadas.push(`• [${nomesModulos[key] || key}] ${val.obs.trim() || 'Divergência apontada na conferência do módulo.'}`);
       }
     });
 
@@ -909,25 +900,54 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     setMensagem({ tipo: '', texto: '' });
 
     try {
-      const { data: opEntrante, error: opError } = await supabase
-        .from('operadores')
-        .select('*')
-        .eq('login', loginEntrante.trim())
-        .eq('senha', senhaEntrante.trim())
-        .eq('condominio_id', usuarioLogado.condominio_id)
-        .eq('ativo', true)
-        .maybeSingle();
+      const loginLimpo = loginEntrante.trim();
+      const senhaLimpa = senhaEntrante.trim();
 
-      if (opError) throw opError;
-
-      if (!opEntrante) {
-        setMensagem({ tipo: 'erro', texto: 'Credenciais do operador entrante incorretas ou operador inativo.' });
+      if (!loginLimpo || !senhaLimpa) {
+        setMensagem({ tipo: 'erro', texto: 'Informe o login e a senha do operador entrante que está assumindo o posto.' });
         setLoading(false);
         return;
       }
 
+      // Busca operador entrante por login (case-insensitive com ilike)
+      let { data: opCandidatos, error: opError } = await supabase
+        .from('operadores')
+        .select('*')
+        .ilike('login', loginLimpo)
+        .eq('senha', senhaLimpa)
+        .eq('ativo', true);
+
+      if (opError) throw opError;
+
+      // Fallback: se não encontrou pelo login exato, tenta pelo nome completo ou primeiro nome
+      if (!opCandidatos || opCandidatos.length === 0) {
+        const { data: opPorNome } = await supabase
+          .from('operadores')
+          .select('*')
+          .ilike('nome', `%${loginLimpo}%`)
+          .eq('senha', senhaLimpa)
+          .eq('ativo', true);
+        if (opPorNome && opPorNome.length > 0) {
+          opCandidatos = opPorNome;
+        }
+      }
+
+      if (!opCandidatos || opCandidatos.length === 0) {
+        setMensagem({ 
+          tipo: 'erro', 
+          texto: 'Credenciais incorretas ou operador inativo. Verifique se o login e a senha digitados estão corretos.' 
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Se houver mais de um, prioriza o do condomínio do posto
+      let opEntrante = opCandidatos.find(
+        op => op.condominio_id === usuarioLogado.condominio_id
+      ) || opCandidatos[0];
+
       if (opEntrante.id === usuarioLogado.id) {
-        setMensagem({ tipo: 'erro', texto: 'O operador entrante deve ser diferente do sainte.' });
+        setMensagem({ tipo: 'erro', texto: 'Atenção: O operador entrante deve ser uma pessoa diferente do operador sainte atual.' });
         setLoading(false);
         return;
       }
@@ -938,12 +958,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       const ano = String(agora.getFullYear()).slice(-2);
       const codigoPas = `PAS:${dia}${mes}${ano}OPER${String(agora.getMinutes()).padStart(2, '0')}`;
 
-      // Montamos o snapshot completo garantindo compatibilidade com versões antigas e a nova auditoria
+      // Snapshot consolidado completo do plantão (8 módulos)
       const snapshotConsolidado = {
         ...consolidacao,
         auditModulos,
-        auditFisico,
-        // campos legado para visualizadores antigos
         chavesFora: consolidacao.chaves.totalFora,
         listaChaves: consolidacao.chaves.listaChavesFora,
         materiaisOk: consolidacao.materiais.avariados === 0,
@@ -969,51 +987,57 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         status: temDivergencia ? 'Divergência Registrada' : 'Concluída'
       };
 
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('passagens_posto')
         .insert([novaPassagem]);
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
-      // Dispara envio automático para WhatsApp do Posto / Grupo Configurado
+      // 1. EFETIVAÇÃO IMEDIATA NO DISPOSITIVO (PERSISTÊNCIA LOCALSTORAGE)
+      // Gravamos a sessão do operador entrante antes de qualquer ação externa!
+      localStorage.setItem('infport_sessao_ativa_v1', JSON.stringify({
+        operadorId: opEntrante.id,
+        login: opEntrante.login,
+        condominioId: opEntrante.condominio_id || usuarioLogado.condominio_id,
+        salvoEm: new Date().toISOString()
+      }));
+      if (opEntrante.condominio_id || usuarioLogado.condominio_id) {
+        localStorage.setItem('infport_condominio_ativo_id', opEntrante.condominio_id || usuarioLogado.condominio_id);
+      }
+
+      // 2. Registro de auditoria no Histórico Absoluto
+      registrarAtividade({
+        modulo: 'Passagem de Posto',
+        acao: 'TROCA_OPERADOR_EFETIVADA',
+        descricao: `Passagem ${codigoPas}: Operador ${opEntrante.nome || opEntrante.login} assumiu oficialmente o posto em substituição a ${usuarioLogado?.nome || usuarioLogado?.login}.`,
+        detalhes: {
+          codigo: codigoPas,
+          operadorSainte: usuarioLogado?.nome || usuarioLogado?.login,
+          operadorEntrante: opEntrante.nome || opEntrante.login,
+          operadorEntranteId: opEntrante.id,
+          condominioId: usuarioLogado.condominio_id
+        },
+        operador_nome: opEntrante.nome || opEntrante.login,
+        operador_id: opEntrante.id,
+        operador_login: opEntrante.login,
+        condominio_id: usuarioLogado.condominio_id
+      });
+
       const passagemCompletaParaRelatorio = {
         ...novaPassagem,
         created_at: new Date().toISOString()
       };
-      const textoRelatorio = gerarTextoRelatorio(passagemCompletaParaRelatorio);
 
-      try {
-        const cfgWhats = await carregarConfigWhatsApp(usuarioLogado.condominio_id);
-        const cfgModulo = cfgWhats.passagem_posto;
-        if (cfgModulo?.ativo && cfgModulo.telefone_ou_grupo) {
-          const link = formatarLinkWhatsApp(cfgModulo.telefone_ou_grupo, textoRelatorio);
-          const a = document.createElement('a');
-          a.href = link;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        }
-      } catch (errW) {
-        console.warn('Erro ao disparar WhatsApp automático:', errW);
-      }
-
+      // Fecha o modal de preenchimento e abre a tela de confirmação e efetivação do login do novo operador
       setModalNova(false);
-      setModalCompartilharWhatsApp(passagemCompletaParaRelatorio);
-      setLoginEntrante('');
-      setSenhaEntrante('');
-      setObservacoes('');
-      setDivergencia('');
-      setTemDivergencia(false);
+      setModalSucessoTroca({
+        operadorEntrante: opEntrante,
+        operadorSainte: usuarioLogado,
+        passagem: passagemCompletaParaRelatorio,
+        relatorioTexto: gerarTextoRelatorio(passagemCompletaParaRelatorio)
+      });
 
-      if (onTrocarOperador) {
-        onTrocarOperador(opEntrante);
-      } else {
-        carregarPassagens();
-        setMensagem({ tipo: 'sucesso', texto: `Passagem de posto registrada com sucesso! Operador ativo: ${opEntrante.nome}` });
-      }
-
+      carregarPassagens();
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao registrar passagem: ' + err.message });
     } finally {
@@ -2225,34 +2249,43 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                 </>
               )}
 
-                  {/* CHECKLIST COMPLETO OBRIGATÓRIO DE AUDITORIA DO POSTO */}
+                  {/* CHECKLIST DE CONFERÊNCIA DOS MÓDULOS OPERACIONAIS (SEM CHECKLIST FÍSICO REDUNDANTE) */}
                   <div className="space-y-4 border-t pt-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
                       <div>
                         <h4 className="text-xs sm:text-sm font-black text-slate-900 uppercase flex items-center gap-2">
                           <CheckSquare className="w-4 h-4 text-emerald-600" />
-                          Checklist Obrigatório de Passagem de Posto
+                          Conferência Operacional dos Módulos da Portaria
                         </h4>
                         <p className="text-[11px] text-slate-500">
-                          É obrigatório avaliar todos os 7 módulos do sistema e os 8 itens físicos da guarita antes de prosseguir
+                          Validação dos 8 módulos da guarita com dados consolidados em tempo real
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={marcarTodosModulosOk}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                          title="Marca todos os 8 módulos como Conformes (OK) de uma só vez"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Marcar Todos como OK (Conforme)
+                        </button>
                         <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${
                           checklistCompletoValido 
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
                             : 'bg-amber-100 text-amber-900 border border-amber-300'
                         }`}>
-                          {totalGeralAuditado} de 15 conferidos {checklistCompletoValido ? '✓ 100%' : `(faltam ${15 - totalGeralAuditado})`}
+                          {totalModulosAvaliados} de {totalModulosObrigatorios} auditados {checklistCompletoValido ? '✓ 100%' : `(faltam ${totalModulosObrigatorios - totalModulosAvaliados})`}
                         </span>
                       </div>
                     </div>
 
-                    {/* PARTE 1: AUDITORIA DOS 7 MÓDULOS INTERNOS */}
+                    {/* AUDITORIA DOS 8 MÓDULOS OPERACIONAIS */}
                     <div className="space-y-2">
                       <label className="block text-[11px] font-black text-slate-700 uppercase">
-                        1. Conferência dos 7 Módulos Internos do Posto (Clique em OK ou Divergente em cada um):
+                        Auditoria Módulo a Módulo (Clique em OK ou Divergente para registrar o status):
                       </label>
 
                       <div className="grid grid-cols-1 gap-2.5 text-xs">
@@ -2738,94 +2771,13 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                       </div>
                     </div>
 
-                    {/* PARTE 2: CHECKLIST FÍSICO OBRIGATÓRIO (C ou NC) */}
-                    <div className="space-y-2 pt-2 border-t border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-[11px] font-black text-slate-700 uppercase">
-                          2. Checklist Físico Obrigatório da Guarita (Marque C ou NC para checagem confiável):
-                        </label>
-                        <span className="text-[10px] text-slate-400">
-                          [C = Conforme | NC = Não Conforme]
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        {[
-                          { key: 'encomendasOk', texto: 'Volumes físicos de encomendas conferidos com saldo retido' },
-                          { key: 'bancadaOk', texto: 'Volumes físicos na bancada conferidos conforme detalhamento por torre' },
-                          { key: 'custodiaOk', texto: 'Itens de custódia na portaria conferidos' },
-                          { key: 'chavesOk', texto: 'Quadro de chaves confere com devoluções e retiradas ativas' },
-                          { key: 'materiaisOk', texto: 'HTs, celulares e lanternas testados e carregando' },
-                          { key: 'rondasOk', texto: 'Relatório de rondas e divergências GPS/NFC verificado' },
-                          { key: 'prestadoresOk', texto: 'Prestadores e crachás ativos no condomínio conferidos' },
-                          { key: 'ocorrenciasCientes', texto: 'Ciente de todas as ocorrências pendentes (mesmo de 10+ dias)' },
-                          { key: 'limpezaOk', texto: 'Guarita e bancadas limpas e organizadas' }
-                        ].map(({ key, texto }) => {
-                          const itemVal = auditFisico[key];
-                          return (
-                            <div key={key} className={`p-2.5 rounded-xl border transition ${
-                              itemVal.status === 'C'
-                                ? 'bg-emerald-50/70 border-emerald-300'
-                                : itemVal.status === 'NC'
-                                ? 'bg-red-50/80 border-red-300'
-                                : 'bg-white border-slate-200'
-                            }`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] text-slate-800 leading-tight">
-                                  {texto}
-                                </span>
-
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => marcarFisicoAudit(key, 'C')}
-                                    className={`px-2 py-1 rounded font-black text-[11px] transition cursor-pointer ${
-                                      itemVal.status === 'C'
-                                        ? 'bg-emerald-600 text-white shadow-xs'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                                    title="Conforme"
-                                  >
-                                    C
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => marcarFisicoAudit(key, 'NC')}
-                                    className={`px-2 py-1 rounded font-black text-[11px] transition cursor-pointer ${
-                                      itemVal.status === 'NC'
-                                        ? 'bg-red-600 text-white shadow-xs'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                                    title="Não Conforme"
-                                  >
-                                    NC
-                                  </button>
-                                </div>
-                              </div>
-
-                              {itemVal.status === 'NC' && (
-                                <div className="mt-2 pt-2 border-t border-red-200">
-                                  <input
-                                    type="text"
-                                    value={itemVal.obs}
-                                    onChange={(e) => setObsFisicoAudit(key, e.target.value)}
-                                    placeholder="Descreva o que está Não Conforme neste item..."
-                                    className="w-full p-1.5 bg-white rounded border border-red-300 text-[11px] text-red-950 font-medium"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
                   </div>
 
-                  {/* BOTÃO DE AVANÇAR COM VALIDAÇÃO */}
-                  <div className="space-y-1.5">
+                  {/* BOTÃO DE AVANÇAR COM VALIDAÇÃO DOS 8 MÓDULOS */}
+                  <div className="space-y-1.5 pt-2">
                     {!checklistCompletoValido && (
                       <p className="text-[11px] text-amber-600 text-center font-bold">
-                        ⚠️ Atenção: Para avançar, é obrigatório clicar em todos os 7 módulos (OK ou Divergente) e nos 8 itens físicos (C ou NC). Faltam {15 - totalGeralAuditado} itens.
+                        ⚠️ Atenção: Para avançar, é obrigatório conferir os {totalModulosObrigatorios} módulos operacionais acima (clique em OK ou Divergente, ou use o botão "Marcar Todos como OK"). Faltam {totalModulosObrigatorios - totalModulosAvaliados} módulo(s).
                       </p>
                     )}
 
@@ -2839,7 +2791,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                           : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                       }`}
                     >
-                      Avançar para Observações & Divergências ({totalGeralAuditado}/15) <ChevronRight className="w-4 h-4" />
+                      Avançar para Observações & Divergências ({totalModulosAvaliados}/{totalModulosObrigatorios}) <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -2906,38 +2858,159 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
               {etapa === 3 && (
                 <form onSubmit={realizarPassagemPosto} className="space-y-4">
-                  <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-200 space-y-3">
-                    <label className="block text-xs font-bold text-emerald-950 uppercase flex items-center gap-1.5">
-                      <Lock className="w-4 h-4 text-emerald-700" /> Autenticação do Operador Entrante (Dupla Assinatura)
-                    </label>
-                    <p className="text-[11px] text-emerald-800">
-                      O operador que está assumindo o posto deve inserir seu login e senha abaixo para validar a auditoria e autenticar a troca de turno.
+                  <div className="bg-emerald-50 p-4 sm:p-5 rounded-2xl border border-emerald-200 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-black text-emerald-950 uppercase flex items-center gap-1.5">
+                        <Lock className="w-4 h-4 text-emerald-700" /> Autenticação do Operador Entrante (Dupla Assinatura)
+                      </label>
+                      <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-bold px-2 py-0.5 rounded">
+                        Etapa 3 de 3
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      Para efetivar o login e transferir oficialmente a responsabilidade da portaria, selecione seu nome ou digite seu login e insira sua senha pessoal.
                     </p>
 
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                        <input
-                          type="text"
-                          required
-                          value={loginEntrante}
-                          onChange={(e) => setLoginEntrante(e.target.value)}
-                          placeholder="Login do Operador Entrante"
-                          className="w-full pl-9 pr-3 py-3 bg-white border border-slate-300 rounded-lg text-xs font-medium"
-                        />
+                    {/* QUADRO DE TRANSFERÊNCIA DE POSTO (QUEM SAI ➔ QUEM ASSUME) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-white/90 p-3 rounded-xl border border-emerald-200 text-xs">
+                      <div className="space-y-0.5 border-b sm:border-b-0 sm:border-r border-slate-200 pb-2 sm:pb-0 sm:pr-2">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                          1. Operador Sainte (Entregando):
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                            {(usuarioLogado?.nome || usuarioLogado?.login || 'O').charAt(0)}
+                          </div>
+                          <span className="font-bold text-slate-800 truncate">
+                            {usuarioLogado?.nome || usuarioLogado?.login}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="relative">
-                        <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                        <input
-                          type="password"
-                          required
-                          value={senhaEntrante}
-                          onChange={(e) => setSenhaEntrante(e.target.value)}
-                          placeholder="Senha do Operador Entrante"
-                          className="w-full pl-9 pr-3 py-3 bg-white border border-slate-300 rounded-lg text-xs font-medium"
-                        />
+                      <div className="space-y-0.5 sm:pl-2">
+                        <span className="text-[10px] text-emerald-700 font-bold uppercase block">
+                          2. Operador Entrante (Assumindo):
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            {operadorSelecionadoEntrante 
+                              ? operadorSelecionadoEntrante.nome.charAt(0) 
+                              : (loginEntrante ? loginEntrante.charAt(0).toUpperCase() : '?')}
+                          </div>
+                          <span className="font-black text-emerald-900 truncate">
+                            {operadorSelecionadoEntrante 
+                              ? `${operadorSelecionadoEntrante.nome} (@${operadorSelecionadoEntrante.login})` 
+                              : (loginEntrante ? `@${loginEntrante}` : 'Selecione ou digite abaixo')}
+                          </span>
+                        </div>
                       </div>
+                    </div>
+
+                    {/* SELEÇÃO RÁPIDA DE OPERADORES DO CONDOMÍNIO */}
+                    {listaOperadores.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                          Quem está assumindo o posto agora? (Clique para selecionar rapidamente):
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                          {listaOperadores.map((op) => {
+                            const selecionado = operadorSelecionadoEntrante?.id === op.id || loginEntrante.toLowerCase() === op.login.toLowerCase();
+                            return (
+                              <button
+                                key={op.id}
+                                type="button"
+                                onClick={() => {
+                                  setOperadorSelecionadoEntrante(op);
+                                  setLoginEntrante(op.login);
+                                  setMensagem({ tipo: '', texto: '' });
+                                }}
+                                className={`p-2 rounded-xl text-left border transition flex items-center gap-2 cursor-pointer ${
+                                  selecionado
+                                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                                    : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200'
+                                }`}
+                              >
+                                {op.foto_url ? (
+                                  <img 
+                                    src={op.foto_url} 
+                                    alt={op.nome} 
+                                    className="w-6 h-6 rounded-full object-cover shrink-0 border border-white" 
+                                  />
+                                ) : (
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                    selecionado ? 'bg-white text-emerald-800' : 'bg-slate-800 text-white'
+                                  }`}>
+                                    {op.nome?.charAt(0)}
+                                  </div>
+                                )}
+                                <div className="min-w-0 truncate">
+                                  <p className="text-[11px] font-bold truncate leading-tight">{op.nome}</p>
+                                  <p className={`text-[9px] truncate ${selecionado ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                    @{op.login}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CAMPOS DE CREDENCIAIS DO OPERADOR ENTRANTE */}
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Login do Operador Entrante:
+                        </label>
+                        <div className="relative">
+                          <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                          <input
+                            type="text"
+                            required
+                            value={loginEntrante}
+                            onChange={(e) => {
+                              setLoginEntrante(e.target.value);
+                              const match = listaOperadores.find(op => op.login.toLowerCase() === e.target.value.toLowerCase().trim());
+                              setOperadorSelecionadoEntrante(match || null);
+                            }}
+                            placeholder="Ex: hugo"
+                            className="w-full pl-9 pr-3 py-3 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Senha Pessoal do Operador Entrante:
+                        </label>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                          <input
+                            type={mostrarSenhaEntrante ? "text" : "password"}
+                            required
+                            value={senhaEntrante}
+                            onChange={(e) => setSenhaEntrante(e.target.value)}
+                            placeholder="Digite sua senha de acesso ao Infport"
+                            className="w-full pl-9 pr-10 py-3 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setMostrarSenhaEntrante(!mostrarSenhaEntrante)}
+                            className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            title={mostrarSenhaEntrante ? "Ocultar senha" : "Ver senha"}
+                          >
+                            {mostrarSenhaEntrante ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-white/80 rounded-xl border border-emerald-200 text-[11px] text-emerald-950 flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>Efetivação de Login Permanente:</strong> Ao autenticar, o operador entrante assumirá imediatamente o comando da guarita neste dispositivo.
+                      </span>
                     </div>
                   </div>
 
@@ -2945,26 +3018,131 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     <button
                       type="button"
                       onClick={() => setEtapa(2)}
-                      className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-xl text-xs transition"
+                      className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-xl text-xs transition cursor-pointer"
                     >
                       Voltar
                     </button>
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-2/3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl uppercase text-xs transition shadow-md flex items-center justify-center gap-2"
+                      className="w-2/3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl uppercase text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
                     >
                       {loading ? (
                         <>
-                          <RefreshCw className="w-4 h-4 animate-spin" /> Assinando e Finalizando...
+                          <RefreshCw className="w-4 h-4 animate-spin" /> Autenticando e Efetivando Login...
                         </>
                       ) : (
-                        'Assinar e Finalizar Passagem de Posto'
+                        <>
+                          <ShieldCheck className="w-4 h-4" /> Assinar e Assumir Posto Agora
+                        </>
                       )}
                     </button>
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SUCESSO E EFETIVAÇÃO DE LOGIN DO NOVO OPERADOR */}
+      {modalSucessoTroca && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl relative border-2 border-emerald-500 animate-in fade-in zoom-in-95 duration-200">
+            {/* Ícone e Título de Confirmação */}
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner border border-emerald-200">
+                <ShieldCheck className="w-10 h-10" />
+              </div>
+              <span className="inline-block bg-emerald-100 text-emerald-900 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-300">
+                ✓ Passagem de Posto Concluída
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+                Login Efetivado com Sucesso!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600">
+                O operador <strong className="text-emerald-700 font-black">{modalSucessoTroca.operadorEntrante.nome || modalSucessoTroca.operadorEntrante.login}</strong> assumiu oficialmente o comando da guarita.
+              </p>
+            </div>
+
+            {/* Cartão de Auditoria e Status */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-slate-200">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Operador Sainte (Saiu):</span>
+                  <span className="font-bold text-slate-700 text-xs">
+                    {modalSucessoTroca.operadorSainte?.nome || modalSucessoTroca.operadorSainte?.login}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-emerald-700 font-bold uppercase block">Operador Ativo no Posto:</span>
+                  <span className="font-black text-emerald-800 text-xs flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    {modalSucessoTroca.operadorEntrante.nome || modalSucessoTroca.operadorEntrante.login}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-slate-600">
+                <span>Código: <strong>{modalSucessoTroca.passagem.codigo}</strong></span>
+                <span>Data/Hora: <strong>{new Date(modalSucessoTroca.passagem.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
+              </div>
+
+              <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 leading-relaxed space-y-1">
+                <p className="font-bold flex items-center gap-1 text-emerald-950">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  Sessão ativa e salva no dispositivo:
+                </p>
+                <p className="text-emerald-800 text-[10px]">
+                  Mesmo recarregando a página, abrindo o WhatsApp ou reabrindo o PWA, o operador <strong>{modalSucessoTroca.operadorEntrante.nome}</strong> permanecerá autenticado. Todas as rotinas da portaria (encomendas, bancada, chaves, rondas e ocorrências) registrarão seu nome.
+                </p>
+              </div>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onTrocarOperador) {
+                    onTrocarOperador(modalSucessoTroca.operadorEntrante);
+                  }
+                  setModalSucessoTroca(null);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 px-4 rounded-xl text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition cursor-pointer"
+              >
+                <CheckCircle className="w-5 h-5" />
+                Assumir Posto Agora (Ir para o Painel)
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cfgWhats = condominioConfig?.whatsapp_grupo_url;
+                    copiarRelatorioWhatsApp(modalSucessoTroca.passagem);
+                    if (cfgWhats) {
+                      window.open(cfgWhats, '_blank');
+                    } else {
+                      const link = gerarLinkWhatsApp(modalSucessoTroca.passagem);
+                      window.open(link, '_blank');
+                    }
+                  }}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition text-center cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4 text-emerald-400" />
+                  Enviar WhatsApp
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => copiarRelatorioWhatsApp(modalSucessoTroca.passagem)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  {copiadoTexto ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  {copiadoTexto ? 'Relatório Copiado!' : 'Copiar Relatório'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
