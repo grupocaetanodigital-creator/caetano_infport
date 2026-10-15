@@ -36,11 +36,14 @@ import {
   ListChecks,
   Share2,
   ExternalLink,
-  Layers,
   Users,
   History,
-  Building2
+  Building2,
+  Sun,
+  Moon,
+  Layers
 } from 'lucide-react';
+import { obterModoAltoContraste, aplicarModoAltoContraste } from '../services/contrasteService';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
 import GerenciamentoPermissoes from '../components/GerenciamentoPermissoes';
@@ -84,6 +87,18 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
   const [copiadoSql, setCopiadoSql] = useState(false);
+  const [altoContraste, setAltoContraste] = useState<boolean>(() => obterModoAltoContraste());
+
+  const handleToggleContraste = (novoValor: boolean) => {
+    setAltoContraste(novoValor);
+    aplicarModoAltoContraste(novoValor);
+    setMensagem({
+      tipo: 'sucesso',
+      texto: novoValor
+        ? '✓ Modo de Alto Contraste ativado! Otimizado para guaritas com luz solar e forte iluminação.'
+        : '✓ Modo Escuro Padrão restaurado com sucesso.'
+    });
+  };
 
   // Estado para Central de WhatsApp por Módulo
   const [whatsModulos, setWhatsModulos] = useState<ConfigNotificacoesWhatsApp>(CONFIG_WHATSAPP_PADRAO);
@@ -1075,8 +1090,91 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
 
       {/* ABA 11.1: PARAMETRIZAÇÃO */}
       {abaAtiva === 'flags' && (
-        <form onSubmit={salvarParametrizacao} className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="space-y-6">
+          {/* SEÇÃO GLOBAL: ACESSIBILIDADE VISUAL & MODO ALTO CONTRASTE */}
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-start gap-3">
+                <div className={`p-2.5 rounded-xl border flex items-center justify-center shrink-0 ${
+                  altoContraste 
+                    ? 'bg-amber-500/20 text-amber-600 border-amber-300' 
+                    : 'bg-slate-900 text-slate-100 border-slate-700'
+                }`}>
+                  {altoContraste ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                    Visibilidade & Contraste do Sistema (Guarita)
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Alterne entre o Modo Escuro padrão e o Modo Alto Contraste para ambientes de portaria com forte iluminação ou reflexo solar.
+                  </p>
+                </div>
+              </div>
+
+              {/* Chave Seletora Switch Toggle */}
+              <div className="flex items-center gap-2 shrink-0 self-start md:self-center bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => handleToggleContraste(false)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    !altoContraste
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Moon className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Escuro</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleContraste(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    altoContraste
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Sun className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Contraste</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Explicação e Destaques dos Modos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className={`p-3.5 rounded-xl border transition ${
+                !altoContraste
+                  ? 'bg-slate-900 text-white border-slate-800 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200'
+              }`}>
+                <div className="flex items-center gap-2 font-bold mb-1">
+                  <Moon className="w-4 h-4 text-emerald-400" />
+                  <span>Modo Escuro Padrão (Ambiente Noturno)</span>
+                </div>
+                <p className="text-[11px] opacity-80 leading-relaxed">
+                  Tema escuro clássico do INFPORT com paleta slate suave. Confortável para os olhos em turnos noturnos e ambientes fechados com luz moderada.
+                </p>
+              </div>
+
+              <div className={`p-3.5 rounded-xl border transition ${
+                altoContraste
+                  ? 'bg-amber-50/80 text-amber-950 border-amber-300 shadow-xs ring-2 ring-amber-400/40'
+                  : 'bg-slate-50 text-slate-600 border-slate-200'
+              }`}>
+                <div className="flex items-center gap-2 font-bold mb-1">
+                  <Sun className="w-4 h-4 text-amber-600" />
+                  <span>Modo Alto Contraste (Forte Iluminação / Luz Solar)</span>
+                </div>
+                <p className="text-[11px] opacity-80 leading-relaxed">
+                  Bordas reforçadas de 2px, texto em contraste máximo e contornos nítidos para anular reflexos do sol em vidros de guarita.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={salvarParametrizacao} className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
               <div>
                 <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
@@ -1172,6 +1270,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
             </div>
           </div>
         </form>
+      </div>
       )}
 
       {/* ABA 11.2: TEMPLATES WHATSAPP */}

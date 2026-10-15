@@ -282,6 +282,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   const [condominioConfig, setCondominioConfig] = useState<CondominioConfig | null>(null);
   const [copiadoTexto, setCopiadoTexto] = useState(false);
   const [modalCompartilharWhatsApp, setModalCompartilharWhatsApp] = useState<any | null>(null);
+  const [exibirResumoPlantao, setExibirResumoPlantao] = useState(false);
 
   const [modalNova, setModalNova] = useState(false);
   const [etapa, setEtapa] = useState(1);
@@ -1251,10 +1252,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       <div className="bg-slate-900 text-white p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 shadow-2xs border border-slate-800">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
-          <div>
-            <h3 className="font-bold text-xs sm:text-sm text-white">Auditoria & Passagem de Posto</h3>
-            <p className="text-[10px] text-slate-400">Consolidação automática dos 7 módulos de guarita</p>
-          </div>
+          <h3 className="font-bold text-xs sm:text-sm text-white">Auditoria & Passagem de Posto</h3>
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
@@ -1271,6 +1269,21 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
+
+          <button
+            type="button"
+            onClick={() => setExibirResumoPlantao(prev => !prev)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer ${
+              exibirResumoPlantao
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+            }`}
+            title="Exibir ou ocultar tabelas do resumo do plantão"
+          >
+            <Table className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Resumo Plantão</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${exibirResumoPlantao ? 'rotate-180' : ''}`} />
+          </button>
 
           <button
             onClick={abrirNovaPassagem}
@@ -1342,25 +1355,12 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         </div>
       )}
 
-      {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS */}
-      <div className="space-y-2">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
-              <Table className="w-4 h-4 text-emerald-600" />
-              Tabelas de Resumo do Plantão para Conferência
-            </h3>
-            <p className="text-[11px] text-slate-500">
-              Conferência detalhada item a item de Rondas, REs, Chaves, Ocorrências, Custódia, Prestadores e Materiais.
-            </p>
-          </div>
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md hidden sm:inline-flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" /> 7 Módulos Sincronizados
-          </span>
+      {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS (ACIONADA PELO BOTÃO RESUMO PLANTÃO DO CABEÇALHO) */}
+      {exibirResumoPlantao && (
+        <div className="space-y-2 animate-in fade-in duration-200">
+          <TabelasResumoPosto consolidacao={consolidacao} />
         </div>
-
-        <TabelasResumoPosto consolidacao={consolidacao} />
-      </div>
+      )}
 
       {/* Histórico de Trocas de Turno */}
       <div className="space-y-4">

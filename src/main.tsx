@@ -4,6 +4,7 @@ import App from './App.tsx';
 import './index.css';
 import { registrarPwaServiceWorker } from './services/offlineStorageService';
 import { inicializarAcessibilidadeFonte } from './services/fontScaleService';
+import { inicializarModoContraste } from './services/contrasteService';
 import { inicializarMotorSincronizacaoOffline } from './services/offlineSyncEngine';
 
 // Blindagem global contra ReferenceError em escopos legados ou chamadas sem escopo
@@ -14,6 +15,7 @@ if (typeof window !== 'undefined') {
 // Inicializações com tratamento defensivo para garantir inicialização limpa no iframe
 try {
   inicializarAcessibilidadeFonte();
+  inicializarModoContraste();
 } catch (e) {
   console.warn('[INFPORT] Acessibilidade inicializada com valores padrão:', e);
 }

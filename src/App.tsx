@@ -18,6 +18,7 @@ import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import ControleFonteAcessibilidade from './components/ControleFonteAcessibilidade';
+import SeletorModoContraste from './components/SeletorModoContraste';
 import BotaoAtualizarApp from './components/BotaoAtualizarApp';
 import AlertaNovaVersaoPWA from './components/AlertaNovaVersaoPWA';
 import IndicadorConectividade from './components/IndicadorConectividade';
@@ -908,6 +909,7 @@ export default function App() {
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <div className="hidden md:flex items-center gap-1.5">
                 <BotaoAtualizarApp />
+                <SeletorModoContraste />
                 <ControleFonteAcessibilidade />
                 <PWAInstallButton />
               </div>
@@ -935,6 +937,7 @@ export default function App() {
                 </span>
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <BotaoAtualizarApp />
+                  <SeletorModoContraste />
                   <ControleFonteAcessibilidade />
                   <PWAInstallButton />
                 </div>
@@ -948,8 +951,9 @@ export default function App() {
               <div className="max-w-4xl mx-auto space-y-3">
                 
                 {/* Bloco Utilitário: Botão Instalar App, Atualizar e Acessibilidade */}
-                <div className="flex items-center justify-end gap-1.5 sm:gap-2 p-1">
+                <div className="flex items-center justify-end flex-wrap gap-1.5 sm:gap-2 p-1">
                   <BotaoAtualizarApp />
+                  <SeletorModoContraste />
                   <ControleFonteAcessibilidade />
                   <PWAInstallButton />
                 </div>
@@ -1200,6 +1204,7 @@ export default function App() {
       {/* Barra Superior de Acessibilidade, Atualização e Instalação na Tela de Login */}
       <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
         <BotaoAtualizarApp />
+        <SeletorModoContraste />
         <ControleFonteAcessibilidade />
         <PWAInstallButton />
       </div>

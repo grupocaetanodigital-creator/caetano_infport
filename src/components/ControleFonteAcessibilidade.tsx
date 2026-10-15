@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Type, ZoomIn, ZoomOut, RotateCcw, Check } from 'lucide-react';
+import { Type, ZoomIn, ZoomOut, RotateCcw, Check, Sun, Moon } from 'lucide-react';
 import { 
   obterEscalaFonteAtual, 
   aplicarEscalaFonte, 
@@ -9,10 +9,12 @@ import {
   OPCOES_ESCALA_FONTE 
 } from '../services/fontScaleService';
 import { forcarAtualizacaoPwa } from '../services/pwaUpdateService';
+import { obterModoAltoContraste, alternarModoAltoContraste } from '../services/contrasteService';
 
 export default function ControleFonteAcessibilidade() {
   const [escala, setEscala] = useState<NivelEscalaFonte>(100);
   const [menuAberto, setMenuAberto] = useState(false);
+  const [altoContraste, setAltoContraste] = useState<boolean>(() => obterModoAltoContraste());
 
   useEffect(() => {
     setEscala(obterEscalaFonteAtual());
@@ -23,8 +25,18 @@ export default function ControleFonteAcessibilidade() {
       }
     };
 
+    const handleContraste = (e: any) => {
+      if (e.detail?.altoContraste !== undefined) {
+        setAltoContraste(e.detail.altoContraste);
+      }
+    };
+
     window.addEventListener('infport_escala_fonte_alterada', handleMudanca);
-    return () => window.removeEventListener('infport_escala_fonte_alterada', handleMudanca);
+    window.addEventListener('infport_contraste_alterado', handleContraste);
+    return () => {
+      window.removeEventListener('infport_escala_fonte_alterada', handleMudanca);
+      window.removeEventListener('infport_contraste_alterado', handleContraste);
+    };
   }, []);
 
   const handleAumentar = () => {
@@ -120,7 +132,33 @@ export default function ControleFonteAcessibilidade() {
               })}
             </div>
 
-            <div className="pt-2 mt-2 border-t border-slate-800">
+            <div className="pt-2 mt-2 border-t border-slate-800 space-y-1">
+              {/* Alternador Modo Escuro / Alto Contraste */}
+              <button
+                type="button"
+                onClick={() => {
+                  alternarModoAltoContraste();
+                }}
+                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                  altoContraste
+                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+                title="Alternar entre Modo Escuro padrão e Modo de Alto Contraste"
+              >
+                <div className="flex items-center gap-1.5">
+                  {altoContraste ? (
+                    <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  ) : (
+                    <Moon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
+                  <span>{altoContraste ? 'Contraste' : 'Escuro'}</span>
+                </div>
+                <span className="text-[9px] font-mono uppercase bg-slate-800 px-1 py-0.5 rounded text-slate-400">
+                  {altoContraste ? 'Ativo' : 'Padrão'}
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {

@@ -16,3 +16,299 @@ html, body, #root {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
+
+/* ==============================================================================
+   MODO ALTO CONTRASTE (DIURNO / GUARITA COM FORTE ILUMINAÇÃO OU REFLEXO SOLAR)
+   Ajusta integralmente: fontes, cores de texto, fundos, ícones, inputs, botões,
+   tabelas, cartões e modais para visibilidade máxima absoluta.
+   ============================================================================== */
+
+html.alto-contraste {
+  filter: contrast(115%) saturate(120%);
+}
+
+html.alto-contraste body {
+  background-color: #f1f5f9 !important;
+  color: #000000 !important;
+  text-rendering: optimizeLegibility;
+  font-weight: 600;
+}
+
+/* 1. TIPOGRAFIA & PESO DE FONTE */
+html.alto-contraste h1,
+html.alto-contraste h2,
+html.alto-contraste h3,
+html.alto-contraste h4,
+html.alto-contraste h5,
+html.alto-contraste h6 {
+  color: #000000 !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.01em;
+}
+
+html.alto-contraste p,
+html.alto-contraste span,
+html.alto-contraste label {
+  text-rendering: optimizeLegibility;
+}
+
+/* Textos secundários em áreas claras ganham preto/azul marinho sólido */
+html.alto-contraste .text-slate-400,
+html.alto-contraste .text-slate-500,
+html.alto-contraste .text-slate-600,
+html.alto-contraste .text-gray-400,
+html.alto-contraste .text-gray-500,
+html.alto-contraste .text-gray-600 {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+html.alto-contraste .text-slate-700,
+html.alto-contraste .text-slate-800,
+html.alto-contraste .text-slate-900 {
+  color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+/* Textos dentro de recipientes escuros (Header, Sidebar, Modais escuros) */
+html.alto-contraste .bg-slate-900 h1,
+html.alto-contraste .bg-slate-900 h2,
+html.alto-contraste .bg-slate-900 h3,
+html.alto-contraste .bg-slate-900 h4,
+html.alto-contraste .bg-slate-950 h1,
+html.alto-contraste .bg-slate-950 h2,
+html.alto-contraste .bg-slate-950 h3,
+html.alto-contraste aside h1,
+html.alto-contraste aside h2,
+html.alto-contraste aside h3,
+html.alto-contraste header h1,
+html.alto-contraste header h2,
+html.alto-contraste header h3 {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+html.alto-contraste .bg-slate-900 p,
+html.alto-contraste .bg-slate-900 span,
+html.alto-contraste .bg-slate-900 .text-slate-300,
+html.alto-contraste .bg-slate-900 .text-slate-400,
+html.alto-contraste .bg-slate-950 p,
+html.alto-contraste .bg-slate-950 span,
+html.alto-contraste .bg-slate-950 .text-slate-300,
+html.alto-contraste .bg-slate-950 .text-slate-400,
+html.alto-contraste aside p,
+html.alto-contraste aside span,
+html.alto-contraste aside .text-slate-300,
+html.alto-contraste aside .text-slate-400,
+html.alto-contraste header p,
+html.alto-contraste header span,
+html.alto-contraste header .text-slate-300,
+html.alto-contraste header .text-slate-400 {
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+/* Destaques em verde/esmeralda no cabeçalho */
+html.alto-contraste .text-emerald-400,
+html.alto-contraste .text-emerald-500 {
+  color: #10b981 !important;
+  font-weight: 900 !important;
+}
+
+/* 2. ÍCONES (LUCIDE SVG) REFORÇADOS */
+html.alto-contraste svg.lucide,
+html.alto-contraste svg {
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+
+html.alto-contraste .bg-slate-900 svg.lucide,
+html.alto-contraste .bg-slate-950 svg.lucide,
+html.alto-contraste aside svg.lucide,
+html.alto-contraste header svg.lucide {
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.3));
+}
+
+/* 3. SUPERFÍCIES, CARTÕES E PAINEIS */
+html.alto-contraste .bg-white {
+  background-color: #ffffff !important;
+  border-color: #0f172a !important;
+}
+
+html.alto-contraste .bg-slate-50 {
+  background-color: #f8fafc !important;
+  border-color: #0f172a !important;
+}
+
+html.alto-contraste .bg-slate-100,
+html.alto-contraste .bg-slate-200 {
+  background-color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+/* Bordas reforçadas em geral para anular reflexos solares */
+html.alto-contraste .border,
+html.alto-contraste .border-slate-100,
+html.alto-contraste .border-slate-200,
+html.alto-contraste .border-slate-300 {
+  border-width: 2px !important;
+  border-color: #334155 !important;
+}
+
+/* Superfícies escuras (Cabeçalho, Barra Lateral, Rodapé) */
+html.alto-contraste .bg-slate-900,
+html.alto-contraste .bg-slate-950,
+html.alto-contraste aside,
+html.alto-contraste header {
+  background-color: #000000 !important;
+  border-color: #64748b !important;
+  border-width: 2px !important;
+}
+
+/* 4. CAMPOS DE ENTRADA, SELECTS E TEXTAREAS */
+html.alto-contraste input:not([type="checkbox"]):not([type="radio"]),
+html.alto-contraste select,
+html.alto-contraste textarea {
+  background-color: #ffffff !important;
+  border-width: 2.5px !important;
+  border-color: #000000 !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1) !important;
+}
+
+html.alto-contraste input::placeholder,
+html.alto-contraste textarea::placeholder {
+  color: #334155 !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+html.alto-contraste input:focus,
+html.alto-contraste select:focus,
+html.alto-contraste textarea:focus {
+  border-color: #047857 !important;
+  outline: 3px solid #10b981 !important;
+  outline-offset: 1px !important;
+}
+
+/* Selects dentro da barra escura (condomínio ativo, etc) */
+html.alto-contraste header select,
+html.alto-contraste aside select {
+  background-color: #0f172a !important;
+  border: 2px solid #38bdf8 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+/* 5. BOTÕES E ELEMENTOS INTERATIVOS */
+html.alto-contraste button {
+  font-weight: 800 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Botões primários verdes (Salvar, Confirmar, OK) */
+html.alto-contraste .bg-emerald-600,
+html.alto-contraste .bg-emerald-500 {
+  background-color: #047857 !important;
+  border: 2px solid #064e3b !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+/* Botões de exclusão / perigo (Vermelho) */
+html.alto-contraste .bg-red-600,
+html.alto-contraste .bg-red-500 {
+  background-color: #b91c1c !important;
+  border: 2px solid #7f1d1d !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+/* Botões de navegação / módulos na tela inicial */
+html.alto-contraste .grid button {
+  border-width: 2.5px !important;
+  border-color: #0f172a !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15) !important;
+}
+
+html.alto-contraste .grid button span {
+  color: #000000 !important;
+  font-weight: 900 !important;
+}
+
+/* 6. TABELAS DE DADOS (ENCOMENDAS, MORADORES, CHAVES, ETC) */
+html.alto-contraste table {
+  border-collapse: collapse !important;
+  border: 2px solid #0f172a !important;
+}
+
+html.alto-contraste th {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  border-bottom: 3px solid #000000 !important;
+}
+
+html.alto-contraste td {
+  color: #000000 !important;
+  font-weight: 700 !important;
+  border-bottom: 2px solid #94a3b8 !important;
+}
+
+html.alto-contraste tbody tr:nth-child(even) {
+  background-color: #f1f5f9 !important;
+}
+
+html.alto-contraste tbody tr:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* 7. BADGES, STATUS PILLS E TAGS */
+html.alto-contraste .bg-emerald-50,
+html.alto-contraste .bg-emerald-100 {
+  background-color: #dcfce7 !important;
+  border: 2px solid #15803d !important;
+  color: #14532d !important;
+  font-weight: 900 !important;
+}
+
+html.alto-contraste .bg-amber-50,
+html.alto-contraste .bg-amber-100 {
+  background-color: #fef3c7 !important;
+  border: 2px solid #b45309 !important;
+  color: #78350f !important;
+  font-weight: 900 !important;
+}
+
+html.alto-contraste .bg-red-50,
+html.alto-contraste .bg-red-100 {
+  background-color: #fee2e2 !important;
+  border: 2px solid #b91c1c !important;
+  color: #7f1d1d !important;
+  font-weight: 900 !important;
+}
+
+html.alto-contraste .bg-blue-50,
+html.alto-contraste .bg-blue-100 {
+  background-color: #dbeafe !important;
+  border: 2px solid #1d4ed8 !important;
+  color: #1e3a8a !important;
+  font-weight: 900 !important;
+}
+
+/* 8. JANELAS MODAIS E GAVETAS */
+html.alto-contraste .fixed.inset-0.bg-black\/60,
+html.alto-contraste .fixed.inset-0.bg-black\/50,
+html.alto-contraste .fixed.inset-0.bg-black\/70 {
+  background-color: rgba(0, 0, 0, 0.85) !important;
+}
+
+html.alto-contraste .fixed.inset-0 > div,
+html.alto-contraste .relative.bg-white.rounded-2xl {
+  border: 3px solid #000000 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
+}
