@@ -693,10 +693,11 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                     ))}
                     <button
                       type="button"
-                      onClick={limparDigitos}
-                      className="h-12 sm:h-14 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 rounded-xl text-xs sm:text-sm font-black shadow-xs border border-rose-200 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
+                      onClick={apagarUltimoDigito}
+                      className="h-12 sm:h-14 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-800 rounded-xl text-base font-black shadow-xs border border-amber-300 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
+                      title="Apagar último caractere"
                     >
-                      Limpar
+                      <Delete className="w-6 h-6" />
                     </button>
                     <button
                       type="button"
@@ -706,26 +707,16 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                       0
                     </button>
                     <button
-                      type="button"
-                      onClick={apagarUltimoDigito}
-                      className="h-12 sm:h-14 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-800 rounded-xl text-base font-black shadow-xs border border-amber-300 active:scale-95 transition flex items-center justify-center cursor-pointer select-none touch-manipulation"
-                      title="Apagar último caractere"
+                      type="submit"
+                      disabled={!unidadeDigitada.trim()}
+                      className="h-12 sm:h-14 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xl sm:text-2xl font-black shadow-xs border border-emerald-500 active:scale-95 transition flex items-center justify-center gap-1 cursor-pointer select-none touch-manipulation"
+                      title="Confirmar e adicionar unidade"
                     >
-                      <Delete className="w-6 h-6" />
+                      <Check className="w-5 h-5 stroke-[3]" />
+                      <span>OK</span>
                     </button>
                   </div>
                 </div>
-
-                {/* BOTÃO PRINCIPAL DE ADICIONAR */}
-                <button
-                  type="submit"
-                  disabled={!unidadeDigitada.trim()}
-                  className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl text-base font-black shadow-md flex items-center justify-center gap-2 transition active:scale-98 cursor-pointer"
-                >
-                  <Plus className="w-5 h-5" />
-                  Confirmar & Adicionar {rotuloUnidade} {unidadeDigitada || '...'}
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </button>
               </form>
 
               {/* FEEDBACK DO ÚLTIMO LANÇAMENTO */}
