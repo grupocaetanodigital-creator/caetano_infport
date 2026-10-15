@@ -335,7 +335,7 @@ NOTIFY pgrst, 'reload schema';`;
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                  Lembretes & Mensagens da Portaria
+                  Lembretes
                 </h2>
                 {totalPendentes > 0 ? (
                   <span className="px-2 py-0.5 rounded-full text-xs font-black bg-red-500 text-white animate-pulse">
