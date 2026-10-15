@@ -905,15 +905,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Ações no Topo Superior Direito: Botão de Notificações/Lembretes e Ferramentas */}
+            {/* Ações no Topo Superior Direito: Botão de Notificações/Lembretes */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="hidden md:flex items-center gap-1.5">
-                <SeletorTema />
-                <ControleFonteAcessibilidade />
-                <BotaoAtualizarApp />
-                <PWAInstallButton />
-              </div>
-
               {/* Ícone de Notificações (Sino/Mensagens) com Alerta Piscante e Contador em Tempo Real */}
               <BotaoNotificacoesLembretes
                 condominioId={condominioAtivoId || operador?.condominio_id || ''}

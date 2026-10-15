@@ -58,7 +58,7 @@ import { inicializarDetectorAtualizacoesPwa } from './pwaUpdateService';
  * e inicializa o detector de atualizações automáticas
  */
 export async function registrarPwaServiceWorker(): Promise<void> {
-  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env?.PROD) {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     try {
       await inicializarDetectorAtualizacoesPwa();
     } catch (e) {
