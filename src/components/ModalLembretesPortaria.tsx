@@ -323,37 +323,39 @@ NOTIFY pgrst, 'reload schema';`;
         onClick={(e) => e.stopPropagation()}
       >
         {/* CABEÇALHO DO MODAL */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 sticky top-0 z-10">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+        <div className="p-3.5 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90 sticky top-0 z-10">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/25 flex items-center justify-center shrink-0">
               {totalPendentes > 0 ? (
-                <BellRing className="w-6 h-6 animate-pulse" />
+                <BellRing className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
               ) : (
-                <Bell className="w-6 h-6" />
+                <Bell className="w-5 h-5 sm:w-6 sm:h-6" />
               )}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
                   Lembretes
                 </h2>
                 {totalPendentes > 0 ? (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-black bg-red-500 text-white animate-pulse">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-red-600 text-white shrink-0">
                     {totalPendentes} pendente{totalPendentes > 1 ? 's' : ''}
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 shrink-0">
                     Nenhum pendente
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                  Tempo Real Ativo
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 min-w-0">
+                <span className="truncate font-medium text-slate-300 max-w-[160px] sm:max-w-xs">
+                  {condominioNome || 'Condomínio'}
                 </span>
-                <span>•</span>
-                <span className="truncate">{condominioNome || 'Condomínio'}</span>
+                <span className="text-slate-600 shrink-0">•</span>
+                <span className="inline-flex items-center gap-1.5 font-medium text-emerald-400 text-[11px] shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Tempo Real
+                </span>
               </div>
             </div>
           </div>
