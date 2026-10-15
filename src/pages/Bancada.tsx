@@ -19,7 +19,10 @@ import {
   Delete,
   Clock,
   User,
-  PackageCheck
+  PackageCheck,
+  Mail,
+  Box,
+  Package
 } from 'lucide-react';
 import {
   ItemBancada,
@@ -64,6 +67,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   // Formulário de lançamento rápido (Touch)
   const [unidadeDigitada, setUnidadeDigitada] = useState<string>('');
   const [qtdVolumes, setQtdVolumes] = useState<number>(1);
+  const [tipoVolumeSelecionado, setTipoVolumeSelecionado] = useState<'Carta' | 'Caixa' | 'Pacote'>('Pacote');
   const [observacao, setObservacao] = useState<string>('');
 
   const [feedbackUltimoLancamento, setFeedbackUltimoLancamento] = useState<{
@@ -207,6 +211,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
         estrutura: estruturaSelecionada,
         unidade: unidadeLimpa,
         volumes: qtdVolumes,
+        tipo_volume: tipoVolumeSelecionado,
         observacao: observacao.trim() || undefined,
         operador_nome: nomeOperador,
         operador_id: usuarioLogado?.id
@@ -217,8 +222,8 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
       // Feedback visual rápido
       setFeedbackUltimoLancamento({
         mensagem: res.incrementou
-          ? `+${qtdVolumes} vol. adicionado ao ${rotuloUnidade} ${unidadeLimpa} (${res.itemAdicionado.volumes} vol. total)`
-          : `${rotuloUnidade} ${unidadeLimpa} registrado com ${qtdVolumes} volume(s)`,
+          ? `+${qtdVolumes} ${tipoVolumeSelecionado.toLowerCase()}(s) adicionado ao ${rotuloUnidade} ${unidadeLimpa} (${res.itemAdicionado.volumes} vol. total)`
+          : `${rotuloUnidade} ${unidadeLimpa} registrado com ${qtdVolumes} ${tipoVolumeSelecionado.toLowerCase()}(s)`,
         tipo: res.incrementou ? 'incremento' : 'novo',
         unidade: unidadeLimpa,
         estrutura: estruturaSelecionada
@@ -665,18 +670,27 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
                 {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL EXCLUSIVO (SEMPRE ATIVO NA TELA) */}
                 <div className="bg-slate-100 p-2.5 sm:p-3 rounded-2xl border border-slate-300 shadow-inner space-y-2">
-                  {/* Linha de Letras Rápidas para Unidades com Letras (ex: 105A, 1507A, Bloco B) */}
-                  <div className="flex items-center gap-1.5 justify-between">
-                    {['A', 'B', 'C', 'D', 'E', 'F'].map(letra => (
-                      <button
-                        key={letra}
-                        type="button"
-                        onClick={() => tocarNumeroVirtual(letra)}
-                        className="flex-1 h-10 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-950 font-black text-sm rounded-xl border border-amber-300 shadow-2xs active:scale-95 transition cursor-pointer select-none touch-manipulation"
-                      >
-                        {letra}
-                      </button>
-                    ))}
+                  {/* Seletor Rápido de Tipo de Volume: Carta, Caixa e Pacote */}
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                    {(['Carta', 'Caixa', 'Pacote'] as const).map(tipo => {
+                      const ativo = tipoVolumeSelecionado === tipo;
+                      const Icone = tipo === 'Carta' ? Mail : tipo === 'Caixa' ? Box : Package;
+                      return (
+                        <button
+                          key={tipo}
+                          type="button"
+                          onClick={() => setTipoVolumeSelecionado(tipo)}
+                          className={`h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer border shadow-2xs select-none touch-manipulation ${
+                            ativo
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-400/50'
+                              : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-300'
+                          }`}
+                        >
+                          <Icone className={`w-4 h-4 ${ativo ? 'text-white' : 'text-amber-600'}`} />
+                          <span>{tipo.toUpperCase()}</span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Grade Numérica 3x3 + 0 + Ações Rápidas */}
@@ -794,6 +808,11 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
                               {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
                             </span>
+                            {item.tipo_volume && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-800 border border-slate-300">
+                                {item.tipo_volume}
+                              </span>
+                            )}
                           </div>
                           {item.observacao && (
                             <p className="text-[11px] text-slate-600 font-medium italic mt-0.5">
