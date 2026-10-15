@@ -899,12 +899,50 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE bancada_conferencias;
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'lembretes_portaria'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE lembretes_portaria;
+  END IF;
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
+
+-- ==============================================================================
+-- TABELA: lembretes_portaria (Mensagens e Recados Portaria ⇄ Moradores)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS lembretes_portaria (
+  id TEXT PRIMARY KEY,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  unidade_bloco TEXT NOT NULL,
+  remetente_tipo TEXT NOT NULL DEFAULT 'morador',
+  remetente_nome TEXT,
+  mensagem TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'Aviso Geral',
+  lido BOOLEAN NOT NULL DEFAULT FALSE,
+  lido_em TIMESTAMPTZ,
+  lido_por_nome TEXT,
+  lido_por_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lembretes_condominio ON lembretes_portaria(condominio_id);
+CREATE INDEX IF NOT EXISTS idx_lembretes_condominio_lido ON lembretes_portaria(condominio_id, lido, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lembretes_condominio_created ON lembretes_portaria(condominio_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lembretes_unidade ON lembretes_portaria(condominio_id, unidade_bloco);
+CREATE INDEX IF NOT EXISTS idx_lembretes_lido ON lembretes_portaria(lido);
+
+ALTER TABLE lembretes_portaria ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total lembretes_portaria" ON lembretes_portaria;
+CREATE POLICY "Acesso total lembretes_portaria" ON lembretes_portaria FOR ALL USING (true) WITH CHECK (true);
 
 COMMIT;
 
 -- Recarrega o cache do PostgREST imediatamente para aplicar as novas colunas
 NOTIFY pgrst, 'reload schema';
+
 
