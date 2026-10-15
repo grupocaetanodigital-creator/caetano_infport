@@ -2046,9 +2046,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                               {ent.empresa ? `Empresa: ${ent.empresa}` : 'Avulso'} | Doc: {ent.documento || 'Sem doc'}
                             </p>
                           </div>
-                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          <button
+                            type="button"
+                            className="text-xs text-white font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-95 px-3 py-1.5 rounded-lg shadow-2xs transition shrink-0 cursor-pointer"
+                          >
                             Selecionar
-                          </span>
+                          </button>
                         </div>
                       ))
                     ) : (

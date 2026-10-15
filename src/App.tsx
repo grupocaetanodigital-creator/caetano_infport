@@ -18,7 +18,7 @@ import AlertaRondaGlobal from './components/AlertaRondaGlobal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import ControleFonteAcessibilidade from './components/ControleFonteAcessibilidade';
-import SeletorModoContraste from './components/SeletorModoContraste';
+import SeletorTema from './components/SeletorTema';
 import BotaoAtualizarApp from './components/BotaoAtualizarApp';
 import AlertaNovaVersaoPWA from './components/AlertaNovaVersaoPWA';
 import IndicadorConectividade from './components/IndicadorConectividade';
@@ -908,9 +908,9 @@ export default function App() {
             {/* Ações no Topo Superior Direito: Botão de Notificações/Lembretes e Ferramentas */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <div className="hidden md:flex items-center gap-1.5">
-                <BotaoAtualizarApp />
-                <SeletorModoContraste />
+                <SeletorTema />
                 <ControleFonteAcessibilidade />
+                <BotaoAtualizarApp />
                 <PWAInstallButton />
               </div>
 
@@ -923,38 +923,33 @@ export default function App() {
           </header>
 
           {moduloAtual !== 'dashboard' && !eSindico && (
-            <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between shadow-xs">
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
               <button 
                 onClick={() => mudarModulo('dashboard')}
-                className="flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                className="flex items-center gap-1 text-xs font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl shadow-xs transition cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
               </button>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
-                  {modulosDisponiveis.find(m => m.id === moduloAtual)?.titulo || moduloAtual}
-                </span>
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <BotaoAtualizarApp />
-                  <SeletorModoContraste />
-                  <ControleFonteAcessibilidade />
-                  <PWAInstallButton />
-                </div>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <SeletorTema />
+                <ControleFonteAcessibilidade />
+                <BotaoAtualizarApp />
+                <PWAInstallButton />
               </div>
             </div>
           )}
 
-          <main className="flex-1 p-2.5 sm:p-4 overflow-y-auto text-slate-900">
+          <main className="flex-1 p-2.5 sm:p-4 overflow-y-auto text-slate-900 dark:text-slate-100">
             
             {moduloAtual === 'dashboard' && (
               <div className="max-w-4xl mx-auto space-y-3">
                 
                 {/* Bloco Utilitário: Botão Instalar App, Atualizar e Acessibilidade */}
                 <div className="flex items-center justify-end flex-wrap gap-1.5 sm:gap-2 p-1">
-                  <BotaoAtualizarApp />
-                  <SeletorModoContraste />
+                  <SeletorTema />
                   <ControleFonteAcessibilidade />
+                  <BotaoAtualizarApp />
                   <PWAInstallButton />
                 </div>
 
@@ -1203,9 +1198,9 @@ export default function App() {
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-slate-900 antialiased relative">
       {/* Barra Superior de Acessibilidade, Atualização e Instalação na Tela de Login */}
       <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
-        <BotaoAtualizarApp />
-        <SeletorModoContraste />
+        <SeletorTema />
         <ControleFonteAcessibilidade />
+        <BotaoAtualizarApp />
         <PWAInstallButton />
       </div>
 

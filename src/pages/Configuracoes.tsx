@@ -43,7 +43,8 @@ import {
   Moon,
   Layers
 } from 'lucide-react';
-import { obterModoAltoContraste, aplicarModoAltoContraste } from '../services/contrasteService';
+import { obterTemaAtual, aplicarTema, TipoTema } from '../services/themeService';
+import SeletorTema from '../components/SeletorTema';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
 import SupabaseDoctorModal from '../components/SupabaseDoctorModal';
 import GerenciamentoPermissoes from '../components/GerenciamentoPermissoes';
@@ -87,16 +88,16 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
   const [copiadoSql, setCopiadoSql] = useState(false);
-  const [altoContraste, setAltoContraste] = useState<boolean>(() => obterModoAltoContraste());
+  const [tema, setTema] = useState<TipoTema>(() => obterTemaAtual());
 
-  const handleToggleContraste = (novoValor: boolean) => {
-    setAltoContraste(novoValor);
-    aplicarModoAltoContraste(novoValor);
+  const handleAlternarTema = (novoTema: TipoTema) => {
+    setTema(novoTema);
+    aplicarTema(novoTema);
     setMensagem({
       tipo: 'sucesso',
-      texto: novoValor
-        ? '✓ Modo de Alto Contraste ativado! Otimizado para guaritas com luz solar e forte iluminação.'
-        : '✓ Modo Escuro Padrão restaurado com sucesso.'
+      texto: novoTema === 'claro'
+        ? '✓ Modo Claro ativado com sucesso! Cores e fontes ajustadas para máxima legibilidade.'
+        : '✓ Modo Escuro ativado com sucesso! Paleta escura suave para menor fadiga visual.'
     });
   };
 
@@ -1091,83 +1092,58 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       {/* ABA 11.1: PARAMETRIZAÇÃO */}
       {abaAtiva === 'flags' && (
         <div className="space-y-6">
-          {/* SEÇÃO GLOBAL: ACESSIBILIDADE VISUAL & MODO ALTO CONTRASTE */}
+          {/* SEÇÃO GLOBAL: SISTEMA DE TEMAS (MODO CLARO & MODO ESCURO) */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div className="flex items-start gap-3">
                 <div className={`p-2.5 rounded-xl border flex items-center justify-center shrink-0 ${
-                  altoContraste 
-                    ? 'bg-amber-500/20 text-amber-600 border-amber-300' 
+                  tema === 'claro'
+                    ? 'bg-amber-500/10 text-amber-600 border-amber-200' 
                     : 'bg-slate-900 text-slate-100 border-slate-700'
                 }`}>
-                  {altoContraste ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+                  {tema === 'claro' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                    Visibilidade & Contraste do Sistema (Guarita)
+                    Tema Visual da Interface (Modo Claro & Modo Escuro)
                   </h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Alterne entre o Modo Escuro padrão e o Modo Alto Contraste para ambientes de portaria com forte iluminação ou reflexo solar.
+                    Alterne entre o Modo Claro (com fundo claro, textos escuros e alta legibilidade) e o Modo Escuro (tons escuros e conforto visual).
                   </p>
                 </div>
               </div>
 
-              {/* Chave Seletora Switch Toggle */}
-              <div className="flex items-center gap-2 shrink-0 self-start md:self-center bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => handleToggleContraste(false)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    !altoContraste
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Moon className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Escuro</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleContraste(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    altoContraste
-                      ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Sun className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Contraste</span>
-                </button>
-              </div>
+              {/* Seletor Segmentado */}
+              <SeletorTema onAlternar={handleAlternarTema} />
             </div>
 
             {/* Explicação e Destaques dos Modos */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className={`p-3.5 rounded-xl border transition ${
-                !altoContraste
-                  ? 'bg-slate-900 text-white border-slate-800 shadow-xs'
+                tema === 'claro'
+                  ? 'bg-amber-50/60 text-slate-900 border-amber-300 shadow-xs ring-2 ring-amber-400/30'
                   : 'bg-slate-50 text-slate-600 border-slate-200'
               }`}>
-                <div className="flex items-center gap-2 font-bold mb-1">
-                  <Moon className="w-4 h-4 text-emerald-400" />
-                  <span>Modo Escuro Padrão (Ambiente Noturno)</span>
+                <div className="flex items-center gap-2 font-bold mb-1 text-slate-900">
+                  <Sun className="w-4 h-4 text-amber-500" />
+                  <span>Modo Claro (Fundo Branco & Alta Legibilidade)</span>
                 </div>
-                <p className="text-[11px] opacity-80 leading-relaxed">
-                  Tema escuro clássico do INFPORT com paleta slate suave. Confortável para os olhos em turnos noturnos e ambientes fechados com luz moderada.
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Fundo claro com tons de branco e ardósia suave, textos escuros e sólidos, e bordas finas e discretas. Ideal para leitura rápida na guarita sob luz natural.
                 </p>
               </div>
 
               <div className={`p-3.5 rounded-xl border transition ${
-                altoContraste
-                  ? 'bg-amber-50/80 text-amber-950 border-amber-300 shadow-xs ring-2 ring-amber-400/40'
+                tema === 'escuro'
+                  ? 'bg-slate-900 text-white border-slate-700 shadow-xs ring-2 ring-emerald-500/30'
                   : 'bg-slate-50 text-slate-600 border-slate-200'
               }`}>
                 <div className="flex items-center gap-2 font-bold mb-1">
-                  <Sun className="w-4 h-4 text-amber-600" />
-                  <span>Modo Alto Contraste (Forte Iluminação / Luz Solar)</span>
+                  <Moon className="w-4 h-4 text-emerald-400" />
+                  <span>Modo Escuro (Turnos Noturnos & Descanso Visual)</span>
                 </div>
                 <p className="text-[11px] opacity-80 leading-relaxed">
-                  Bordas reforçadas de 2px, texto em contraste máximo e contornos nítidos para anular reflexos do sol em vidros de guarita.
+                  Tema escuro clássico do INFPORT com paleta slate suave. Confortável para os olhos em turnos noturnos e ambientes fechados com luz moderada.
                 </p>
               </div>
             </div>
