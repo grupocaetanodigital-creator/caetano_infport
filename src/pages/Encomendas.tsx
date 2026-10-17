@@ -204,6 +204,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [buscaBaixaGeral, setBuscaBaixaGeral] = useState('');
+  const [tipoFiltroBuscaBaixa, setTipoFiltroBuscaBaixa] = useState<'todos' | 'unidade' | 'nome' | 'rastreio'>('todos');
+  const [leitorModoLote, setLeitorModoLote] = useState(true);
+  const [ultimoPacoteBipado, setUltimoPacoteBipado] = useState<any | null>(null);
+  const ultimoCodigoLidoRef = useRef<{ codigo: string; timestamp: number }>({ codigo: '', timestamp: 0 });
   const [abaBlocoSelecionada, setAbaBlocoSelecionada] = useState('TODOS');
   const [itensSelecionadosIds, setItensSelecionadosIds] = useState<string[]>([]);
   const [itensCandidatosEntrega, setItensCandidatosEntrega] = useState<string[]>([]);
@@ -604,6 +608,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const abrirLeitorCamera = async (destino: 'triagem' | 'baixa' = 'triagem') => {
     setDestinoLeitor(destino);
+    setUltimoPacoteBipado(null);
+    ultimoCodigoLidoRef.current = { codigo: '', timestamp: 0 };
     setModalLeitor(true);
     setErroCamera('');
     try {
@@ -640,16 +646,55 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             });
             const barcodes = await barcodeDetector.detect(videoRef.current);
             if (barcodes.length > 0) {
-              const valorLido = barcodes[0].rawValue;
-              tocarBipSucesso();
-              fecharLeitorCamera();
+              const valorLido = (barcodes[0].rawValue || '').trim();
+              if (!valorLido) return;
+
+              const agora = Date.now();
+              // Evita bip duplicado consecutivo do mesmo código em menos de 1.8 segundos
+              if (ultimoCodigoLidoRef.current.codigo === valorLido && (agora - ultimoCodigoLidoRef.current.timestamp) < 1800) {
+                return;
+              }
+              ultimoCodigoLidoRef.current = { codigo: valorLido, timestamp: agora };
 
               if (destinoLeitor === 'triagem') {
+                tocarBipSucesso();
+                fecharLeitorCamera();
                 setCodigoBarras(valorLido);
                 setMensagem({ tipo: 'sucesso', texto: `Código de rastreio lido: ${valorLido}` });
               } else {
-                setBuscaBaixaGeral(valorLido);
-                setMensagem({ tipo: 'sucesso', texto: `Código buscado na saída: ${valorLido}` });
+                // Destino: BAIXA / SAÍDA — Escaneamento contínuo em lote com auto-seleção
+                const pacoteEncontrado = todosItensRetidos.find(i => 
+                  (i.codigo_barras || '').trim().toLowerCase() === valorLido.toLowerCase()
+                );
+
+                if (pacoteEncontrado) {
+                  tocarBipSucesso();
+                  // Já deixa o pacote selecionado no lote de entrega imediatamente
+                  setItensSelecionadosIds(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+                  setItensCandidatosEntrega(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+                  setUltimoPacoteBipado(pacoteEncontrado);
+
+                  const labelUnid = formatarIdentificacaoUnidade(pacoteEncontrado.unidade, pacoteEncontrado.bloco, condoConfig?.tipo_estrutura);
+                  setMensagem({
+                    tipo: 'sucesso',
+                    texto: `✅ Pacote ${pacoteEncontrado.codigo_barras || valorLido} (${labelUnid}) adicionado ao lote!`
+                  });
+
+                  // Se NÃO estiver em modo lote, fecha a câmera; se estiver em modo lote, continua aberto para escanear mais pacotes!
+                  if (!leitorModoLote) {
+                    fecharLeitorCamera();
+                    setBuscaBaixaGeral(valorLido);
+                  }
+                } else {
+                  setMensagem({
+                    tipo: 'erro',
+                    texto: `⚠️ Código "${valorLido}" lido, mas não corresponde a nenhum pacote retido pendente.`
+                  });
+                  if (!leitorModoLote) {
+                    fecharLeitorCamera();
+                    setBuscaBaixaGeral(valorLido);
+                  }
+                }
               }
             }
           } catch (e) {
@@ -661,7 +706,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [modalLeitor, destinoLeitor]);
+  }, [modalLeitor, destinoLeitor, leitorModoLote, todosItensRetidos, condoConfig]);
 
   const entregadoresFiltrados = entregadores.filter(ent => {
     const termo = buscaEntregador.toLowerCase();
@@ -1418,6 +1463,28 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     const comboUnidBlocoEspaco = `${unid} ${bloc}`;
     const comboBlocoUnid = `${bloc}${unid}`;
 
+    // Filtro estrito por tipo selecionado
+    if (tipoFiltroBuscaBaixa === 'unidade') {
+      return (
+        saoUnidadesEquivalentes(unid, termo) ||
+        unid === termo ||
+        unid.includes(termo) ||
+        bloc.includes(termo) ||
+        comboUnidBloco.includes(termoSemEspaco) ||
+        comboUnidBlocoEspaco.includes(termo) ||
+        comboBlocoUnid.includes(termoSemEspaco)
+      );
+    }
+
+    if (tipoFiltroBuscaBaixa === 'nome') {
+      return moradorNome.includes(termo);
+    }
+
+    if (tipoFiltroBuscaBaixa === 'rastreio') {
+      return cod.includes(termo);
+    }
+
+    // Geral: Todos os campos
     return (
       saoUnidadesEquivalentes(unid, termo) ||
       unid.includes(termo) ||
@@ -1431,6 +1498,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   });
 
   // Resumo visual de encomendas pendentes agrupadas por unidade (com badges/contadores)
+  // Quando há busca ativa, exibe rigorosamente apenas o que está sendo pesquisado
   const resumoPendenciasPorUnidade = useMemo(() => {
     const mapa: Record<string, {
       chave: string;
@@ -1442,8 +1510,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       itensIds: string[];
     }> = {};
 
-    // Considera os itens retidos conforme filtro de bloco ou geral
-    const baseItens = todosItensRetidos.filter((item: any) => {
+    // Considera apenas o que está sendo pesquisado quando houver busca ativa
+    const baseItens = buscaBaixaGeral.trim() ? itensRetidosFiltrados : todosItensRetidos.filter((item: any) => {
       if (abaBlocoSelecionada !== 'TODOS') {
         const blocoItem = getRotuloBlocoParaFiltro(item.bloco);
         if (blocoItem !== abaBlocoSelecionada) return false;
@@ -1482,7 +1550,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       if (b.qtd !== a.qtd) return b.qtd - a.qtd;
       return a.unidade.localeCompare(b.unidade, undefined, { numeric: true, sensitivity: 'base' });
     });
-  }, [todosItensRetidos, abaBlocoSelecionada]);
+  }, [todosItensRetidos, abaBlocoSelecionada, buscaBaixaGeral, itensRetidosFiltrados, condoConfig]);
 
   // Lista de itens candidatos ao checklist (preserva itens mesmo se desmarcados temporariamente no checklist)
   const idsParaChecklist = itensCandidatosEntrega.length > 0 
@@ -1527,6 +1595,31 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     return listaEncontrada;
   }, [moradores, itensSelecionadosObjetos, itensCandidatosObjetos, eEstruturaCasas]);
+
+  const handleLimparBuscaBaixa = () => {
+    setBuscaBaixaGeral('');
+  };
+
+  const handleExecutarBusca = (termoFornecido?: string) => {
+    const termo = (termoFornecido !== undefined ? termoFornecido : buscaBaixaGeral).trim();
+    if (!termo) return;
+
+    // Se o termo corresponder a um código de barras de algum pacote retido, já seleciona no lote automaticamente
+    const pacoteEncontrado = todosItensRetidos.find(i => 
+      (i.codigo_barras || '').trim().toLowerCase() === termo.toLowerCase()
+    );
+
+    if (pacoteEncontrado) {
+      tocarBipSucesso();
+      setItensSelecionadosIds(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+      setItensCandidatosEntrega(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+      const labelUnid = formatarIdentificacaoUnidade(pacoteEncontrado.unidade, pacoteEncontrado.bloco, condoConfig?.tipo_estrutura);
+      setMensagem({
+        tipo: 'sucesso',
+        texto: `✅ Pacote ${pacoteEncontrado.codigo_barras || termo} (${labelUnid}) selecionado no lote de entrega!`
+      });
+    }
+  };
 
   const toggleItemSelecao = (id: string) => {
     if (itensSelecionadosIds.includes(id)) {
@@ -1942,7 +2035,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       {/* Navegação Sequencial de 4 Etapas & Dossiê com Cores Destacadas por Etapa (Layout Intuitivo) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200">
-        {/* 1ª ETAPA: RECEBIMENTO (RE) - Âmbar / Laranja */}
+        {/* 1º BOTÃO: (RE) */}
         <button
           onClick={() => {
             if (!podeReceberRE) {
@@ -1951,22 +2044,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             }
             setEtapa('1');
           }}
-          className={`p-2.5 sm:p-3 rounded-xl text-center border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-4 rounded-xl text-center border-2 transition cursor-pointer flex items-center justify-center gap-1.5 ${
             etapa === '1'
               ? 'border-amber-500 bg-amber-500/15 text-amber-950 font-black shadow-md shadow-amber-500/10 ring-2 ring-amber-400/40'
               : 'border-amber-200/60 bg-white hover:bg-amber-50/60 text-amber-900/80'
           } ${!podeReceberRE ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title="Recebimento (RE)"
         >
-          <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block flex items-center gap-1">
-            {!podeReceberRE && <Lock className="w-2.5 h-2.5 text-amber-700" />} 1ª Etapa
-          </span>
-          <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-amber-950">
-            <Truck className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="truncate">Recebimento (RE)</span>
-          </strong>
+          {!podeReceberRE && <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />}
+          <Truck className="w-4 h-4 text-amber-600 shrink-0" />
+          <strong className="text-xs sm:text-sm font-black text-amber-950 truncate">(RE)</strong>
         </button>
 
-        {/* 2ª ETAPA: TRIAGEM - Coral / Vermelho */}
+        {/* 2º BOTÃO: TRIAGEM */}
         <button
           onClick={() => {
             if (!podeFazerTriagem) {
@@ -1975,22 +2065,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             }
             setEtapa('2');
           }}
-          className={`p-2.5 sm:p-3 rounded-xl text-center border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-4 rounded-xl text-center border-2 transition cursor-pointer flex items-center justify-center gap-1.5 ${
             etapa === '2'
               ? 'border-rose-500 bg-rose-500/15 text-rose-950 font-black shadow-md shadow-rose-500/10 ring-2 ring-rose-400/40'
               : 'border-rose-200/60 bg-white hover:bg-rose-50/60 text-rose-900/80'
           } ${!podeFazerTriagem ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title="Triagem"
         >
-          <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider block flex items-center gap-1">
-            {!podeFazerTriagem && <Lock className="w-2.5 h-2.5 text-rose-700" />} 2ª Etapa
-          </span>
-          <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-rose-950">
-            <Package className="w-4 h-4 text-rose-600 shrink-0" />
-            <span className="truncate">Triagem</span>
-          </strong>
+          {!podeFazerTriagem && <Lock className="w-3.5 h-3.5 text-rose-700 shrink-0" />}
+          <Package className="w-4 h-4 text-rose-600 shrink-0" />
+          <strong className="text-xs sm:text-sm font-black text-rose-950 truncate">Triagem</strong>
         </button>
 
-        {/* 3ª ETAPA: SAÍDA / BAIXA - Verde Esmeralda */}
+        {/* 3º BOTÃO: BAIXA */}
         <button
           onClick={() => {
             if (!podeDarBaixa) {
@@ -1999,22 +2086,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             }
             setEtapa('3');
           }}
-          className={`p-2.5 sm:p-3 rounded-xl text-center border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-4 rounded-xl text-center border-2 transition cursor-pointer flex items-center justify-center gap-1.5 ${
             etapa === '3'
               ? 'border-emerald-500 bg-emerald-500/15 text-emerald-950 font-black shadow-md shadow-emerald-500/10 ring-2 ring-emerald-400/40'
               : 'border-emerald-200/60 bg-white hover:bg-emerald-50/60 text-emerald-900/80'
           } ${!podeDarBaixa ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title="Baixa de Pacotes"
         >
-          <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider block flex items-center gap-1">
-            {!podeDarBaixa && <Lock className="w-2.5 h-2.5 text-emerald-700" />} 3ª Etapa
-          </span>
-          <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-emerald-950">
-            <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="truncate">Saída / Baixa</span>
-          </strong>
+          {!podeDarBaixa && <Lock className="w-3.5 h-3.5 text-emerald-700 shrink-0" />}
+          <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <strong className="text-xs sm:text-sm font-black text-emerald-950 truncate">Baixa</strong>
         </button>
 
-        {/* AUDITORIA & PROVAS: DOSSIÊ COMPLETO - Roxo / Violeta */}
+        {/* 4º BOTÃO: DOSSIÊ */}
         <button
           onClick={() => {
             if (!podeVerDossie) {
@@ -2024,19 +2108,16 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             setEtapa('4');
             carregarDossie();
           }}
-          className={`p-2.5 sm:p-3 rounded-xl text-center border-2 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-4 rounded-xl text-center border-2 transition cursor-pointer flex items-center justify-center gap-1.5 ${
             etapa === '4'
               ? 'border-purple-600 bg-purple-600/15 text-purple-950 font-black shadow-md shadow-purple-600/10 ring-2 ring-purple-400/40'
               : 'border-purple-200/60 bg-white hover:bg-purple-50/60 text-purple-900/80'
           } ${!podeVerDossie ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title="Dossiê de Encomendas"
         >
-          <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block flex items-center justify-center gap-1">
-            {podeVerDossie ? <ShieldCheck className="w-3 h-3 text-purple-600" /> : <Lock className="w-2.5 h-2.5 text-purple-700" />} Auditoria & Provas
-          </span>
-          <strong className="text-xs sm:text-sm flex items-center justify-center gap-1 text-purple-950">
-            <FileText className="w-4 h-4 text-purple-700 shrink-0" />
-            <span className="truncate">Dossiê Completo</span>
-          </strong>
+          {!podeVerDossie && <Lock className="w-3.5 h-3.5 text-purple-700 shrink-0" />}
+          <FileText className="w-4 h-4 text-purple-700 shrink-0" />
+          <strong className="text-xs sm:text-sm font-black text-purple-950 truncate">Dossiê</strong>
         </button>
       </div>
 
@@ -2648,19 +2729,91 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               </h3>
             </div>
             
-            <div className="flex gap-1.5 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-56">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 w-full sm:w-auto">
+              {/* Seletor de Tipo de Busca */}
+              <select
+                value={tipoFiltroBuscaBaixa}
+                onChange={(e) => setTipoFiltroBuscaBaixa(e.target.value as any)}
+                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-800 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition cursor-pointer shrink-0"
+                title="Filtrar por tipo de pesquisa"
+              >
+                <option value="todos">🔎 Todos os Campos</option>
+                <option value="unidade">{eEstruturaCasas ? '🏠 Por Casa' : '🏠 Por Unidade'}</option>
+                <option value="nome">👤 Por Morador / Nome</option>
+                <option value="rastreio">📦 Por Rastreio / Código</option>
+              </select>
+
+              {/* 1º DIV filho de div:nth-of-type(2) -> input:nth-of-type(1) */}
+              <div className="relative flex-1 sm:w-60 min-w-[160px] flex items-center">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" />
                 <input
                   type="text"
                   value={buscaBaixaGeral}
                   onChange={(e) => setBuscaBaixaGeral(e.target.value)}
-                  placeholder="Unidade, Bloco ou Código..."
-                  className="pl-8 pr-3 py-1.5 w-full bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleExecutarBusca();
+                    }
+                  }}
+                  placeholder={
+                    tipoFiltroBuscaBaixa === 'unidade' 
+                      ? (eEstruturaCasas ? "Casa (ex: 01, 14)..." : "Unidade (ex: 101, B2)...")
+                      : tipoFiltroBuscaBaixa === 'nome'
+                      ? "Nome do morador..."
+                      : tipoFiltroBuscaBaixa === 'rastreio'
+                      ? "Código de rastreio..."
+                      : "Unidade, morador ou rastreio..."
+                  }
+                  className="pl-8 pr-7 py-1.5 w-full bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition font-medium"
                 />
+                {buscaBaixaGeral && (
+                  <button
+                    type="button"
+                    onClick={handleLimparBuscaBaixa}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                    title="Limpar campo de busca"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
-              <button onClick={() => abrirLeitorCamera('baixa')} className="bg-slate-900 hover:bg-slate-800 text-white p-1.5 rounded-lg transition shrink-0 cursor-pointer" title="Ler Código de Barras">
+
+              {/* Botão de Pesquisar */}
+              <button
+                type="button"
+                onClick={() => handleExecutarBusca()}
+                className="bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                title="Executar pesquisa / bipar código"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Pesquisar</span>
+              </button>
+
+              {/* Botão de Limpar */}
+              <button
+                type="button"
+                onClick={handleLimparBuscaBaixa}
+                disabled={!buscaBaixaGeral}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer border ${
+                  buscaBaixaGeral 
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 shadow-2xs' 
+                    : 'bg-slate-50 text-slate-300 border-slate-200 opacity-60 cursor-not-allowed'
+                }`}
+                title="Limpar filtro de pesquisa"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Limpar</span>
+              </button>
+
+              {/* Botão do Leitor com Câmera (Modo Lote) */}
+              <button 
+                type="button"
+                onClick={() => abrirLeitorCamera('baixa')} 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs" 
+                title="Escanear Pacotes com Câmera (Modo Lote)"
+              >
                 <QrCode className="w-4 h-4" />
+                <span className="hidden md:inline">Escanear em Lote</span>
               </button>
             </div>
           </div>
@@ -2935,8 +3088,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     );
                   })
                 ) : (
-                  <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-200 rounded-xl">
-                    Nenhum pacote encontrado para os filtros atuais.
+                  <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-200 rounded-xl space-y-2">
+                    <p className="font-bold text-slate-700">
+                      {buscaBaixaGeral 
+                        ? `Nenhum pacote retido encontrado para "${buscaBaixaGeral}".`
+                        : 'Nenhum pacote retido aguardando entrega.'}
+                    </p>
+                    {buscaBaixaGeral && (
+                      <button
+                        type="button"
+                        onClick={handleLimparBuscaBaixa}
+                        className="text-emerald-600 hover:text-emerald-700 font-bold underline text-xs cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <X className="w-3.5 h-3.5" /> Limpar pesquisa e mostrar todos
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -3499,23 +3665,67 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         </div>
       )}
 
-      {/* MODAL LEITOR DE CÓDIGO */}
+      {/* MODAL LEITOR DE CÓDIGO (COM SUPORTE A ESCANEAMENTO EM LOTE) */}
       {modalLeitor && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col">
-          <div className="p-4 flex justify-between items-center bg-black/50 absolute top-0 w-full z-10">
-            <h3 className="font-bold text-white flex items-center gap-2"><QrCode className="w-5 h-5" /> Posicione o código</h3>
-            <button onClick={fecharLeitorCamera} className="bg-white/20 text-white p-2 rounded-full hover:bg-white/30"><X className="w-6 h-6" /></button>
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xs z-50 flex flex-col justify-between">
+          {/* Header Superior do Leitor */}
+          <div className="p-3 sm:p-4 flex justify-between items-center bg-slate-900/90 border-b border-slate-800 z-10 gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                <QrCode className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5">
+                  {destinoLeitor === 'baixa' ? 'Escaneamento de Pacotes (Saída)' : 'Leitor de Código de Rastreio'}
+                </h3>
+                <p className="text-[10px] text-slate-300">
+                  {destinoLeitor === 'baixa' 
+                    ? 'Aponte a câmera para os pacotes para selecionar em lote'
+                    : 'Aponte a câmera para o código de barras ou QR Code'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {destinoLeitor === 'baixa' && (
+                <button
+                  type="button"
+                  onClick={() => setLeitorModoLote(!leitorModoLote)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                    leitorModoLote 
+                      ? 'bg-emerald-600 text-white shadow-xs' 
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                  title="Permite escanear vários pacotes seguidos sem fechar a câmera"
+                >
+                  <Boxes className="w-3.5 h-3.5" />
+                  {leitorModoLote ? 'Modo Lote: Ativo ✓' : 'Modo Lote: Desligado'}
+                </button>
+              )}
+
+              <button 
+                onClick={fecharLeitorCamera} 
+                className="bg-white/10 hover:bg-white/20 text-white p-1.5 rounded-lg transition cursor-pointer"
+                title="Fechar Leitor"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 bg-black flex items-center justify-center relative">
+
+          {/* Área Central da Câmera com Mira e Indicadores */}
+          <div className="flex-1 bg-black flex items-center justify-center relative overflow-hidden">
             {erroCamera ? (
-              <div className="text-white text-center p-6 bg-red-900/50 rounded-xl m-4 border border-red-500">
+              <div className="text-white text-center p-6 bg-red-900/50 rounded-xl m-4 border border-red-500 max-w-sm">
                 <AlertCircle className="w-10 h-10 mx-auto mb-2 text-red-400" />
-                <p className="text-sm">{erroCamera}</p>
-                <p className="text-xs mt-2 text-red-200">Verifique as permissões de câmera do navegador.</p>
+                <p className="text-sm font-bold">{erroCamera}</p>
+                <p className="text-xs mt-2 text-red-200">Verifique as permissões de câmera do seu navegador.</p>
               </div>
             ) : (
               <>
                 <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+                
+                {/* Mira central de escaneamento */}
                 <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none flex items-center justify-center">
                   <div className="w-64 h-40 border-2 border-emerald-500 bg-transparent rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] relative">
                     <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-500 rounded-tl"></div>
@@ -3525,11 +3735,47 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     <div className="w-full h-0.5 bg-emerald-500/50 absolute top-1/2 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
                   </div>
                 </div>
+
+                {/* Banner flutuante com feedback do último pacote bipado em lote */}
+                {destinoLeitor === 'baixa' && (
+                  <div className="absolute top-4 left-4 right-4 flex flex-col items-center gap-2 pointer-events-none">
+                    {ultimoPacoteBipado && (
+                      <div className="bg-emerald-950/90 text-emerald-200 border border-emerald-500 px-3 py-1.5 rounded-xl text-xs font-bold shadow-lg flex items-center gap-2 animate-bounce">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>
+                          Bipado: {ultimoPacoteBipado.codigo_barras || 'S/ Rastreio'} ({formatarIdentificacaoUnidade(ultimoPacoteBipado.unidade, ultimoPacoteBipado.bloco, condoConfig?.tipo_estrutura)})
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="bg-slate-900/80 backdrop-blur-xs text-white px-3 py-1 rounded-full text-[11px] font-black border border-slate-700 shadow-sm flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{itensSelecionadosIds.length} volume(s) selecionado(s) no lote</span>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
-          <div className="p-6 bg-black text-center text-white text-xs">
-            A câmera lerá automaticamente o código de barras ou QR Code do pacote.
+
+          {/* Rodapé do Leitor com Ação de Conclusão */}
+          <div className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 text-center flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
+            <p className="text-slate-300 text-xs">
+              {destinoLeitor === 'baixa' 
+                ? 'Posicione o código de barras no centro da mira. O sistema selecionará automaticamente cada pacote em lote.'
+                : 'A câmera lerá automaticamente o código de barras ou QR Code do pacote.'}
+            </p>
+
+            {destinoLeitor === 'baixa' && (
+              <button
+                type="button"
+                onClick={fecharLeitorCamera}
+                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Concluir Escaneamento ({itensSelecionadosIds.length} selecionados)</span>
+              </button>
+            )}
           </div>
         </div>
       )}
