@@ -2724,25 +2724,26 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         ) : (
         <div className="bg-white p-2.5 sm:p-3 rounded-xl shadow-2xs border border-slate-200 space-y-2">
           <div className="border-b border-slate-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-            <div>
-              <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5 shrink-0">
                 <UserCheck className="w-4 h-4 text-slate-800" /> Entrega de Pacotes (Saída)
               </h3>
-            </div>
-            
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 w-full sm:w-auto">
-              {/* Seletor de Tipo de Busca */}
+
+              {/* Lista seletora ao lado do título: Todos, Unidade, Morador e Rastreio */}
               <select
                 value={tipoFiltroBuscaBaixa}
                 onChange={(e) => setTipoFiltroBuscaBaixa(e.target.value as any)}
-                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-800 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition cursor-pointer shrink-0"
-                title="Filtrar por tipo de pesquisa"
+                className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-800 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition cursor-pointer shrink-0"
+                title="Filtrar tipo de pesquisa"
               >
-                <option value="todos">🔎 Todos os Campos</option>
-                <option value="unidade">{eEstruturaCasas ? '🏠 Por Casa' : '🏠 Por Unidade'}</option>
-                <option value="nome">👤 Por Morador / Nome</option>
-                <option value="rastreio">📦 Por Rastreio / Código</option>
+                <option value="todos">Todos</option>
+                <option value="unidade">Unidade</option>
+                <option value="nome">Morador</option>
+                <option value="rastreio">Rastreio</option>
               </select>
+            </div>
+            
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 w-full sm:w-auto">
 
               {/* 1º DIV filho de div:nth-of-type(2) -> input:nth-of-type(1) com botão de pesquisa embutido */}
               <div className="relative flex-1 sm:w-64 min-w-[160px] flex items-center">
