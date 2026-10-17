@@ -44,7 +44,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
-  PenTool
+  PenTool,
+  Eraser
 } from 'lucide-react';
 import CampoAssinaturaDigital from '../components/CampoAssinaturaDigital';
 import { verificarPermissao, carregarNiveisAcesso } from '../services/permissoesService';
@@ -2743,9 +2744,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 <option value="rastreio">📦 Por Rastreio / Código</option>
               </select>
 
-              {/* 1º DIV filho de div:nth-of-type(2) -> input:nth-of-type(1) */}
-              <div className="relative flex-1 sm:w-60 min-w-[160px] flex items-center">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" />
+              {/* 1º DIV filho de div:nth-of-type(2) -> input:nth-of-type(1) com botão de pesquisa embutido */}
+              <div className="relative flex-1 sm:w-64 min-w-[160px] flex items-center">
                 <input
                   type="text"
                   value={buscaBaixaGeral}
@@ -2764,56 +2764,42 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       ? "Código de rastreio..."
                       : "Unidade, morador ou rastreio..."
                   }
-                  className="pl-8 pr-7 py-1.5 w-full bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition font-medium"
+                  className="pl-3 pr-9 py-1.5 w-full bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition font-medium"
                 />
-                {buscaBaixaGeral && (
-                  <button
-                    type="button"
-                    onClick={handleLimparBuscaBaixa}
-                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
-                    title="Limpar campo de busca"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
+
+                {/* Botão de Pesquisa DENTRO da barra de pesquisa: só o ícone sem o nome */}
+                <button
+                  type="button"
+                  onClick={() => handleExecutarBusca()}
+                  className="absolute right-1 top-1 bottom-1 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md flex items-center justify-center transition cursor-pointer shadow-xs"
+                  title="Pesquisar"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                </button>
               </div>
 
-              {/* Botão de Pesquisar */}
-              <button
-                type="button"
-                onClick={() => handleExecutarBusca()}
-                className="bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
-                title="Executar pesquisa / bipar código"
-              >
-                <Search className="w-3.5 h-3.5" />
-                <span>Pesquisar</span>
-              </button>
-
-              {/* Botão de Limpar */}
+              {/* Botão de Limpar ao lado da barra com apenas o ícone de uma borracha em vermelho */}
               <button
                 type="button"
                 onClick={handleLimparBuscaBaixa}
-                disabled={!buscaBaixaGeral}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer border ${
+                className={`p-2 rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer border ${
                   buscaBaixaGeral 
-                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 shadow-2xs' 
-                    : 'bg-slate-50 text-slate-300 border-slate-200 opacity-60 cursor-not-allowed'
+                    ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-300 shadow-2xs' 
+                    : 'bg-white hover:bg-red-50 text-red-500 border-red-200'
                 }`}
-                title="Limpar filtro de pesquisa"
+                title="Limpar pesquisa (Borracha)"
               >
-                <X className="w-3.5 h-3.5" />
-                <span>Limpar</span>
+                <Eraser className="w-4 h-4 text-red-600" />
               </button>
 
-              {/* Botão do Leitor com Câmera (Modo Lote) */}
+              {/* Botão de Leitura de Código ao lado do botão de limpar */}
               <button 
                 type="button"
                 onClick={() => abrirLeitorCamera('baixa')} 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs" 
-                title="Escanear Pacotes com Câmera (Modo Lote)"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs" 
+                title="Leitor de Código de Barras / Escanear em Lote"
               >
                 <QrCode className="w-4 h-4" />
-                <span className="hidden md:inline">Escanear em Lote</span>
               </button>
             </div>
           </div>
