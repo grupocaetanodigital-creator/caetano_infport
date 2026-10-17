@@ -79,7 +79,7 @@ export const LOCAIS_ARMAZENAMENTO_PADRAO: LocalArmazenamento[] = [
 
 interface ConfiguracoesProps {
   usuarioLogado?: any;
-  onConfigSalva?: (payload: any) => void;
+  onConfigSalva?: (payload: any, condominioId?: string) => void;
 }
 
 export default function Configuracoes({ usuarioLogado, onConfigSalva }: ConfiguracoesProps) {
@@ -644,6 +644,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
         const payloadCompleto: any = {
           condominio_id: targetCondoId,
           feature_flags: featureFlagsJson,
+          mod01_cadastros_base: Boolean(featureFlagsJson.mod01_cadastros_base),
           mod02_gestao_encomendas: Boolean(featureFlagsJson.mod02_gestao_encomendas),
           mod03_custodia_itens: Boolean(featureFlagsJson.mod03_custodia_itens),
           mod04_materiais_posto: Boolean(featureFlagsJson.mod04_materiais_posto),
@@ -652,7 +653,10 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
           mod07_gestao_ronda: Boolean(featureFlagsJson.mod07_gestao_ronda),
           mod08_livro_ocorrencias: Boolean(featureFlagsJson.mod08_livro_ocorrencias),
           mod09_passagem_posto: Boolean(featureFlagsJson.mod09_passagem_posto),
-          mod10_prestadores_servico: Boolean(featureFlagsJson.mod10_prestadores_servico)
+          mod10_prestadores_servico: Boolean(featureFlagsJson.mod10_prestadores_servico),
+          mod11_bancada_conferencia: Boolean(featureFlagsJson.mod11_bancada_conferencia),
+          mod12_historico_absoluto: Boolean(featureFlagsJson.mod12_historico_absoluto),
+          mod_portal_sindico: Boolean(featureFlagsJson.mod_portal_sindico)
         };
 
         if (config.id) {
@@ -712,7 +716,7 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
       setMensagem({ tipo: 'sucesso', texto: 'Parametrização dos módulos salva com sucesso!' });
       setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
 
-      if (onConfigSalva) onConfigSalva(featureFlagsJson);
+      if (onConfigSalva) onConfigSalva(featureFlagsJson, targetCondoId);
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar parametrização: ' + err.message });
     } finally {

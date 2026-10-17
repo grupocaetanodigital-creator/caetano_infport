@@ -245,7 +245,7 @@ export default function App() {
       if (e.detail) {
         const idAlvo = e.detail.condominio_id;
         const condoAtual = eAdmin ? (condominioAtivoId || operador?.condominio_id) : operador?.condominio_id;
-        if (!idAlvo || idAlvo === condoAtual) {
+        if (!idAlvo || idAlvo === condoAtual || (eAdmin && (!condominioAtivoId || condominioAtivoId === idAlvo))) {
           const novas = e.detail.flags || e.detail;
           setFeatureFlags(prev => ({
             ...prev,
@@ -642,8 +642,16 @@ export default function App() {
                   onChange={(e) => {
                     const novoId = e.target.value;
                     setCondominioAtivoId(novoId);
+                    localStorage.setItem('infport_condominio_ativo_id', novoId);
                     const cObj = listaCondominios.find(c => c.id === novoId);
                     if (cObj) setCondominio(cObj);
+                    if (novoId) {
+                      carregarFeatureFlags(novoId);
+                    } else if (operador?.condominio_id) {
+                      carregarFeatureFlags(operador.condominio_id);
+                    } else {
+                      resetarFeatureFlagsPadrao();
+                    }
                   }}
                   className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-600 focus:outline-none"
                 >
@@ -768,6 +776,13 @@ export default function App() {
                         localStorage.setItem('infport_condominio_ativo_id', novoId);
                         const cObj = listaCondominios.find(c => c.id === novoId);
                         if (cObj) setCondominio(cObj);
+                        if (novoId) {
+                          carregarFeatureFlags(novoId);
+                        } else if (operador?.condominio_id) {
+                          carregarFeatureFlags(operador.condominio_id);
+                        } else {
+                          resetarFeatureFlagsPadrao();
+                        }
                       }}
                       className="w-full bg-slate-900 text-white text-xs font-bold p-2.5 rounded-lg border border-slate-700"
                     >
@@ -886,6 +901,13 @@ export default function App() {
                       localStorage.setItem('infport_condominio_ativo_id', novoId);
                       const cObj = listaCondominios.find(c => c.id === novoId);
                       if (cObj) setCondominio(cObj);
+                      if (novoId) {
+                        carregarFeatureFlags(novoId);
+                      } else if (operador?.condominio_id) {
+                        carregarFeatureFlags(operador.condominio_id);
+                      } else {
+                        resetarFeatureFlagsPadrao();
+                      }
                     }}
                     className="bg-slate-800 text-emerald-400 font-extrabold text-[11px] sm:text-xs px-2 py-1 rounded border border-slate-700 focus:outline-none max-w-full truncate"
                   >
@@ -1007,7 +1029,11 @@ export default function App() {
                   <Ocorrencias usuarioLogado={operadorContextoGlobal} />
                 )}
                 {moduloAtual === 'passagem' && featureFlags.mod09_passagem_posto && (
-                  <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />
+                  <PassagemPosto 
+                    usuarioLogado={operadorContextoGlobal} 
+                    onTrocarOperador={handleTrocarOperador} 
+                    featureFlags={featureFlags}
+                  />
                 )}
                 {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
                   <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
@@ -1028,7 +1054,16 @@ export default function App() {
                 {moduloAtual === 'configuracoes' && podeAcessarConfiguracoes && (
                   <Configuracoes 
                     usuarioLogado={operadorContextoGlobal} 
-                    onConfigSalva={() => carregarFeatureFlags(operadorContextoGlobal.condominio_id)} 
+                    onConfigSalva={(novasFlags, idCondSalvo) => {
+                      const idAlvo = idCondSalvo || (eAdmin ? (condominioAtivoId || operadorContextoGlobal.condominio_id) : operadorContextoGlobal.condominio_id);
+                      if (idAlvo) carregarFeatureFlags(idAlvo);
+                      if (novasFlags) {
+                        setFeatureFlags(prev => ({
+                          ...prev,
+                          ...novasFlags
+                        }));
+                      }
+                    }} 
                   />
                 )}
               </>
