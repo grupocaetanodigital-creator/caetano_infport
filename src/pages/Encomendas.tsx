@@ -60,6 +60,7 @@ import {
   formatarIdentificacaoUnidade, 
   formatarTextoWhatsUnidade,
   saoUnidadesEquivalentes,
+  autoCorrigirZeroEsquerda,
   CondominioConfig 
 } from '../services/condominioService';
 
@@ -111,6 +112,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [baixaParentesco, setBaixaParentesco] = useState('Titular / Morador');
   const [baixaObsEspecial, setBaixaObsEspecial] = useState('');
   const [baixaNotificarSupervisor, setBaixaNotificarSupervisor] = useState(false);
+
+  // Timer para auto-correção imediata do zero à esquerda (1 a 9 -> 01 a 09)
+  const timerCorrecaoUnidadeRef = useRef<any>(null);
 
   // RBAC: Verificação do nível de acesso e permissões configuradas na matriz de Acesso & Permissões
   const nivelNum = usuarioLogado?.nivel_acesso !== undefined && usuarioLogado?.nivel_acesso !== null 
@@ -1018,7 +1022,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     try {
       const payload: any = {
-        unidade: editPacoteUnidade.trim(),
+        unidade: autoCorrigirZeroEsquerda(editPacoteUnidade.trim()),
         bloco: eEstruturaCasas ? 'Casa' : editPacoteBloco.trim(),
         morador_id: editPacoteMoradorId || null,
         codigo_barras: editPacoteCodigo.trim(),
@@ -1175,6 +1179,41 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     }
   };
 
+  /**
+   * Auto-corrige unidades de 1 a 9 inserindo o '0' à esquerda na hora
+   * caso o operador esqueça de colocar, garantindo padronização imediata.
+   */
+  const handleDigitarUnidadeTriagem = (valor: string) => {
+    const blocoEfetivo = eEstruturaCasas ? 'Casa' : blocoTriagem;
+    setUnidadeTriagem(valor);
+
+    if (timerCorrecaoUnidadeRef.current) {
+      clearTimeout(timerCorrecaoUnidadeRef.current);
+    }
+
+    // Se digitou número isolado de 1 a 9, agenda auto-correção imediata após breve pausa de 450ms
+    if (/^[1-9]$/.test(valor.trim())) {
+      timerCorrecaoUnidadeRef.current = setTimeout(() => {
+        const corrigida = autoCorrigirZeroEsquerda(valor);
+        setUnidadeTriagem(corrigida);
+        buscarMoradoresEChecarAgrupamento(corrigida, blocoEfetivo);
+      }, 450);
+    }
+
+    buscarMoradoresEChecarAgrupamento(valor, blocoEfetivo);
+  };
+
+  const handleBlurUnidadeTriagem = () => {
+    if (timerCorrecaoUnidadeRef.current) {
+      clearTimeout(timerCorrecaoUnidadeRef.current);
+    }
+    const corrigida = autoCorrigirZeroEsquerda(unidadeTriagem);
+    if (corrigida !== unidadeTriagem) {
+      setUnidadeTriagem(corrigida);
+      buscarMoradoresEChecarAgrupamento(corrigida, eEstruturaCasas ? 'Casa' : blocoTriagem);
+    }
+  };
+
   const salvarItemTriagem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!podeFazerTriagem) {
@@ -1191,12 +1230,13 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const localArmazenar = localArmazenamentoTriagem || 'Bancada Principal';
       const condoAlvo = loteAtivo.condominio_id || idCondominioAtivo || 'aa205bfb-55cc-42fe-ab25-9c16ac943851';
       const blocoFinal = eEstruturaCasas ? 'Casa' : blocoTriagem.trim();
+      const unidadeFinal = autoCorrigirZeroEsquerda(unidadeTriagem.trim());
 
       let payloadItem: any = {
         lote_re_id: loteAtivo.id,
         condominio_id: condoAlvo,
         bloco: blocoFinal,
-        unidade: unidadeTriagem.trim(),
+        unidade: unidadeFinal,
         morador_id: moradorSelecionado?.id || null,
         codigo_barras: codigoBarras.trim(),
         foto_etiqueta_url: fotoEtiquetaUrl.trim(),
@@ -1237,7 +1277,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
       const telMorador = moradorSelecionado?.telefone?.replace(/\D/g, '') || '';
       const nomeDestinatario = moradorSelecionado ? moradorSelecionado.nome : 'Morador';
-      const labelUnidadeFormatada = formatarIdentificacaoUnidade(unidadeTriagem, blocoFinal, condoConfig?.tipo_estrutura);
+      const labelUnidadeFormatada = formatarIdentificacaoUnidade(unidadeFinal, blocoFinal, condoConfig?.tipo_estrutura);
 
       // Registra evento no Histórico Absoluto
       registrarAtividade({
@@ -1247,7 +1287,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         detalhes: {
           loteId: loteAtivo.id,
           codigoRe: loteAtivo.codigo_re,
-          unidade: unidadeTriagem,
+          unidade: unidadeFinal,
           bloco: blocoFinal,
           destinatario: nomeDestinatario,
           localGuarda: localArmazenar,
@@ -1452,12 +1492,41 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const itensCandidatosObjetos = todosItensRetidos.filter(i => idsParaChecklist.includes(i.id));
   const itensSelecionadosObjetos = todosItensRetidos.filter(i => itensSelecionadosIds.includes(i.id));
 
-  const moradoresDasUnidadesBaixa = moradores.filter(m => 
-    itensSelecionadosObjetos.some(item => 
-      String(item.unidade).toLowerCase() === String(m.unidade).toLowerCase() &&
-      (!item.bloco || String(item.bloco).toLowerCase() === String(m.bloco || '').toLowerCase())
-    )
-  );
+  const moradoresDasUnidadesBaixa = useMemo(() => {
+    const listaEncontrada: any[] = [];
+    const nomesJaAdicionados = new Set<string>();
+
+    const unidadesDosItens = [
+      ...itensSelecionadosObjetos,
+      ...itensCandidatosObjetos
+    ];
+
+    // 1. Moradores cadastrados na mesma unidade/bloco
+    moradores.forEach(m => {
+      const match = unidadesDosItens.some(item => 
+        saoUnidadesEquivalentes(item.unidade, m.unidade) &&
+        (!item.bloco || String(item.bloco).toLowerCase() === String(m.bloco || '').toLowerCase() || eEstruturaCasas)
+      );
+      if (match && m.nome && !nomesJaAdicionados.has(m.nome.toLowerCase().trim())) {
+        nomesJaAdicionados.add(m.nome.toLowerCase().trim());
+        listaEncontrada.push(m);
+      }
+    });
+
+    // 2. Morador diretamente vinculado ao pacote se houver
+    unidadesDosItens.forEach(item => {
+      if (item.moradores?.nome && !nomesJaAdicionados.has(item.moradores.nome.toLowerCase().trim())) {
+        nomesJaAdicionados.add(item.moradores.nome.toLowerCase().trim());
+        listaEncontrada.push({
+          id: item.morador_id || item.moradores.id || `morador-${item.id}`,
+          nome: item.moradores.nome,
+          tipo: item.moradores.tipo || 'Morador'
+        });
+      }
+    });
+
+    return listaEncontrada;
+  }, [moradores, itensSelecionadosObjetos, itensCandidatosObjetos, eEstruturaCasas]);
 
   const toggleItemSelecao = (id: string) => {
     if (itensSelecionadosIds.includes(id)) {
@@ -1681,10 +1750,25 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setMensagem({ tipo: 'erro', texto: 'Acesso restrito: Apenas usuários autorizados (Master/Supervisor/Admin) possuem permissão para realizar Baixa de Pacotes.' });
       return;
     }
-    if (itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || (!fotoRetiranteUrl.trim() && !assinaturaDigitalUrl.trim())) {
+    if (itensSelecionadosIds.length === 0) {
       setMensagem({ 
         tipo: 'erro', 
-        texto: 'Selecione e marque os pacotes no checklist, informe o nome do retirante e colete a assinatura digital do morador ou a foto da entrega.' 
+        texto: 'Selecione e marque ao menos um volume no checklist para realizar a entrega.' 
+      });
+      return;
+    }
+    if (!nomeRetirante.trim()) {
+      setMensagem({ 
+        tipo: 'erro', 
+        texto: 'Por favor, selecione o morador ou informe o nome de quem está retirando.' 
+      });
+      return;
+    }
+    // FOTO DO PACOTE É OBRIGATÓRIA PARA TODA E QUALQUER RETIRADA
+    if (!fotoRetiranteUrl.trim()) {
+      setMensagem({ 
+        tipo: 'erro', 
+        texto: '⚠️ A FOTO DO PACOTE É OBRIGATÓRIA para toda e qualquer retirada! Anexe ou tire a foto do pacote para concluir.' 
       });
       return;
     }
@@ -2364,14 +2448,25 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   )}
                   
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                      {rotuloUnidade} *
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center justify-between">
+                      <span>{rotuloUnidade} *</span>
+                      {/^[1-9]$/.test(unidadeTriagem.trim()) && (
+                        <span className="text-[10px] text-emerald-600 font-bold animate-pulse">
+                          Auto-ajustando para 0{unidadeTriagem.trim()}...
+                        </span>
+                      )}
                     </label>
                     <input
                       type="text"
                       value={unidadeTriagem}
-                      onChange={(e) => buscarMoradoresEChecarAgrupamento(e.target.value, eEstruturaCasas ? 'Casa' : blocoTriagem)}
-                      placeholder={eEstruturaCasas ? "Ex: 01 ou 117" : "Ex: 101"}
+                      onChange={(e) => handleDigitarUnidadeTriagem(e.target.value)}
+                      onBlur={handleBlurUnidadeTriagem}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleBlurUnidadeTriagem();
+                        }
+                      }}
+                      placeholder={eEstruturaCasas ? "Ex: 01 ou 117" : "Ex: 01 ou 101"}
                       required
                       className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
                     />
@@ -2865,87 +2960,172 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   {/* CHECKLIST DE CONFERÊNCIA DOS PACOTES */}
                   {renderChecklistConferencia(false)}
 
-                  {moradoresDasUnidadesBaixa.length > 0 && (
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-bold text-slate-700 uppercase">Preencher com Morador:</label>
-                      <div className="flex flex-wrap gap-1">
-                        {moradoresDasUnidadesBaixa.map((m: any) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => setNomeRetirante(m.nome)}
-                            className="bg-white border border-slate-300 text-slate-700 hover:bg-emerald-50 text-[11px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer font-medium"
-                          >
-                            <User className="w-3 h-3 text-emerald-600" /> {m.nome}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Quem está retirando? (Nome / RG) *</label>
-                    <input
-                      type="text"
-                      value={nomeRetirante}
-                      onChange={(e) => setNomeRetirante(e.target.value)}
-                      placeholder="Nome de quem pegou o pacote..."
-                      required
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition"
-                    />
-                  </div>
-
-                  {/* CAMPO DE ASSINATURA DIGITAL (Touch / Tela) */}
-                  <CampoAssinaturaDigital
-                    valor={assinaturaDigitalUrl}
-                    onChange={setAssinaturaDigitalUrl}
-                    onLimpar={() => setAssinaturaDigitalUrl('')}
-                    nomeRetirante={nomeRetirante}
-                    obrigatorio={!fotoRetiranteUrl}
-                    altura={130}
-                  />
-
-                  {/* FOTO DO COMPROVANTE (Opcional ou Complementar) */}
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center justify-between">
-                      <span>Foto do Comprovante / Retirante</span>
-                      {assinaturaDigitalUrl ? (
-                        <span className="text-[10px] text-emerald-600 font-semibold lowercase">(opcional com assinatura)</span>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 lowercase">(ou foto se não assinar)</span>
+                  {/* 1. QUEM ESTÁ RETIRANDO (LISTANDO OS MORADORES DA UNIDADE) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-800 uppercase flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-emerald-600" />
+                        Quem está retirando? *
+                      </span>
+                      {moradoresDasUnidadesBaixa.length > 0 && (
+                        <span className="text-[10px] text-emerald-700 font-bold lowercase">
+                          ({moradoresDasUnidadesBaixa.length} morador(es) na unidade)
+                        </span>
                       )}
                     </label>
-                    {!fotoRetiranteUrl ? (
-                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 cursor-pointer rounded-lg p-2 flex items-center justify-center gap-2 transition">
-                        <Camera className="w-4 h-4 text-emerald-600" />
-                        <span className="text-xs font-bold text-slate-700">
-                          {uploadingFoto ? 'Enviando...' : '📷 Foto do Pacote / Morador'}
-                        </span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          capture="environment" 
-                          className="hidden" 
-                          onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
-                          disabled={uploadingFoto} 
-                        />
-                      </label>
+
+                    {moradoresDasUnidadesBaixa.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <select
+                          value={nomeRetirante}
+                          onChange={(e) => setNomeRetirante(e.target.value)}
+                          required
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition cursor-pointer shadow-2xs"
+                        >
+                          <option value="">Selecione o morador da unidade...</option>
+                          {moradoresDasUnidadesBaixa.map((m: any) => (
+                            <option key={m.id} value={m.nome}>
+                              👤 {m.nome} {m.tipo ? `(${m.tipo})` : ''}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Botões rápidos em 1 clique para agilidade do operador */}
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {moradoresDasUnidadesBaixa.map((m: any) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setNomeRetirante(m.nome)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer font-bold border ${
+                                nomeRetirante === m.nome 
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' 
+                                  : 'bg-white border-slate-300 text-slate-700 hover:bg-emerald-50'
+                              }`}
+                            >
+                              <User className="w-3 h-3" /> {m.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ) : (
-                      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
-                        <img src={fotoRetiranteUrl} alt="Comprovante" loading="lazy" decoding="async" className="max-h-24 rounded object-cover" />
-                        <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
-                          <X className="w-3.5 h-3.5" />
+                      <input
+                        type="text"
+                        value={nomeRetirante}
+                        onChange={(e) => setNomeRetirante(e.target.value)}
+                        placeholder="Nome de quem pegou o pacote..."
+                        required
+                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition font-medium"
+                      />
+                    )}
+                  </div>
+
+                  {/* 2. FOTO DO PACOTE (OBRIGATÓRIA PARA TODA E QUALQUER RETIRADA) */}
+                  <div className={`space-y-1.5 p-3 rounded-xl border-2 transition ${
+                    fotoRetiranteUrl 
+                      ? 'border-emerald-300 bg-emerald-50/40' 
+                      : 'border-amber-400 bg-amber-50/40'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-black text-slate-900 uppercase flex items-center gap-1.5">
+                        <Camera className="w-4 h-4 text-emerald-600" />
+                        <span>Foto do Pacote * (Obrigatória)</span>
+                      </label>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        fotoRetiranteUrl 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
+                      }`}>
+                        {fotoRetiranteUrl ? '✓ Foto Anexada' : 'Obrigatório'}
+                      </span>
+                    </div>
+
+                    {!fotoRetiranteUrl ? (
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-amber-900 font-bold">
+                          A foto do pacote é obrigatória para registrar a retirada e liberar a entrega.
+                        </p>
+                        <label className="border-2 border-dashed border-amber-400 hover:border-emerald-500 bg-white hover:bg-emerald-50/50 cursor-pointer rounded-xl p-3 flex flex-col items-center justify-center gap-1 transition text-xs font-black text-slate-800 shadow-2xs active:scale-98">
+                          <Camera className="w-5 h-5 text-emerald-600" />
+                          <span>{uploadingFoto ? 'Enviando foto...' : '📷 Tirar Foto do Pacote'}</span>
+                          <span className="text-[10px] text-slate-500 font-normal">Tire a foto do pacote ou comprovante</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment" 
+                            className="hidden" 
+                            onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
+                            disabled={uploadingFoto} 
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-xl overflow-hidden border border-emerald-300 bg-white p-2 flex items-center justify-between gap-2 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img src={fotoRetiranteUrl} alt="Foto do Pacote" loading="lazy" decoding="async" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                          <div className="min-w-0">
+                            <span className="text-xs font-black text-emerald-900 block truncate">✓ Foto do Pacote Registrada</span>
+                            <span className="text-[10px] text-slate-500 block truncate">Comprovante anexado com sucesso</span>
+                          </div>
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => setFotoRetiranteUrl('')} 
+                          className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 font-bold text-xs rounded-lg transition flex items-center gap-1 cursor-pointer shrink-0"
+                          title="Tirar outra foto"
+                        >
+                          <X className="w-3.5 h-3.5" /> Tirar Outra
                         </button>
                       </div>
                     )}
                   </div>
 
+                  {/* 3. CAMPO DE ASSINATURA DIGITAL (APARECE APENAS DEPOIS QUE TIRAR A FOTO, COMO OPCIONAL) */}
+                  {fotoRetiranteUrl ? (
+                    <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-white animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                          <PenTool className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Assinatura Digital (Opcional)</span>
+                        </label>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                          Opcional
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Foto do pacote já registrada com sucesso. A assinatura digital na tela é opcional.
+                      </p>
+                      <CampoAssinaturaDigital
+                        valor={assinaturaDigitalUrl}
+                        onChange={setAssinaturaDigitalUrl}
+                        onLimpar={() => setAssinaturaDigitalUrl('')}
+                        nomeRetirante={nomeRetirante}
+                        obrigatorio={false}
+                        altura={130}
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-100/70 text-center text-xs text-slate-500 space-y-0.5">
+                      <span className="font-bold text-slate-700 block">✍️ Campo de Assinatura Digital</span>
+                      <span className="text-[11px] text-slate-500">Tire a foto obrigatória do pacote acima para liberar o campo opcional de assinatura.</span>
+                    </div>
+                  )}
+
                   <button 
                     type="submit" 
-                    disabled={loading || itensSelecionadosIds.length === 0} 
-                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs"
+                    disabled={loading || itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl} 
+                    className={`w-full font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition text-xs shadow-xs ${
+                      loading || itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-98'
+                    }`}
                   >
-                    {loading ? 'Processando...' : (
+                    {loading ? 'Processando...' : !fotoRetiranteUrl ? (
+                      <>
+                        <Camera className="w-4 h-4 text-slate-600" />
+                        <span>Tire a foto do pacote para liberar entrega</span>
+                      </>
+                    ) : (
                       <>
                         <UserCheck className="w-4 h-4" /> 
                         {itensSelecionadosIds.length > 0 
@@ -3028,82 +3208,156 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   {/* CHECKLIST DE CONFERÊNCIA DOS VOLUMES */}
                   {renderChecklistConferencia(true)}
 
-                  {moradoresDasUnidadesBaixa.length > 0 && (
-                    <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                      <label className="block text-[10px] font-bold text-slate-700 uppercase">
-                        Preencher com Morador da Unidade:
-                      </label>
-                      <div className="flex flex-wrap gap-1">
-                        {moradoresDasUnidadesBaixa.map((m: any) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => setNomeRetirante(m.nome)}
-                            className="bg-white border border-slate-300 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300 text-[11px] px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer font-medium"
-                          >
-                            <User className="w-3 h-3 text-emerald-600" /> {m.nome}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase">
-                      Quem está retirando? (Nome / RG) *
-                    </label>
-                    <input
-                      type="text"
-                      value={nomeRetirante}
-                      onChange={(e) => setNomeRetirante(e.target.value)}
-                      placeholder="Nome de quem pegou o pacote..."
-                      required
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
-                    />
-                  </div>
-
-                  {/* CAMPO DE ASSINATURA DIGITAL (Touch / Tela) */}
-                  <CampoAssinaturaDigital
-                    valor={assinaturaDigitalUrl}
-                    onChange={setAssinaturaDigitalUrl}
-                    onLimpar={() => setAssinaturaDigitalUrl('')}
-                    nomeRetirante={nomeRetirante}
-                    obrigatorio={!fotoRetiranteUrl}
-                    altura={145}
-                  />
-
-                  {/* FOTO DO COMPROVANTE (Opcional ou Complementar) */}
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
-                      <span>Foto do Comprovante / Retirante</span>
-                      {assinaturaDigitalUrl ? (
-                        <span className="text-[10px] text-emerald-600 font-semibold lowercase">(opcional com assinatura)</span>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 lowercase">(ou anexe foto se não assinar)</span>
+                  {/* 1. QUEM ESTÁ RETIRANDO (LISTANDO OS MORADORES DA UNIDADE) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-800 uppercase flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-emerald-600" />
+                        Quem está retirando? *
+                      </span>
+                      {moradoresDasUnidadesBaixa.length > 0 && (
+                        <span className="text-[10px] text-emerald-700 font-bold lowercase">
+                          ({moradoresDasUnidadesBaixa.length} morador(es) na unidade)
+                        </span>
                       )}
                     </label>
-                    {!fotoRetiranteUrl ? (
-                      <label className="border border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50 cursor-pointer rounded-lg p-2.5 flex items-center justify-center gap-2 transition text-xs font-bold text-slate-700">
-                        <Camera className="w-4 h-4 text-emerald-600" />
-                        <span>{uploadingFoto ? 'Enviando...' : '📷 Foto do Pacote / Morador'}</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          capture="environment" 
-                          className="hidden" 
-                          onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
-                          disabled={uploadingFoto} 
-                        />
-                      </label>
+
+                    {moradoresDasUnidadesBaixa.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <select
+                          value={nomeRetirante}
+                          onChange={(e) => setNomeRetirante(e.target.value)}
+                          required
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition cursor-pointer shadow-2xs"
+                        >
+                          <option value="">Selecione o morador da unidade...</option>
+                          {moradoresDasUnidadesBaixa.map((m: any) => (
+                            <option key={m.id} value={m.nome}>
+                              👤 {m.nome} {m.tipo ? `(${m.tipo})` : ''}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Botões rápidos em 1 clique para agilidade do operador */}
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {moradoresDasUnidadesBaixa.map((m: any) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setNomeRetirante(m.nome)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer font-bold border ${
+                                nomeRetirante === m.nome 
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' 
+                                  : 'bg-white border-slate-300 text-slate-700 hover:bg-emerald-50'
+                              }`}
+                            >
+                              <User className="w-3 h-3" /> {m.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ) : (
-                      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 flex justify-center">
-                        <img src={fotoRetiranteUrl} alt="Comprovante" loading="lazy" decoding="async" className="max-h-24 rounded object-cover" />
-                        <button type="button" onClick={() => setFotoRetiranteUrl('')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-xs cursor-pointer">
-                          <X className="w-3.5 h-3.5" />
+                      <input
+                        type="text"
+                        value={nomeRetirante}
+                        onChange={(e) => setNomeRetirante(e.target.value)}
+                        placeholder="Nome de quem pegou o pacote..."
+                        required
+                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition font-medium"
+                      />
+                    )}
+                  </div>
+
+                  {/* 2. FOTO DO PACOTE (OBRIGATÓRIA PARA TODA E QUALQUER RETIRADA) */}
+                  <div className={`space-y-1.5 p-3 rounded-xl border-2 transition ${
+                    fotoRetiranteUrl 
+                      ? 'border-emerald-300 bg-emerald-50/40' 
+                      : 'border-amber-400 bg-amber-50/40'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-black text-slate-900 uppercase flex items-center gap-1.5">
+                        <Camera className="w-4 h-4 text-emerald-600" />
+                        <span>Foto do Pacote * (Obrigatória)</span>
+                      </label>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        fotoRetiranteUrl 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
+                      }`}>
+                        {fotoRetiranteUrl ? '✓ Foto Anexada' : 'Obrigatório'}
+                      </span>
+                    </div>
+
+                    {!fotoRetiranteUrl ? (
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-amber-900 font-bold">
+                          A foto do pacote é obrigatória para registrar a retirada e liberar a entrega.
+                        </p>
+                        <label className="border-2 border-dashed border-amber-400 hover:border-emerald-500 bg-white hover:bg-emerald-50/50 cursor-pointer rounded-xl p-3 flex flex-col items-center justify-center gap-1 transition text-xs font-black text-slate-800 shadow-2xs active:scale-98">
+                          <Camera className="w-5 h-5 text-emerald-600" />
+                          <span>{uploadingFoto ? 'Enviando foto...' : '📷 Tirar Foto do Pacote'}</span>
+                          <span className="text-[10px] text-slate-500 font-normal">Tire a foto do pacote ou comprovante</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment" 
+                            className="hidden" 
+                            onChange={(e) => uploadFotoStorage(e.target.files ? e.target.files[0] : null, 'comprovantes_baixa', setFotoRetiranteUrl)} 
+                            disabled={uploadingFoto} 
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-xl overflow-hidden border border-emerald-300 bg-white p-2 flex items-center justify-between gap-2 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img src={fotoRetiranteUrl} alt="Foto do Pacote" loading="lazy" decoding="async" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                          <div className="min-w-0">
+                            <span className="text-xs font-black text-emerald-900 block truncate">✓ Foto do Pacote Registrada</span>
+                            <span className="text-[10px] text-slate-500 block truncate">Comprovante anexado com sucesso</span>
+                          </div>
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => setFotoRetiranteUrl('')} 
+                          className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 font-bold text-xs rounded-lg transition flex items-center gap-1 cursor-pointer shrink-0"
+                          title="Tirar outra foto"
+                        >
+                          <X className="w-3.5 h-3.5" /> Tirar Outra
                         </button>
                       </div>
                     )}
                   </div>
+
+                  {/* 3. CAMPO DE ASSINATURA DIGITAL (APARECE APENAS DEPOIS QUE TIRAR A FOTO, COMO OPCIONAL) */}
+                  {fotoRetiranteUrl ? (
+                    <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-white animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                          <PenTool className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Assinatura Digital (Opcional)</span>
+                        </label>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                          Opcional
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Foto do pacote já registrada com sucesso. A assinatura digital na tela é opcional.
+                      </p>
+                      <CampoAssinaturaDigital
+                        valor={assinaturaDigitalUrl}
+                        onChange={setAssinaturaDigitalUrl}
+                        onLimpar={() => setAssinaturaDigitalUrl('')}
+                        nomeRetirante={nomeRetirante}
+                        obrigatorio={false}
+                        altura={140}
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-100/70 text-center text-xs text-slate-500 space-y-0.5">
+                      <span className="font-bold text-slate-700 block">✍️ Campo de Assinatura Digital</span>
+                      <span className="text-[11px] text-slate-500">Tire a foto obrigatória do pacote acima para liberar o campo opcional de assinatura.</span>
+                    </div>
+                  )}
 
                   {/* SOLICITAÇÃO DE RECURSO: BOTÃO / MENU 'ADICIONAR OPÇÕES' NA FINALIZAÇÃO DA ENTREGA */}
                   <div className="pt-1">
@@ -3183,10 +3437,19 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
                   <button 
                     type="submit" 
-                    disabled={loading || itensSelecionadosIds.length === 0} 
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 text-xs cursor-pointer shadow-xs"
+                    disabled={loading || itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl} 
+                    className={`w-full font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition text-xs shadow-xs ${
+                      loading || itensSelecionadosIds.length === 0 || !nomeRetirante.trim() || !fotoRetiranteUrl
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-98'
+                    }`}
                   >
-                    {loading ? 'Processando...' : (
+                    {loading ? 'Processando...' : !fotoRetiranteUrl ? (
+                      <>
+                        <Camera className="w-4 h-4 text-slate-600" />
+                        <span>Tire a foto do pacote para liberar entrega</span>
+                      </>
+                    ) : (
                       <>
                         <UserCheck className="w-4 h-4" /> 
                         {itensSelecionadosIds.length > 0 
@@ -4135,6 +4398,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     required
                     value={editPacoteUnidade}
                     onChange={(e) => setEditPacoteUnidade(e.target.value)}
+                    onBlur={() => setEditPacoteUnidade(autoCorrigirZeroEsquerda(editPacoteUnidade))}
                     placeholder="Unidade"
                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />

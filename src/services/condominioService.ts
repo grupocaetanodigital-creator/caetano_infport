@@ -264,6 +264,25 @@ export function formatarComZeroEsquerda(num: string | number, digitos: number = 
   return str;
 }
 
+/**
+ * Auto-corrige unidades de 1 a 9 adicionando o zero à esquerda (ex: "1" -> "01", "9" -> "09")
+ * Caso o operador esqueça de colocar, o sistema corrige na hora.
+ */
+export function autoCorrigirZeroEsquerda(val: string | null | undefined): string {
+  if (!val) return '';
+  const limpo = String(val).trim();
+  // Se for apenas um único dígito de 1 a 9: '1' -> '01', ..., '9' -> '09'
+  if (/^[1-9]$/.test(limpo)) {
+    return `0${limpo}`;
+  }
+  // Se for numeral com prefixo (ex: "Casa 5" -> "Casa 05", "Ap 3" -> "Ap 03")
+  const matchPrefixo = limpo.match(/^((?:casa|apto|ap|unidade|und|lote|bloco|quadra)\.?\s*)([1-9])$/i);
+  if (matchPrefixo) {
+    return `${matchPrefixo[1]}0${matchPrefixo[2]}`;
+  }
+  return limpo;
+}
+
 export interface UnidadeEstruturada {
   id: string; // Ex: "casa-1" ou "bloco-A-ap-101"
   numero: string; // Ex: "01", "1", "101", "12A"

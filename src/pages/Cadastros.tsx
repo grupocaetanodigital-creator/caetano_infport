@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase';
 import { 
   Building2, 
   Users, 
+  User,
   UserPlus, 
   Home, 
   Plus, 
@@ -60,6 +61,7 @@ import {
   saoUnidadesEquivalentes,
   normalizarNumeroUnidade,
   formatarComZeroEsquerda,
+  autoCorrigirZeroEsquerda,
   UnidadeEstruturada,
   CondominioConfig 
 } from '../services/condominioService';
@@ -685,7 +687,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     const dadosMorador: any = {
       nome: nomeMorador.trim(),
       bloco: blocoFinal,
-      unidade: unidadeMorador.trim(),
+      unidade: autoCorrigirZeroEsquerda(unidadeMorador.trim()),
       telefone: telefoneMorador.trim(),
       condominio_id: targetCondominioId,
       tipo: tipoMorador || 'Morador',
@@ -1140,6 +1142,67 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
     const totalBloqueados = moradores.filter(m => m.status_acesso === 'bloqueado').length;
     return { total, ocupadas, vagas, totalMoradores: moradores.length, totalTags, totalVeiculos, totalBloqueados };
   }, [unidadesComMoradores, moradores]);
+
+  // Busca estrita: Unidade, Nome de Moradores e Placa de Veículo (nada mais)
+  const matchBuscaUnidadeMoradorPlaca = (item: { unidade: UnidadeEstruturada; moradores: any[] }, termo: string): boolean => {
+    if (!termo) return true;
+    const t = termo.trim().toLowerCase();
+    if (!t) return true;
+
+    // 1. UNIDADE: número direto, label, equivalência (ex: 1 e 01) ou busca na lista de moradores da unidade
+    const num = (item.unidade.numero || '').toLowerCase();
+    const lbl = (item.unidade.label || '').toLowerCase();
+    const matchNum = num === t || num.includes(t) || lbl.includes(t) || saoUnidadesEquivalentes(item.unidade.numero, t);
+    if (matchNum) return true;
+
+    const matchUnidadeMorador = item.moradores.some(m => 
+      saoUnidadesEquivalentes(m.unidade, t) || (m.unidade || '').toString().toLowerCase().includes(t)
+    );
+    if (matchUnidadeMorador) return true;
+
+    // 2. NOME DE MORADORES
+    const matchNomeMorador = item.moradores.some(m => 
+      (m.nome || '').toLowerCase().includes(t)
+    );
+    if (matchNomeMorador) return true;
+
+    // 3. PLACA DE VEÍCULO
+    const tLimpo = t.replace(/[^a-z0-9]/gi, '');
+    const matchPlaca = item.moradores.some(m => {
+      if (!m.veiculo_placa) return false;
+      const plk = m.veiculo_placa.toLowerCase();
+      const plkLimpa = plk.replace(/[^a-z0-9]/gi, '');
+      return plk.includes(t) || (tLimpo.length >= 2 && plkLimpa.includes(tLimpo));
+    });
+    if (matchPlaca) return true;
+
+    // NADA MAIS: Não filtra por telefone, tag RFID, CPF, etc.
+    return false;
+  };
+
+  const matchBuscaItemMorador = (m: any, termo: string): boolean => {
+    if (!termo) return true;
+    const t = termo.trim().toLowerCase();
+    if (!t) return true;
+
+    // 1. UNIDADE
+    const und = (m.unidade || '').toString().toLowerCase();
+    if (und === t || und.includes(t) || saoUnidadesEquivalentes(m.unidade, t)) return true;
+
+    // 2. NOME DO MORADOR
+    if ((m.nome || '').toLowerCase().includes(t)) return true;
+
+    // 3. PLACA DE VEÍCULO
+    if (m.veiculo_placa) {
+      const plk = m.veiculo_placa.toLowerCase();
+      const tLimpo = t.replace(/[^a-z0-9]/gi, '');
+      const plkLimpa = plk.replace(/[^a-z0-9]/gi, '');
+      if (plk.includes(t) || (tLimpo.length >= 2 && plkLimpa.includes(tLimpo))) return true;
+    }
+
+    // NADA MAIS
+    return false;
+  };
 
   return (
     <div className="space-y-4 pb-12">
@@ -1694,15 +1757,26 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
 
             {/* Linha de Busca e Navegador de Faixas de Casas */}
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-2 border-t border-slate-100 flex-wrap">
-              <div className="relative flex-1 min-w-[220px] max-w-sm">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <div className="relative flex-1 min-w-[240px] max-w-md">
+                <Search className="w-4 h-4 text-emerald-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={termoBuscaMorador}
                   onChange={(e) => setTermoBuscaMorador(e.target.value)}
-                  placeholder={eEstruturaCasasAtivo ? "Buscar casa (ex: 15), morador, telefone, placa..." : "Buscar unidade, morador, telefone..."}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-purple-500 font-medium"
+                  placeholder="Buscar: unidade, moradores ou placa..."
+                  title="Busca restrita a: Unidade, Nome de Moradores e Placa de Veículo (nada mais)"
+                  className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-bold placeholder:text-slate-400 placeholder:font-normal transition shadow-2xs"
                 />
+                {termoBuscaMorador && (
+                  <button
+                    type="button"
+                    onClick={() => setTermoBuscaMorador('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+                    title="Limpar busca"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Navegação Rápida por Faixa de Casas (Ex: 01-30, 31-60, 61-90, 91-117) */}
@@ -1795,18 +1869,15 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                           if (faixaCasasFiltro === '91_120' && num < 91) return false;
                         }
                       }
-                      if (termoBuscaMorador.trim()) {
-                        const t = termoBuscaMorador.trim().toLowerCase();
-                        const num = item.unidade.numero.toLowerCase();
-                        const lbl = item.unidade.label.toLowerCase();
-                        const matchNum = num === t || num.includes(t) || lbl.includes(t);
-                        const matchMorador = item.moradores.some(m => 
-                          (m.nome || '').toLowerCase().includes(t) || 
-                          (m.telefone || '').includes(t)
-                        );
-                        return matchNum || matchMorador;
+                      if (filtroStatusAcesso !== 'todos') {
+                        const temAcesso = item.moradores.some(m => (m.status_acesso || 'liberado') === filtroStatusAcesso);
+                        if (!temAcesso) return false;
                       }
-                      return true;
+                      if (filtroTipoMorador !== 'todos') {
+                        const temTipo = item.moradores.some(m => (m.tipo || 'Morador') === filtroTipoMorador);
+                        if (!temTipo) return false;
+                      }
+                      return matchBuscaUnidadeMoradorPlaca(item, termoBuscaMorador);
                     }).length}
                   </strong>{' '}
                   de {contadoresUnidades.total} {eEstruturaCasasAtivo ? 'casas' : 'unidades'}
@@ -1836,135 +1907,90 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                       const temTipo = item.moradores.some(m => (m.tipo || 'Morador') === filtroTipoMorador);
                       if (!temTipo) return false;
                     }
-                    if (termoBuscaMorador.trim()) {
-                      const t = termoBuscaMorador.trim().toLowerCase();
-                      const num = item.unidade.numero.toLowerCase();
-                      const lbl = item.unidade.label.toLowerCase();
-                      const matchNum = num === t || num.includes(t) || lbl.includes(t);
-                      const matchMorador = item.moradores.some(m => 
-                        (m.nome || '').toLowerCase().includes(t) || 
-                        (m.telefone || '').includes(t) ||
-                        (m.tag_rfid || '').toLowerCase().includes(t) ||
-                        (m.veiculo_placa || '').toLowerCase().includes(t)
-                      );
-                      return matchNum || matchMorador;
-                    }
-                    return true;
+                    return matchBuscaUnidadeMoradorPlaca(item, termoBuscaMorador);
                   })
                   .map((item) => {
-                    const temBloqueado = item.moradores.some(m => m.status_acesso === 'bloqueado');
-                    const tagsQtd = item.moradores.filter(m => m.tag_rfid).length;
-                    const veiculosQtd = item.moradores.filter(m => m.veiculo_placa).length;
+                    const placas: string[] = item.moradores
+                      .map((m: any) => m.veiculo_placa ? `${m.veiculo_placa}${m.veiculo_modelo ? ` (${m.veiculo_modelo})` : ''}` : null)
+                      .filter((p: string | null): p is string => Boolean(p));
 
                     return (
                       <div
                         key={item.unidade.id}
                         onClick={() => setUnidadeModalAberta(item)}
                         className={`rounded-2xl border p-3.5 shadow-2xs hover:shadow-md transition flex flex-col justify-between gap-3 cursor-pointer group select-none ${
-                          temBloqueado
-                            ? 'bg-rose-50/50 hover:bg-rose-50 border-rose-300'
-                            : item.ocupada 
-                            ? 'bg-white hover:bg-emerald-50/40 border-slate-200 hover:border-emerald-400' 
-                            : 'bg-slate-50/80 hover:bg-emerald-50/30 border-dashed border-slate-300 hover:border-emerald-400'
+                          item.ocupada 
+                            ? 'bg-white hover:bg-slate-50/80 border-slate-200 hover:border-slate-300' 
+                            : 'bg-slate-50/70 hover:bg-slate-100/70 border-dashed border-slate-300 hover:border-slate-400'
                         }`}
                       >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition ${
-                                temBloqueado
-                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                  : item.ocupada 
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-300 group-hover:scale-105' 
-                                  : 'bg-emerald-100/60 text-emerald-800 border border-emerald-300'
-                              }`}>
-                                <Home className={`w-4 h-4 ${item.ocupada ? 'text-amber-800' : 'text-emerald-700'}`} />
+                        <div className="space-y-2.5">
+                          {/* 1. UNIDADE */}
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xs shrink-0">
+                                <Home className="w-4 h-4 text-emerald-400" />
                               </div>
-
-                              <div className="min-w-0">
-                                <span className="text-xs sm:text-sm font-black text-slate-900 block truncate group-hover:text-emerald-950">
-                                  {eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}
-                                </span>
-                                <span className="text-[10px] text-slate-500 block truncate font-medium">
-                                  {item.ocupada ? `${item.moradores.length} ${item.moradores.length > 1 ? 'moradores cadastrados' : 'morador'}` : 'Casa disponível'}
-                                </span>
-                              </div>
+                              <span className="text-sm font-black text-slate-900 block truncate">
+                                {eEstruturaCasasAtivo ? `CASA ${item.unidade.numero}` : item.unidade.label}
+                              </span>
                             </div>
-
-                            <div className="shrink-0 flex items-center gap-1">
-                              {temBloqueado && (
-                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-rose-600 text-white flex items-center gap-0.5" title="Morador com acesso bloqueado">
-                                  <ShieldAlert className="w-3 h-3" /> Bloqueio
-                                </span>
-                              )}
-                              {item.ocupada ? (
-                                <span className="text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                  {item.moradores.length} {item.moradores.length > 1 ? 'Habitantes' : 'Habitante'}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-600 border border-slate-300">
-                                  Vaga
-                                </span>
-                              )}
-                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              item.ocupada 
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}>
+                              {item.ocupada ? 'Ocupada' : 'Disponível'}
+                            </span>
                           </div>
 
-                          {/* Credenciais e Indicadores de Controle de Acesso */}
-                          {item.ocupada && (
-                            <div className="space-y-1.5 pt-1">
-                              <div className="flex flex-wrap gap-1">
-                                {tagsQtd > 0 && (
-                                  <span className="text-[9px] font-extrabold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
-                                    <CreditCard className="w-2.5 h-2.5 text-indigo-600" /> {tagsQtd} {tagsQtd > 1 ? 'Tags' : 'Tag'}
-                                  </span>
-                                )}
-                                {veiculosQtd > 0 && (
-                                  <span className="text-[9px] font-extrabold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
-                                    <Car className="w-2.5 h-2.5 text-amber-700" /> {veiculosQtd} {veiculosQtd > 1 ? 'Veículos' : 'Veículo'}
-                                  </span>
-                                )}
+                          {/* 2. NOME DE MORADORES */}
+                          {item.ocupada && item.moradores.length > 0 ? (
+                            <div className="space-y-2">
+                              <div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                  Morador(es):
+                                </span>
+                                <div className="space-y-1">
+                                  {item.moradores.map((m: any) => (
+                                    <div key={m.id} className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                      <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      <span className="truncate">{m.nome}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="flex flex-wrap gap-1">
-                                {item.moradores.map((m: any) => {
-                                  const telClean = (m.telefone || '').replace(/\D/g, '');
-                                  return (
-                                    <span 
-                                      key={m.id} 
-                                      className="inline-flex items-center gap-1.5 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-800 px-2 py-0.5 rounded-full font-semibold truncate max-w-[150px] border border-slate-200"
-                                      title={`${m.nome} (${m.tipo || 'Morador'})`}
-                                    >
-                                      {m.foto_url ? (
-                                        <img src={m.foto_url} alt={m.nome} loading="lazy" decoding="async" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
-                                      ) : (
-                                        <span className="w-3.5 h-3.5 rounded-full bg-purple-200 text-purple-800 text-[8px] flex items-center justify-center font-black shrink-0">
-                                          {m.nome ? m.nome.charAt(0).toUpperCase() : 'M'}
-                                        </span>
-                                      )}
-                                      <span className="truncate">{m.nome.split(' ')[0]}</span>
-                                      {telClean && (
-                                        <a
-                                          href={`https://wa.me/55${telClean}`}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="text-emerald-600 hover:text-emerald-700 p-0.5"
-                                          title={`Conversar no WhatsApp (${m.telefone})`}
-                                        >
-                                          <MessageCircle className="w-2.5 h-2.5" />
-                                        </a>
-                                      )}
-                                    </span>
-                                  );
-                                })}
+
+                              {/* 3. PLACA DE VEÍCULO (NADA MAIS) */}
+                              <div className="pt-2 border-t border-slate-100">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                  Placa de Veículo:
+                                </span>
+                                {placas.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {placas.map((p: string, idx: number) => (
+                                      <span 
+                                        key={idx}
+                                        className="inline-flex items-center gap-1.5 font-mono font-black text-xs bg-amber-50 text-amber-950 px-2.5 py-1 rounded-lg border border-amber-300 shadow-2xs"
+                                      >
+                                        <Car className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                        <span>{p}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic">Sem veículo cadastrado</span>
+                                )}
                               </div>
                             </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic py-1">Nenhum morador cadastrado nesta unidade.</p>
                           )}
                         </div>
 
-                        {/* Rodapé do Card com Ação Direta 1-Clique */}
-                        <div className="pt-2 border-t border-slate-100">
-                          {!item.ocupada ? (
+                        {/* Ação simples se vaga */}
+                        {!item.ocupada && (
+                          <div className="pt-2 border-t border-slate-100">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1976,26 +2002,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                               <Plus className="w-3.5 h-3.5" />
                               <span>+ Cadastrar Morador</span>
                             </button>
-                          ) : (
-                            <div className="flex items-center justify-between gap-1 w-full text-xs">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  abrirNovoMorador({ numero: item.unidade.numero, bloco: item.unidade.bloco });
-                                }}
-                                className="py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold border border-emerald-200 transition flex items-center gap-1 cursor-pointer"
-                                title="Adicionar outro morador a esta casa"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>+ Morador</span>
-                              </button>
-                              <span className="text-[11px] text-slate-500 group-hover:text-emerald-700 font-bold flex items-center gap-0.5 transition">
-                                Ver Dossiê →
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2013,16 +2021,7 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                   .filter(m => {
                     if (filtroTipoMorador !== 'todos' && (m.tipo || 'Morador') !== filtroTipoMorador) return false;
                     if (filtroStatusAcesso !== 'todos' && (m.status_acesso || 'liberado') !== filtroStatusAcesso) return false;
-                    if (!termoBuscaMorador.trim()) return true;
-                    const termo = termoBuscaMorador.toLowerCase();
-                    const nm = (m.nome || '').toLowerCase();
-                    const und = (m.unidade || '').toString().toLowerCase();
-                    const blc = (m.bloco || '').toLowerCase();
-                    const tel = (m.telefone || '').toLowerCase();
-                    const tag = (m.tag_rfid || '').toLowerCase();
-                    const plk = (m.veiculo_placa || '').toLowerCase();
-                    const cpf = (m.cpf || '').toLowerCase();
-                    return nm.includes(termo) || und.includes(termo) || blc.includes(termo) || tel.includes(termo) || tag.includes(termo) || plk.includes(termo) || cpf.includes(termo);
+                    return matchBuscaItemMorador(m, termoBuscaMorador);
                   })
                   .map((m) => {
                     const telLimpo = (m.telefone || '').replace(/\D/g, '');
@@ -2860,7 +2859,8 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                               required
                               value={unidadeMorador}
                               onChange={(e) => setUnidadeMorador(e.target.value)}
-                              placeholder={eCasasModal ? "Ex: 01 ou 117" : "Ex: 101"}
+                              onBlur={() => setUnidadeMorador(autoCorrigirZeroEsquerda(unidadeMorador))}
+                              placeholder={eCasasModal ? "Ex: 01 ou 117" : "Ex: 01 ou 101"}
                               className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
                             />
                           </div>
