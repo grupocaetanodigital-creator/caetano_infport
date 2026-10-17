@@ -919,13 +919,14 @@ export default function App() {
             <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
               <button 
                 onClick={() => mudarModulo('dashboard')}
-                className="flex items-center gap-1 text-xs font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl shadow-xs transition cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-800 dark:border-slate-700 px-3.5 py-2 rounded-xl shadow-xs transition cursor-pointer"
+                title="Voltar ao Painel Principal"
               >
-                <ChevronLeft className="w-4 h-4" /> Voltar ao Painel
+                <ChevronLeft className="w-4 h-4 text-white shrink-0" />
+                <span className="text-white font-bold">Voltar ao Painel</span>
               </button>
 
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <SeletorTema />
                 <ControleFonteAcessibilidade />
                 <BotaoAtualizarApp />
                 <PWAInstallButton />
