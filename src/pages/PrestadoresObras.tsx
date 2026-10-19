@@ -1007,18 +1007,23 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       )}
 
       {/* NAVEGAÇÃO DE ABAS (Removida aba SQL da tela conforme instrução) */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2 border-b border-slate-800 pb-2 w-full">
         <button
           onClick={() => setAbaAtiva('dentro')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
+          className={`w-full py-2 px-1 sm:px-3 sm:py-2.5 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs md:text-sm font-black transition flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center ${
             abaAtiva === 'dentro'
               ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
               : 'bg-slate-850 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800'
           }`}
         >
-          <Timer className="w-4 h-4" />
-          <span>No Condomínio</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+          <div className="flex flex-col sm:flex-row items-center justify-center leading-tight">
+            <div className="flex items-center gap-1 shrink-0">
+              <Timer className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <span>No</span>
+            </div>
+            <span className="sm:ml-1">Condomínio</span>
+          </div>
+          <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shrink-0 ${
             totalEstourados > 0 
               ? 'bg-red-600 text-white animate-pulse' 
               : abaAtiva === 'dentro' ? 'bg-slate-950 text-purple-300' : 'bg-slate-800 text-slate-300'
@@ -1029,28 +1034,30 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
         <button
           onClick={() => setAbaAtiva('cadastros')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
+          className={`w-full py-2 px-1 sm:px-3 sm:py-2.5 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs md:text-sm font-black transition flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center ${
             abaAtiva === 'cadastros'
               ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
               : 'bg-slate-850 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>Liberados</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-900/60 text-slate-300">
+          <div className="flex items-center justify-center gap-1 leading-tight shrink-0">
+            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span>Liberados</span>
+          </div>
+          <span className="px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] bg-slate-900/60 text-slate-300 shrink-0">
             {cadastros.length}
           </span>
         </button>
 
         <button
           onClick={() => setAbaAtiva('historico')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black transition flex items-center gap-2 cursor-pointer ${
+          className={`w-full py-2 px-1 sm:px-3 sm:py-2.5 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs md:text-sm font-black transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center ${
             abaAtiva === 'historico'
               ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
               : 'bg-slate-850 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800'
           }`}
         >
-          <Clock className="w-4 h-4" />
+          <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
           <span>Histórico</span>
         </button>
       </div>
