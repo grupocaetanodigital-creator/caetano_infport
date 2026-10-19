@@ -3906,44 +3906,30 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           </div>
         ) : (
         <div className="space-y-4">
-          {/* Banner do Dossiê */}
-          <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 p-4 sm:p-5 rounded-2xl text-white border-2 border-purple-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider bg-purple-500/30 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-400/40 inline-flex items-center gap-1 mb-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" /> Auditoria Irrefutável de Encomendas
-              </span>
-              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                Dossiê Completo de Recebimento & Entrega com Fotos
-              </h3>
-              <p className="text-xs text-purple-200/80">
-                Histórico arquivado com foto da etiqueta de entrada e foto do morador/retirante na saída para resolver reclamações de extravio.
-              </p>
-            </div>
-
+          {/* Filtros e Busca Rápida com Botão de Atualizar Dossiê (apenas o ícone) */}
+          <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={buscaDossie}
+                  onChange={(e) => setBuscaDossie(e.target.value)}
+                  placeholder="Buscar por unidade, bloco, nome do morador, código de barras/rastreio ou quem retirou..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-600 focus:bg-white transition"
+                />
+              </div>
+
+              {/* Botão Atualizar Dossiê - Apenas o ícone */}
               <button
                 type="button"
                 onClick={carregarDossie}
                 disabled={loadingDossie}
-                className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
+                title="Atualizar Dossiê"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingDossie ? 'animate-spin' : ''}`} />
-                Atualizar Dossiê
+                <RefreshCw className={`w-4 h-4 ${loadingDossie ? 'animate-spin' : ''}`} />
               </button>
-            </div>
-          </div>
-
-          {/* Filtros e Busca Rápida */}
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-              <input
-                type="text"
-                value={buscaDossie}
-                onChange={(e) => setBuscaDossie(e.target.value)}
-                placeholder="Buscar por unidade, bloco, nome do morador, código de barras/rastreio ou quem retirou..."
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:border-purple-500"
-              />
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
