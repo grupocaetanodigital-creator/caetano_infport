@@ -102,19 +102,20 @@ export function formatarRG(rg: string): string {
  * Termos governamentais e de cabeçalhos que devem ser ignorados na extração de nome
  */
 export const STOP_WORDS_DOCUMENTOS = [
-  'REPUBLICA', 'FEDERATIVA', 'BRASIL', 'MINISTERIO', 'FAZENDA', 'RECEITA',
-  'FEDERAL', 'CARTEIRA', 'NACIONAL', 'HABILITACAO', 'IDENTIDADE', 'REGISTRO',
-  'GERAL', 'SECRETARIA', 'SEGURANCA', 'PUBLICA', 'DEPARTAMENTO', 'TRANSITO',
-  'DETRAN', 'INSTITUTO', 'IDENTIFICACAO', 'POLICIA', 'CIVIL', 'FILIACAO',
-  'PAI', 'MAE', 'NATURALIDADE', 'NACIONALIDADE', 'DATA', 'NASCIMENTO',
-  'EXPEDICAO', 'VALIDADE', 'OBSERVACOES', 'ASSINATURA', 'PORTADOR', 'VALIDA',
-  'TERRITORIO', 'VIA', 'CATEGORIA', 'HABILITADO', 'PERMISSAO', 'CONDUTOR',
-  'DOC', 'SSP', 'ORGAO', 'EMISSOR', 'BRASILEIRA', 'BRASILEIRO', 'SEXO',
+  'REPUBLICA', 'FEDERATIVA', 'BRASIL', 'MINISTERIO', 'MINISTÉRIO', 'FAZENDA', 'RECEITA',
+  'FEDERAL', 'CARTEIRA', 'NACIONAL', 'HABILITACAO', 'HABILITAÇÃO', 'IDENTIDADE', 'REGISTRO',
+  'GERAL', 'SECRETARIA', 'SEGURANCA', 'SEGURANÇA', 'PUBLICA', 'PÚBLICA', 'DEPARTAMENTO', 
+  'TRANSITO', 'TRÂNSITO', 'TRANSPORTES', 'SENATRAN', 'DENATRAN', 'DETRAN', 'INSTITUTO', 
+  'IDENTIFICACAO', 'IDENTIFICAÇÃO', 'POLICIA', 'POLÍCIA', 'CIVIL', 'FILIACAO', 'FILIAÇÃO',
+  'PAI', 'MAE', 'MÃE', 'NATURALIDADE', 'NACIONALIDADE', 'DATA', 'NASCIMENTO',
+  'EXPEDICAO', 'EXPEDIÇÃO', 'VALIDADE', 'OBSERVACOES', 'OBSERVAÇÕES', 'ASSINATURA', 'PORTADOR', 'VALIDA',
+  'TERRITORIO', 'TERRITÓRIO', 'VIA', 'CATEGORIA', 'HABILITADO', 'PERMISSAO', 'PERMISSÃO', 'CONDUTOR',
+  'DOC', 'SSP', 'ORGAO', 'ÓRGÃO', 'EMISSOR', 'BRASILEIRA', 'BRASILEIRO', 'SEXO',
   'ESTADO', 'PREFEITURA', 'GOVERNO', 'CONSELHO', 'REGIONAL', 'LOCAL',
-  'MATRICULA', 'CHAVE', 'CODIGO', 'ACESSO', 'AUTORIZADO', 'VISITANTE',
-  'EMPRESA', 'SERVICO', 'PORTARIA', 'SISTEMA', 'CARTAO', 'CRACHA',
-  'POLEGAR', 'DIREITO', 'ASSINATURA', 'DIRETOR', 'TITULAR', 'SUBSTITUTO',
-  'INSTITUTO', 'INSTITUTO DE IDENTIFICACAO', 'VÁLIDA EM TODO', 'TERRITÓRIO NACIONAL'
+  'MATRICULA', 'MATRÍCULA', 'CHAVE', 'CODIGO', 'CÓDIGO', 'ACESSO', 'AUTORIZADO', 'VISITANTE',
+  'EMPRESA', 'SERVICO', 'SERVIÇO', 'PORTARIA', 'SISTEMA', 'CARTAO', 'CARTÃO', 'CRACHA', 'CRACHÁ',
+  'POLEGAR', 'DIREITO', 'DIRETOR', 'TITULAR', 'SUBSTITUTO', 'DRIVER', 'LICENSE', 'PERMISO', 'CONDUCCION', 'CONDUCCIÓN',
+  'TRERUBLICA', 'MINTETERTO', 'MINTÊTERTOS', 'NAGIONALOE', 'TRANSPOR', 'SOBRENOME', 'VÁLIDA EM TODO'
 ];
 
 /**
@@ -492,7 +493,21 @@ export function extrairDadosDocumento(textoBruto: string): DadosDocumentoExtraid
   const textoUpper = textoBruto.toUpperCase();
 
   // 1. Identificar o tipo do documento
-  if (textoUpper.includes('HABILITACAO') || textoUpper.includes('CNH') || textoUpper.includes('CONDUTOR') || textoUpper.includes('DETRAN')) {
+  if (
+    textoUpper.includes('HABILITACAO') || 
+    textoUpper.includes('HABILITAÇÃO') || 
+    textoUpper.includes('CNH') || 
+    textoUpper.includes('CONDUTOR') || 
+    textoUpper.includes('DETRAN') ||
+    textoUpper.includes('SENATRAN') ||
+    textoUpper.includes('DENATRAN') ||
+    textoUpper.includes('TRANSPORTES') ||
+    textoUpper.includes('TRANSPOR') ||
+    textoUpper.includes('DRIVER') ||
+    textoUpper.includes('PERMISO') ||
+    textoUpper.includes('TRANSITO') ||
+    textoUpper.includes('TRÂNSITO')
+  ) {
     tipoDetectado = 'CNH';
   } else if (textoUpper.includes('REGISTRO GERAL') || textoUpper.includes('SECRETARIA DE SEGURANCA') || textoUpper.includes('IDENTIDADE') || textoUpper.includes('SSP')) {
     tipoDetectado = 'RG';
@@ -513,7 +528,7 @@ export function extrairDadosDocumento(textoBruto: string): DadosDocumentoExtraid
   // 4. Extração de CNH Registro
   let cnhRegistroEncontrado: string | null = null;
   if (tipoDetectado === 'CNH') {
-    const matchReg = textoBruto.match(/(?:REGISTRO|Nº\s*REGISTRO|N°\s*REGISTRO)[\s:]*([0-9OIZESAB]{11})/i);
+    const matchReg = textoBruto.match(/(?:REGISTRO|Nº\s*REGISTRO|N°\s*REGISTRO|5\s*N)[\s:]*([0-9OIZESAB]{11})/i);
     if (matchReg && matchReg[1]) {
       cnhRegistroEncontrado = corrigirErrosOcrNumeros(matchReg[1]);
     }
@@ -543,21 +558,30 @@ export function extrairDadosDocumento(textoBruto: string): DadosDocumentoExtraid
   // 6. Extração de Nome Completo do Titular
   let nomeCompleto = '';
 
-  // Procura rótulo "NOME" no texto (evitando a filiação)
+  // Procura rótulo "NOME" ou "2 e 1 NOME E SOBRENOME" no texto (evitando a filiação)
   for (let i = 0; i < linhasBrutas.length; i++) {
     const linha = linhasBrutas[i];
     const linhaUpper = linha.toUpperCase();
 
-    // Evita capturar nomes de pais no campo filiação
-    if (linhaUpper.includes('FILIACAO') || linhaUpper.includes('FILIAÇÃO') || linhaUpper.includes('PAI') || linhaUpper.includes('MAE') || linhaUpper.includes('MÃE')) {
-      continue;
+    // Se chegou na filiação, interrompe a busca de nome para não capturar pais
+    if (linhaUpper.includes('FILIACAO') || linhaUpper.includes('FILIAÇÃO')) {
+      break;
     }
 
-    if (linhaUpper.includes('NOME') || linhaUpper.includes('CONDUTOR') || linhaUpper.includes('TITULAR')) {
-      let candidata = '';
-      if (linha.includes(':')) {
-        candidata = linha.split(':')[1] || '';
-      } else if (i + 1 < linhasBrutas.length) {
+    if (
+      linhaUpper.includes('NOME') || 
+      linhaUpper.includes('SOBRENOME') || 
+      linhaUpper.includes('2 E 1') || 
+      linhaUpper.includes('CONDUTOR') || 
+      linhaUpper.includes('TITULAR')
+    ) {
+      let candidata = linha;
+      // Remove o rótulo CNH (ex: "2 e 1 NOME E SOBRENOME" ou "1. NOME:")
+      candidata = candidata.replace(/^(?:2\s*e\s*1\s*)?NOME(?:\s*E\s*SOBRENOME)?\s*[:.-]?\s*/i, '');
+      if (candidata.includes(':')) {
+        candidata = candidata.split(':')[1] || '';
+      }
+      if (!candidata.trim() && i + 1 < linhasBrutas.length) {
         candidata = linhasBrutas[i + 1];
       }
 
@@ -570,10 +594,12 @@ export function extrairDadosDocumento(textoBruto: string): DadosDocumentoExtraid
     }
   }
 
-  // Se não achou com rótulo explícito, busca a primeira linha com formato de nome próprio válido
+  // Se não achou com rótulo explícito, busca a primeira linha com formato de nome próprio válido antes de filiação
   if (!nomeCompleto) {
     for (const linha of linhasBrutas) {
-      if (linha.toUpperCase().includes('FILIACAO') || linha.toUpperCase().includes('FILIAÇÃO')) continue;
+      const linhaUpper = linha.toUpperCase();
+      if (linhaUpper.includes('FILIACAO') || linhaUpper.includes('FILIAÇÃO')) break;
+
       const sanitizada = sanitizarNomeTitular(linha);
       const partes = sanitizada.split(' ').filter(p => p.length >= 2);
 
@@ -628,6 +654,48 @@ export function extrairDadosDocumento(textoBruto: string): DadosDocumentoExtraid
 }
 
 /**
+ * Recorta a foto com base em coordenadas normalizadas [0..1]
+ */
+export function recortarFotoPorCoordenadas(
+  canvasDoc: HTMLCanvasElement,
+  ymin: number,
+  xmin: number,
+  ymax: number,
+  xmax: number
+): string | undefined {
+  try {
+    const w = canvasDoc.width;
+    const h = canvasDoc.height;
+
+    // Converte coordenadas relativas com margem de segurança
+    const cropX = Math.max(0, Math.round(xmin * w));
+    const cropY = Math.max(0, Math.round(ymin * h));
+    const cropW = Math.min(w - cropX, Math.round((xmax - xmin) * w));
+    const cropH = Math.min(h - cropY, Math.round((ymax - ymin) * h));
+
+    if (cropW < 20 || cropH < 20) return undefined;
+
+    const faceCanvas = document.createElement('canvas');
+    faceCanvas.width = 240;
+    faceCanvas.height = 300;
+    const fCtx = faceCanvas.getContext('2d');
+    if (!fCtx) return undefined;
+
+    fCtx.imageSmoothingEnabled = true;
+    fCtx.imageSmoothingQuality = 'high';
+    fCtx.drawImage(
+      canvasDoc,
+      cropX, cropY, cropW, cropH,
+      0, 0, faceCanvas.width, faceCanvas.height
+    );
+
+    return faceCanvas.toDataURL('image/jpeg', 0.90);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Recorta a foto do rosto do titular com base nas proporções do documento brasileiro
  */
 export function recortarFotoTitular(
@@ -638,13 +706,20 @@ export function recortarFotoTitular(
     const w = canvasDoc.width;
     const h = canvasDoc.height;
 
-    // Na CNH e RG a foto fica predominantemente no terço esquerdo
     let cropX = Math.round(w * 0.04);
     let cropY = Math.round(h * 0.12);
     let cropW = Math.round(w * 0.36);
     let cropH = Math.round(h * 0.68);
 
-    if (tipo === 'CRACHA') {
+    if (tipo === 'CNH') {
+      // Na CNH (Nova CNH 2022-2026 e Tradicional):
+      // A foto fica após a faixa verde lateral de segurança (inicia em ~19% da largura)
+      // e ocupa de ~36% a ~78% da altura
+      cropX = Math.round(w * 0.19);
+      cropY = Math.round(h * 0.36);
+      cropW = Math.round(w * 0.25);
+      cropH = Math.round(h * 0.42);
+    } else if (tipo === 'CRACHA') {
       // No crachá vertical a foto costuma ficar no topo central
       cropX = Math.round(w * 0.25);
       cropY = Math.round(h * 0.10);
@@ -658,13 +733,15 @@ export function recortarFotoTitular(
     const fCtx = faceCanvas.getContext('2d');
     if (!fCtx) return undefined;
 
+    fCtx.imageSmoothingEnabled = true;
+    fCtx.imageSmoothingQuality = 'high';
     fCtx.drawImage(
       canvasDoc,
       cropX, cropY, cropW, cropH,
       0, 0, faceCanvas.width, faceCanvas.height
     );
 
-    return faceCanvas.toDataURL('image/jpeg', 0.88);
+    return faceCanvas.toDataURL('image/jpeg', 0.90);
   } catch {
     return undefined;
   }
@@ -673,7 +750,7 @@ export function recortarFotoTitular(
 /**
  * Executa o fluxo completo de OCR:
  * 1. Pré-processa a imagem (Redimensionamento + Escala de Cinza + Binarização de Otsu)
- * 2. Tenta API Gemini 2.5 Flash no backend (se disponível)
+ * 2. Tenta API Gemini no backend (se disponível)
  * 3. Fallback inteligente e resiliente para o motor Tesseract.js (100% gratuito e local para PWA)
  * 4. Pós-processa com validação matemática Módulo 11 e substituições regex
  */
@@ -693,7 +770,7 @@ export async function executarOCRCompleto(
 
   // Tentativa 1: IA Gemini no backend (se configurada)
   try {
-    onProgresso?.(40, 'Consultando reconhecimento de alta precisão...');
+    onProgresso?.(40, 'Consultando reconhecimento de alta precisão com IA...');
     const respostaApi = await fetch('/api/ocr-documento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -703,22 +780,31 @@ export async function executarOCRCompleto(
     if (respostaApi.ok) {
       const dadosGemini = await respostaApi.json();
       if (dadosGemini && (dadosGemini.nomeCompleto || dadosGemini.documentoFormatado)) {
-        onProgresso?.(90, 'Extraindo fotos e calibração...');
-        const fotoRosto = recortarFotoTitular(imgOriginal.canvas, dadosGemini.tipoDocumento);
+        onProgresso?.(90, 'Extraindo fotos e calibração das zonas...');
+        
+        let fotoRosto: string | undefined = undefined;
+        if (dadosGemini.boxRosto && Array.isArray(dadosGemini.boxRosto) && dadosGemini.boxRosto.length === 4) {
+          const [ymin, xmin, ymax, xmax] = dadosGemini.boxRosto;
+          fotoRosto = recortarFotoPorCoordenadas(imgOriginal.canvas, ymin, xmin, ymax, xmax);
+        }
+        if (!fotoRosto) {
+          fotoRosto = recortarFotoTitular(imgOriginal.canvas, dadosGemini.tipoDocumento);
+        }
+
         onProgresso?.(100, 'OCR com IA concluído com sucesso!');
 
         return {
-          tipoDocumento: dadosGemini.tipoDocumento || 'CPF',
+          tipoDocumento: dadosGemini.tipoDocumento || 'CNH',
           nomeCompleto: dadosGemini.nomeCompleto || '',
           documentoFormatado: dadosGemini.documentoFormatado || '',
           numeroLimpo: dadosGemini.numeroLimpo || '',
           cpfValidado: Boolean(dadosGemini.cpfValidado),
-          rgValido: Boolean(dadosGemini.rgValido),
+          rgValido: Boolean(dadosGemini.rgValido || dadosGemini.rg),
           cnhRegistro: dadosGemini.cnhRegistro,
           empresaSugerida: dadosGemini.empresaSugerida,
           fotoDocumentoBase64: fotoDocBase64,
           fotoRostoBase64: fotoRosto,
-          confianca: dadosGemini.confianca || 98,
+          confianca: dadosGemini.confianca || 99,
           numerosRejeitados: [],
           metodoUtilizado: 'IA_GEMINI'
         };
