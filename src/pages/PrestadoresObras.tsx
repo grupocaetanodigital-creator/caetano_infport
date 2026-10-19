@@ -959,9 +959,6 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Controle de Visitantes, Familiares, Prestadores de Unidade e Manutenção Predial.
-            </p>
           </div>
         </div>
 
@@ -983,9 +980,10 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
               setModalNovoCadastro(true);
             }}
             className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs uppercase flex items-center gap-1.5 transition shadow-md active:scale-95 cursor-pointer"
+            title="Liberação de Acesso"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Nova Liberação / Cadastro</span>
+            <span>Liberação</span>
           </button>
         </div>
       </div>
