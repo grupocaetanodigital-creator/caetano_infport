@@ -401,6 +401,10 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     nomeCompleto: string;
     documento: string;
     tipoDocumento: string;
+    cpf?: string;
+    rg?: string;
+    cnhRegistro?: string;
+    validade?: string;
     fotoDocumentoBase64?: string;
     fotoRostoBase64?: string;
     empresa?: string;
@@ -412,7 +416,10 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
     if (dados.fotoRostoBase64) setFotoRosto(dados.fotoRostoBase64);
     if (dados.empresa && !empresa) setEmpresa(dados.empresa);
     setModalOcrAberto(false);
-    setMensagem({ tipo: 'sucesso', texto: 'Dados do documento e foto extraídos com sucesso via OCR!' });
+    setMensagem({ 
+      tipo: 'sucesso', 
+      texto: `Documento extraído com sucesso! Titular: ${dados.nomeCompleto} | Doc: ${dados.documento}` 
+    });
   };
 
   // Upload manual de foto do rosto otimizada
@@ -1643,7 +1650,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
             <form onSubmit={modalEditarCadastro ? salvarEdicaoCadastro : salvarCadastro} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className={perfilAcesso === 'autorizado' ? 'sm:col-span-3' : 'sm:col-span-2'}>
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-black uppercase text-slate-300 mb-1">
                     Nome Completo <span className="text-red-400">*</span>
                   </label>
@@ -1657,21 +1664,20 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                   />
                 </div>
 
-                {perfilAcesso !== 'autorizado' && (
-                  <div>
-                    <label className="block text-xs font-black uppercase text-slate-400 mb-1">
-                      Leitor Inteligente OCR
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setModalOcrAberto(true)}
-                      className="w-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-bold text-xs p-2.5 rounded-xl border border-indigo-500/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    >
-                      <Scan className="w-4 h-4 text-indigo-400" />
-                      <span>Ler Documento</span>
-                    </button>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-xs font-black uppercase text-indigo-400 mb-1 flex items-center justify-between">
+                    <span>Leitor OCR</span>
+                    <span className="text-[10px] text-emerald-400 font-normal">CNH / RG</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setModalOcrAberto(true)}
+                    className="w-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 font-bold text-xs p-3 rounded-xl border border-indigo-500/50 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <Scan className="w-4 h-4 text-indigo-400" />
+                    <span>Ler Documento</span>
+                  </button>
+                </div>
               </div>
 
               {/* Documento e Empresa / Parentesco com Opções Padronizadas */}

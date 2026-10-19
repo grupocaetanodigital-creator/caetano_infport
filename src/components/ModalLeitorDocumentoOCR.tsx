@@ -39,6 +39,10 @@ interface ModalLeitorDocumentoOCRProps {
     nomeCompleto: string;
     documento: string;
     tipoDocumento: string;
+    cpf?: string;
+    rg?: string;
+    cnhRegistro?: string;
+    validade?: string;
     fotoDocumentoBase64?: string;
     fotoRostoBase64?: string;
     empresa?: string;
@@ -110,6 +114,8 @@ export default function ModalLeitorDocumentoOCR({
   // Estados dos dados extraídos e conferência
   const [dadosOcr, setDadosOcr] = useState<DadosDocumentoExtraidos | null>(null);
   const [nomeEditado, setNomeEditado] = useState('');
+  const [cpfEditado, setCpfEditado] = useState('');
+  const [rgEditado, setRgEditado] = useState('');
   const [documentoEditado, setDocumentoEditado] = useState('');
   const [tipoDocEditado, setTipoDocEditado] = useState('CPF');
   const [fotoDocPreview, setFotoDocPreview] = useState<string | undefined>(undefined);
@@ -283,9 +289,17 @@ export default function ModalLeitorDocumentoOCR({
       });
 
       setDadosOcr(resultado);
-      setNomeEditado(resultado.nomeCompleto);
-      setDocumentoEditado(resultado.documentoFormatado);
-      setTipoDocEditado(resultado.tipoDocumento !== 'DESCONHECIDO' ? resultado.tipoDocumento : 'CPF');
+      const nomeVal = (resultado.nome || resultado.nomeCompleto || '').trim();
+      const cpfVal = (resultado.cpf || (resultado.cpfValidado ? resultado.documentoFormatado : '')).trim();
+      const rgVal = (resultado.rg || (resultado.rgValido ? resultado.documentoFormatado : '')).trim();
+
+      setNomeEditado(nomeVal);
+      setCpfEditado(cpfVal);
+      setRgEditado(rgVal);
+
+      const docPrincipal = cpfVal || rgVal || resultado.documentoFormatado || '';
+      setDocumentoEditado(docPrincipal);
+      setTipoDocEditado(resultado.tipoDocumento !== 'DESCONHECIDO' ? resultado.tipoDocumento : (cpfVal ? 'CPF' : 'RG'));
       setFotoDocPreview(resultado.fotoDocumentoBase64);
       setFotoRostoPreview(resultado.fotoRostoBase64);
 
@@ -320,7 +334,7 @@ export default function ModalLeitorDocumentoOCR({
   };
 
   const handleConfirmar = () => {
-    const docLimpo = documentoEditado.trim();
+    const docLimpo = documentoEditado.trim() || cpfEditado.trim() || rgEditado.trim();
     const nomeLimpo = nomeEditado.trim();
 
     if (!docLimpo) {
@@ -332,6 +346,10 @@ export default function ModalLeitorDocumentoOCR({
       nomeCompleto: nomeLimpo,
       documento: docLimpo,
       tipoDocumento: tipoDocEditado,
+      cpf: cpfEditado.trim() || undefined,
+      rg: rgEditado.trim() || undefined,
+      cnhRegistro: dadosOcr?.cnhRegistro,
+      validade: dadosOcr?.validade,
       fotoDocumentoBase64: fotoDocPreview,
       fotoRostoBase64: fotoRostoPreview,
       empresa: dadosOcr?.empresaSugerida
@@ -634,55 +652,160 @@ export default function ModalLeitorDocumentoOCR({
 
             {/* Campos de Conferência e Ajuste Rápido */}
             <div className="space-y-3 bg-slate-950/80 p-4 rounded-2xl border border-slate-800">
+              {/* 1. Nome do Titular */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase mb-1 flex items-center justify-between">
-                  <span>Nome Completo do Titular *</span>
-                  <span className="text-[10px] text-emerald-400 font-normal">Correção de letras ativada</span>
+                  <span>Nome do Titular *</span>
+                  <span className="text-[10px] text-emerald-400 font-normal">Campo '2 e 1 NOME E SOBRENOME'</span>
                 </label>
                 <input
                   type="text"
                   value={nomeEditado}
                   onChange={(e) => setNomeEditado(e.target.value)}
-                  placeholder="Nome do profissional"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:outline-hidden focus:border-emerald-500"
+                  placeholder="Nome do titular"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-bold uppercase focus:outline-hidden focus:border-emerald-500 tracking-wide"
                   required
                 />
               </div>
 
+              {/* 2. CPF e RG Lados a Lado */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Campo CPF (4d) */}
+                <div className={`p-2.5 rounded-xl border transition ${
+                  documentoEditado === cpfEditado && cpfEditado
+                    ? 'bg-emerald-950/40 border-emerald-500/60'
+                    : 'bg-slate-900/60 border-slate-800'
+                }`}>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1 flex items-center justify-between">
+                    <span>4d CPF</span>
+                    {validarCPF(cpfEditado) ? (
+                      <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" /> Válido
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">11 dígitos</span>
+                    )}
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={cpfEditado}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const limpo = val.replace(/\D/g, '');
+                        const formatado = limpo.length === 11 && validarCPF(limpo) ? formatarCPF(limpo) : val;
+                        setCpfEditado(formatado);
+                        if (documentoEditado === cpfEditado) {
+                          setDocumentoEditado(formatado);
+                        }
+                      }}
+                      placeholder="000.000.000-00"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white font-bold focus:outline-hidden focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocumentoEditado(cpfEditado);
+                        setTipoDocEditado('CPF');
+                      }}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg transition whitespace-nowrap cursor-pointer ${
+                        documentoEditado === cpfEditado
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'bg-slate-800 hover:bg-slate-700 text-emerald-300'
+                      }`}
+                      title="Usar CPF como Documento Principal"
+                    >
+                      {documentoEditado === cpfEditado ? 'Principal' : 'Usar'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Campo RG (4c) */}
+                <div className={`p-2.5 rounded-xl border transition ${
+                  documentoEditado === rgEditado && rgEditado
+                    ? 'bg-blue-950/40 border-blue-500/60'
+                    : 'bg-slate-900/60 border-slate-800'
+                }`}>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1 flex items-center justify-between">
+                    <span>4c Doc. Identidade / RG</span>
+                    <span className="text-[10px] text-blue-400 font-bold bg-blue-950/80 px-1.5 py-0.5 rounded border border-blue-500/30">
+                      Órgão / UF
+                    </span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={rgEditado}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRgEditado(val);
+                        if (documentoEditado === rgEditado) {
+                          setDocumentoEditado(val);
+                        }
+                      }}
+                      placeholder="43048684 SSP/SP"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white font-bold focus:outline-hidden focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocumentoEditado(rgEditado);
+                        setTipoDocEditado('RG');
+                      }}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg transition whitespace-nowrap cursor-pointer ${
+                        documentoEditado === rgEditado
+                          ? 'bg-blue-500 text-slate-950'
+                          : 'bg-slate-800 hover:bg-slate-700 text-blue-300'
+                      }`}
+                      title="Usar RG como Documento Principal"
+                    >
+                      {documentoEditado === rgEditado ? 'Principal' : 'Usar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Documento Principal Ativo para o Cadastro */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase mb-1 flex items-center justify-between">
-                  <span>Número do Documento (CPF / RG) *</span>
-                  {validarCPF(documentoEditado) ? (
-                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> CPF Válido (Módulo 11)
-                    </span>
-                  ) : validarRG(documentoEditado) ? (
-                    <span className="text-[10px] text-blue-400 font-bold bg-blue-950/80 px-2 py-0.5 rounded border border-blue-500/30 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Registro Geral (RG)
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" /> Verifique os dígitos
-                    </span>
-                  )}
+                  <span>Documento Selecionado para Liberação *</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Tipo: {tipoDocEditado}</span>
                 </label>
                 <input
                   type="text"
                   value={documentoEditado}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const limpo = val.replace(/\D/g, '');
-                    if (limpo.length === 11 && validarCPF(limpo)) {
-                      setDocumentoEditado(formatarCPF(limpo));
-                    } else {
-                      setDocumentoEditado(val);
-                    }
-                  }}
-                  placeholder="000.000.000-00 ou RG"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-white font-bold focus:outline-hidden focus:border-emerald-500"
+                  onChange={(e) => setDocumentoEditado(e.target.value)}
+                  placeholder="Número que será salvo no cadastro"
+                  className="w-full bg-slate-900 border border-emerald-500/50 rounded-xl px-3.5 py-2 text-sm font-mono text-emerald-400 font-black focus:outline-hidden focus:border-emerald-400"
                   required
                 />
               </div>
+
+              {/* Metadados Adicionais da CNH (Registro, Validade, Categoria) */}
+              {(dadosOcr?.cnhRegistro || dadosOcr?.validade || dadosOcr?.categoria || dadosOcr?.dataNascimento) && (
+                <div className="bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl flex flex-wrap items-center gap-2 text-[11px]">
+                  {dadosOcr.cnhRegistro && (
+                    <span className="bg-slate-950 px-2 py-1 rounded-md border border-slate-700 text-slate-300 font-mono">
+                      <strong className="text-purple-400">5 Registro:</strong> {dadosOcr.cnhRegistro}
+                    </span>
+                  )}
+                  {dadosOcr.validade && (
+                    <span className="bg-slate-950 px-2 py-1 rounded-md border border-slate-700 text-slate-300 font-mono">
+                      <strong className="text-emerald-400">4b Validade:</strong> {dadosOcr.validade}
+                    </span>
+                  )}
+                  {dadosOcr.categoria && (
+                    <span className="bg-slate-950 px-2 py-1 rounded-md border border-slate-700 text-slate-300 font-mono">
+                      <strong className="text-amber-400">9 Cat:</strong> {dadosOcr.categoria}
+                    </span>
+                  )}
+                  {dadosOcr.dataNascimento && (
+                    <span className="bg-slate-950 px-2 py-1 rounded-md border border-slate-700 text-slate-300 font-mono">
+                      <strong className="text-blue-400">3 Nasc:</strong> {dadosOcr.dataNascimento}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Informação sobre Proteção Anti-Números Aleatórios */}
               {dadosOcr?.numerosRejeitados && dadosOcr.numerosRejeitados.length > 0 && (

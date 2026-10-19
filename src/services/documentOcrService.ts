@@ -22,11 +22,17 @@
 export interface DadosDocumentoExtraidos {
   tipoDocumento: 'CPF' | 'RG' | 'CNH' | 'CIN' | 'CRACHA' | 'DESCONHECIDO';
   nomeCompleto: string;
+  nome?: string;
+  cpf?: string;
+  rg?: string;
   documentoFormatado: string;
   numeroLimpo: string;
   cpfValidado: boolean;
   rgValido: boolean;
   cnhRegistro?: string;
+  validade?: string;
+  categoria?: string;
+  dataNascimento?: string;
   empresaSugerida?: string;
   fotoDocumentoBase64?: string;
   fotoRostoBase64?: string;
@@ -779,7 +785,7 @@ export async function executarOCRCompleto(
 
     if (respostaApi.ok) {
       const dadosGemini = await respostaApi.json();
-      if (dadosGemini && (dadosGemini.nomeCompleto || dadosGemini.documentoFormatado)) {
+      if (dadosGemini && (dadosGemini.nome || dadosGemini.nomeCompleto || dadosGemini.cpf || dadosGemini.rg || dadosGemini.documentoFormatado)) {
         onProgresso?.(90, 'Extraindo fotos e calibração das zonas...');
         
         let fotoRosto: string | undefined = undefined;
@@ -793,14 +799,26 @@ export async function executarOCRCompleto(
 
         onProgresso?.(100, 'OCR com IA concluído com sucesso!');
 
+        const nomeFinal = (dadosGemini.nome || dadosGemini.nomeCompleto || '').trim();
+        const cpfFinal = (dadosGemini.cpf || '').trim();
+        const rgFinal = (dadosGemini.rg || '').trim();
+        const docFormatadoFinal = cpfFinal || rgFinal || dadosGemini.documentoFormatado || '';
+        const numeroLimpoFinal = (cpfFinal || rgFinal || dadosGemini.numeroLimpo || '').replace(/\D/g, '');
+
         return {
           tipoDocumento: dadosGemini.tipoDocumento || 'CNH',
-          nomeCompleto: dadosGemini.nomeCompleto || '',
-          documentoFormatado: dadosGemini.documentoFormatado || '',
-          numeroLimpo: dadosGemini.numeroLimpo || '',
-          cpfValidado: Boolean(dadosGemini.cpfValidado),
-          rgValido: Boolean(dadosGemini.rgValido || dadosGemini.rg),
+          nomeCompleto: nomeFinal,
+          nome: nomeFinal,
+          cpf: cpfFinal,
+          rg: rgFinal,
+          documentoFormatado: docFormatadoFinal,
+          numeroLimpo: numeroLimpoFinal,
+          cpfValidado: Boolean(dadosGemini.cpfValidado || (cpfFinal && cpfFinal.length >= 11)),
+          rgValido: Boolean(dadosGemini.rgValido || rgFinal),
           cnhRegistro: dadosGemini.cnhRegistro,
+          validade: dadosGemini.validade,
+          categoria: dadosGemini.categoria,
+          dataNascimento: dadosGemini.dataNascimento,
           empresaSugerida: dadosGemini.empresaSugerida,
           fotoDocumentoBase64: fotoDocBase64,
           fotoRostoBase64: fotoRosto,
