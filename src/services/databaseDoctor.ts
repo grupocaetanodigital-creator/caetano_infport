@@ -277,7 +277,7 @@ export function generateMigrationSql(): string {
 
 BEGIN;
 
--- 0. Garantir colunas de parametrização e JSONB na tabela configuracoes (incluindo RBAC e todos os 13 módulos)
+-- 0. Garantir colunas de parametrização e JSONB na tabela configuracoes (incluindo RBAC)
 ALTER TABLE IF EXISTS configuracoes 
   ADD COLUMN IF NOT EXISTS niveis_acesso JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb,
@@ -285,7 +285,6 @@ ALTER TABLE IF EXISTS configuracoes
   ADD COLUMN IF NOT EXISTS setores_ronda JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS turnos_plantao JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS dados_tenant JSONB DEFAULT '{}'::jsonb,
-  ADD COLUMN IF NOT EXISTS mod01_cadastros_base BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod02_gestao_encomendas BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod03_custodia_itens BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod04_materiais_posto BOOLEAN DEFAULT true,
@@ -294,30 +293,7 @@ ALTER TABLE IF EXISTS configuracoes
   ADD COLUMN IF NOT EXISTS mod07_gestao_ronda BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod08_livro_ocorrencias BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
-  ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true,
-  ADD COLUMN IF NOT EXISTS mod11_bancada_conferencia BOOLEAN DEFAULT true,
-  ADD COLUMN IF NOT EXISTS mod12_historico_absoluto BOOLEAN DEFAULT true,
-  ADD COLUMN IF NOT EXISTS mod_portal_sindico BOOLEAN DEFAULT true;
-
--- 0.001 Garantir tabela oficial bancada_volumes (Módulo 11 - Conferência de Balcão)
-CREATE TABLE IF NOT EXISTS bancada_volumes (
-  id TEXT PRIMARY KEY,
-  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
-  estrutura TEXT NOT NULL,
-  unidade TEXT NOT NULL,
-  volumes INTEGER NOT NULL DEFAULT 1,
-  observacao TEXT,
-  tipo_volume TEXT DEFAULT 'Volume',
-  operador_nome TEXT,
-  operador_id TEXT,
-  status TEXT DEFAULT 'ativo',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE bancada_volumes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Acesso total bancada_volumes" ON bancada_volumes;
-CREATE POLICY "Acesso total bancada_volumes" ON bancada_volumes FOR ALL USING (true) WITH CHECK (true);
+  ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
 
 -- 0.01 Garantir colunas na tabela operadores (RBAC e perfis personalizados)
 ALTER TABLE IF EXISTS operadores
@@ -601,7 +577,6 @@ export interface CondominioConfigDiagnostic {
   status: 'integra' | 'ausente' | 'corrompida';
   detalhesStatus: string;
   featureFlags: {
-    mod01_cadastros_base: boolean;
     mod02_gestao_encomendas: boolean;
     mod03_custodia_itens: boolean;
     mod04_materiais_posto: boolean;
@@ -611,15 +586,11 @@ export interface CondominioConfigDiagnostic {
     mod08_livro_ocorrencias: boolean;
     mod09_passagem_posto: boolean;
     mod10_prestadores_servico: boolean;
-    mod11_bancada_conferencia: boolean;
-    mod12_historico_absoluto: boolean;
-    mod_portal_sindico: boolean;
   };
   chavesFaltantes: string[];
 }
 
 export const REQUIRED_MODULE_KEYS = [
-  'mod01_cadastros_base',
   'mod02_gestao_encomendas',
   'mod03_custodia_itens',
   'mod04_materiais_posto',
@@ -628,10 +599,7 @@ export const REQUIRED_MODULE_KEYS = [
   'mod07_gestao_ronda',
   'mod08_livro_ocorrencias',
   'mod09_passagem_posto',
-  'mod10_prestadores_servico',
-  'mod11_bancada_conferencia',
-  'mod12_historico_absoluto',
-  'mod_portal_sindico'
+  'mod10_prestadores_servico'
 ] as const;
 
 /**
@@ -667,7 +635,6 @@ export async function auditCondominiosConfigs(): Promise<CondominioConfigDiagnos
           status: 'ausente',
           detalhesStatus: 'Nenhum registro encontrado na tabela configuracoes.',
           featureFlags: {
-            mod01_cadastros_base: true,
             mod02_gestao_encomendas: true,
             mod03_custodia_itens: true,
             mod04_materiais_posto: true,
@@ -676,10 +643,7 @@ export async function auditCondominiosConfigs(): Promise<CondominioConfigDiagnos
             mod07_gestao_ronda: true,
             mod08_livro_ocorrencias: true,
             mod09_passagem_posto: true,
-            mod10_prestadores_servico: true,
-            mod11_bancada_conferencia: true,
-            mod12_historico_absoluto: true,
-            mod_portal_sindico: true
+            mod10_prestadores_servico: true
           },
           chavesFaltantes: [...REQUIRED_MODULE_KEYS]
         };
@@ -696,10 +660,10 @@ export async function auditCondominiosConfigs(): Promise<CondominioConfigDiagnos
         const valColuna = cfg[key];
         const valJson = flagsJson[key];
 
-        if (typeof valJson === 'boolean') {
-          resolvedFlags[key] = valJson;
-        } else if (typeof valColuna === 'boolean') {
+        if (typeof valColuna === 'boolean') {
           resolvedFlags[key] = valColuna;
+        } else if (typeof valJson === 'boolean') {
+          resolvedFlags[key] = valJson;
         } else {
           chavesFaltantes.push(key);
           resolvedFlags[key] = true; // valor padrão
@@ -707,7 +671,7 @@ export async function auditCondominiosConfigs(): Promise<CondominioConfigDiagnos
       });
 
       let status: 'integra' | 'ausente' | 'corrompida' = 'integra';
-      let detalhesStatus = `Configuração completa e íntegra (${REQUIRED_MODULE_KEYS.length - chavesFaltantes.length}/${REQUIRED_MODULE_KEYS.length} módulos parametrizados)`;
+      let detalhesStatus = 'Configuração completa e íntegra (9/9 módulos parametrizados)';
 
       if (chavesFaltantes.length > 0 || !cfg.feature_flags || typeof cfg.feature_flags !== 'object') {
         status = 'corrompida';
@@ -743,7 +707,6 @@ export async function repairCondominioConfig(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const defaultFlags = {
-      mod01_cadastros_base: currentDiag?.featureFlags?.mod01_cadastros_base ?? true,
       mod02_gestao_encomendas: currentDiag?.featureFlags?.mod02_gestao_encomendas ?? true,
       mod03_custodia_itens: currentDiag?.featureFlags?.mod03_custodia_itens ?? true,
       mod04_materiais_posto: currentDiag?.featureFlags?.mod04_materiais_posto ?? true,
@@ -752,10 +715,7 @@ export async function repairCondominioConfig(
       mod07_gestao_ronda: currentDiag?.featureFlags?.mod07_gestao_ronda ?? true,
       mod08_livro_ocorrencias: currentDiag?.featureFlags?.mod08_livro_ocorrencias ?? true,
       mod09_passagem_posto: currentDiag?.featureFlags?.mod09_passagem_posto ?? true,
-      mod10_prestadores_servico: currentDiag?.featureFlags?.mod10_prestadores_servico ?? true,
-      mod11_bancada_conferencia: currentDiag?.featureFlags?.mod11_bancada_conferencia ?? true,
-      mod12_historico_absoluto: currentDiag?.featureFlags?.mod12_historico_absoluto ?? true,
-      mod_portal_sindico: currentDiag?.featureFlags?.mod_portal_sindico ?? true
+      mod10_prestadores_servico: currentDiag?.featureFlags?.mod10_prestadores_servico ?? true
     };
 
     // Atualiza imediatamente cache local do navegador

@@ -205,7 +205,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [buscaBaixaGeral, setBuscaBaixaGeral] = useState('');
-  const [tipoFiltroBuscaBaixa, setTipoFiltroBuscaBaixa] = useState<'todos' | 'unidade' | 'nome' | 'rastreio'>('todos');
+  const [tipoFiltroBuscaBaixa, setTipoFiltroBuscaBaixa] = useState<'todos' | 'unidade' | 'nome' | 'rastreio'>('unidade');
   const [leitorModoLote, setLeitorModoLote] = useState(true);
   const [ultimoPacoteBipado, setUltimoPacoteBipado] = useState<any | null>(null);
   const ultimoCodigoLidoRef = useRef<{ codigo: string; timestamp: number }>({ codigo: '', timestamp: 0 });
@@ -2729,17 +2729,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 <UserCheck className="w-4 h-4 text-slate-800" /> Entrega de Pacotes (Saída)
               </h3>
 
-              {/* Lista seletora ao lado do título: Todos, Unidade, Morador e Rastreio */}
+              {/* Lista seletora ao lado do título com ícones: Unidade (padrão), Todos, Morador e Rastreio */}
               <select
                 value={tipoFiltroBuscaBaixa}
                 onChange={(e) => setTipoFiltroBuscaBaixa(e.target.value as any)}
                 className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-800 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 transition cursor-pointer shrink-0"
                 title="Filtrar tipo de pesquisa"
               >
-                <option value="todos">Todos</option>
-                <option value="unidade">Unidade</option>
-                <option value="nome">Morador</option>
-                <option value="rastreio">Rastreio</option>
+                <option value="unidade">🏠 UNIDADE</option>
+                <option value="todos">🔍 TODOS</option>
+                <option value="nome">👤 MORADOR</option>
+                <option value="rastreio">📦 RASTREIO</option>
               </select>
             </div>
             

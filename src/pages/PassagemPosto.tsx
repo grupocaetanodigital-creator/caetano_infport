@@ -62,7 +62,6 @@ import {
 interface PassagemPostoProps {
   usuarioLogado?: any;
   onTrocarOperador?: (novoOperador: any) => void;
-  featureFlags?: Record<string, boolean>;
 }
 
 export interface ConsolidacaoPosto {
@@ -275,7 +274,7 @@ const estadoInicialConsolidacao: ConsolidacaoPosto = {
   }
 };
 
-export default function PassagemPosto({ usuarioLogado, onTrocarOperador, featureFlags: featureFlagsProp }: PassagemPostoProps) {
+export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: PassagemPostoProps) {
   const [passagens, setPassagens] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingAuditoria, setLoadingAuditoria] = useState(false);
@@ -284,28 +283,6 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
   const [copiadoTexto, setCopiadoTexto] = useState(false);
   const [modalCompartilharWhatsApp, setModalCompartilharWhatsApp] = useState<any | null>(null);
   const [exibirResumoPlantao, setExibirResumoPlantao] = useState(false);
-
-  // Obtém o status de ativação do módulo a partir das props ou do cache local do condomínio
-  const isModuloAtivo = (chaveModulo: string, padrao: boolean = true): boolean => {
-    if (featureFlagsProp && featureFlagsProp[chaveModulo] !== undefined) {
-      return Boolean(featureFlagsProp[chaveModulo]);
-    }
-    const condId = usuarioLogado?.condominio_id;
-    if (condId) {
-      try {
-        const cached = localStorage.getItem(`infport_flags_${condId}`);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed[chaveModulo] !== undefined) return Boolean(parsed[chaveModulo]);
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return padrao;
-  };
-
-  const isBancadaAtiva = isModuloAtivo('mod11_bancada_conferencia', true);
 
   const [modalNova, setModalNova] = useState(false);
   const [etapa, setEtapa] = useState(1);
@@ -331,35 +308,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
   // Modal para ver relatório histórico completo
   const [modalHistoricoDetalhes, setModalHistoricoDetalhes] = useState<any | null>(null);
 
-  // 1. Auditoria Obrigatória dos Módulos Operacionais Ativos no Condomínio
-  const [auditModulos, setAuditModulos] = useState<Record<string, { status: 'ok' | 'divergente' | null; obs: string }>>(() => {
-    const base: Record<string, { status: 'ok' | 'divergente' | null; obs: string }> = {
-      encomendas: { status: null, obs: '' },
-      rondas: { status: null, obs: '' },
-      chaves: { status: null, obs: '' },
-      prestadores: { status: null, obs: '' },
-      custodia: { status: null, obs: '' },
-      materiais: { status: null, obs: '' },
-      ocorrencias: { status: null, obs: '' }
-    };
-    if (isBancadaAtiva) {
-      base.bancada = { status: null, obs: '' };
-    }
-    return base;
+  // 1. Auditoria Obrigatória dos 8 Módulos do Sistema (Sem checklist físico redundante)
+  const [auditModulos, setAuditModulos] = useState<Record<string, { status: 'ok' | 'divergente' | null; obs: string }>>({
+    encomendas: { status: null, obs: '' },
+    bancada: { status: null, obs: '' },
+    rondas: { status: null, obs: '' },
+    chaves: { status: null, obs: '' },
+    prestadores: { status: null, obs: '' },
+    custodia: { status: null, obs: '' },
+    materiais: { status: null, obs: '' },
+    ocorrencias: { status: null, obs: '' }
   });
-
-  // Atualiza auditModulos caso o estado da bancada seja alterado
-  useEffect(() => {
-    setAuditModulos(prev => {
-      const copy = { ...prev };
-      if (!isBancadaAtiva && copy.bancada) {
-        delete copy.bancada;
-      } else if (isBancadaAtiva && !copy.bancada) {
-        copy.bancada = { status: null, obs: '' };
-      }
-      return copy;
-    });
-  }, [isBancadaAtiva]);
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>({
     encomendasOk: true,
@@ -461,20 +420,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
     setLoginEntrante('');
     setSenhaEntrante('');
     setMostrarSenhaEntrante(false);
-    // Reinicia auditoria dos módulos operacionais ativos sem itens pré-marcados
-    const modulosReset: Record<string, { status: 'ok' | 'divergente' | null; obs: string }> = {
+    // Reinicia auditoria dos 8 módulos operacionais sem itens pré-marcados
+    setAuditModulos({
       encomendas: { status: null, obs: '' },
+      bancada: { status: null, obs: '' },
       rondas: { status: null, obs: '' },
       chaves: { status: null, obs: '' },
       prestadores: { status: null, obs: '' },
       custodia: { status: null, obs: '' },
       materiais: { status: null, obs: '' },
       ocorrencias: { status: null, obs: '' }
-    };
-    if (isBancadaAtiva) {
-      modulosReset.bancada = { status: null, obs: '' };
-    }
-    setAuditModulos(modulosReset);
+    });
     setTemDivergencia(false);
     setDivergencia('');
     setObservacoes('');
@@ -585,16 +541,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
       });
 
       // 1.6 MÓDULO 11 - CONFERÊNCIA FÍSICA DE BANCADA (BALCÃO)
-      let itensBancada: ItemBancada[] = [];
-      let estruturasResumoBancada: EstruturaResumoBancada[] = [];
-      let totalVolumesBancada = 0;
-      let totalUnidadesBancada = 0;
-      if (isBancadaAtiva) {
-        itensBancada = await carregarItensBancada(condId);
-        estruturasResumoBancada = agruparItensPorEstrutura(itensBancada);
-        totalVolumesBancada = itensBancada.reduce((acc, it) => acc + (it.volumes || 1), 0);
-        totalUnidadesBancada = itensBancada.length;
-      }
+      const itensBancada = await carregarItensBancada(condId);
+      const estruturasResumoBancada = agruparItensPorEstrutura(itensBancada);
+      const totalVolumesBancada = itensBancada.reduce((acc, it) => acc + (it.volumes || 1), 0);
+      const totalUnidadesBancada = itensBancada.length;
 
       // 2. MÓDULO 07 - RONDAS PATRIMONIAIS
       const { data: rondasPlantaoData } = await supabase
@@ -1137,38 +1087,35 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
     texto += `\n`;
 
     // 1.1 Bancada / Balcão Físico
-    // 1.5 Módulo 11 - Bancada (se ativo no condomínio ou registrado na passagem)
-    if (isBancadaAtiva || (c.bancada && c.bancada.totalVolumes > 0)) {
-      const ban = c.bancada || {};
-      const totalVolumesBancada = ban.totalVolumes ?? 0;
-      const totalUnidadesBancada = ban.totalUnidades ?? 0;
-      texto += `📦 *MÓDULO 11 - CONFERÊNCIA DE BANCADA (VOLUMES FÍSICOS NO BALCÃO)*\n` +
-        `• Total de volumes na bancada: *${totalVolumesBancada} volume(s)* em *${totalUnidadesBancada} unidade(s)*\n`;
-      if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
-        texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
-        ban.estruturasResumo.forEach((g: any) => {
-          const lista = g.itens || g.unidades || [];
-          const apsStr = lista.map((u: any) => {
-            const uni = u.unidade || u;
-            const vol = (u.volumes && u.volumes > 1) ? ` (${u.volumes} vol)` : '';
-            const obs = u.observacao ? ` [${u.observacao}]` : '';
-            return `${uni}${vol}${obs}`;
-          }).join(', ');
-          const totalVols = g.totalVolumes ?? lista.reduce((acc: number, it: any) => acc + (it.volumes || 1), 0);
-          texto += `  *${(g.estrutura || 'TORRE A').toUpperCase()}*, TOTAL ${totalVols}:\n`;
-          texto += `  ↳ ${apsStr || 'Nenhum'}\n`;
-        });
-      } else if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
-        texto += `  _Discriminação de encomendas retidas conferidas no posto:_\n`;
-        Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
-          texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n`;
-          texto += `  ↳ ${info.unidades.join(', ')}\n`;
-        });
-      } else {
-        texto += `• Situação: *Bancada livre / sem volumes retidos*\n`;
-      }
-      texto += `\n`;
+    const ban = c.bancada || {};
+    const totalVolumesBancada = ban.totalVolumes ?? 0;
+    const totalUnidadesBancada = ban.totalUnidades ?? 0;
+    texto += `📦 *MÓDULO 11 - CONFERÊNCIA DE BANCADA (VOLUMES FÍSICOS NO BALCÃO)*\n` +
+      `• Total de volumes na bancada: *${totalVolumesBancada} volume(s)* em *${totalUnidadesBancada} unidade(s)*\n`;
+    if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
+      texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
+      ban.estruturasResumo.forEach((g: any) => {
+        const lista = g.itens || g.unidades || [];
+        const apsStr = lista.map((u: any) => {
+          const uni = u.unidade || u;
+          const vol = (u.volumes && u.volumes > 1) ? ` (${u.volumes} vol)` : '';
+          const obs = u.observacao ? ` [${u.observacao}]` : '';
+          return `${uni}${vol}${obs}`;
+        }).join(', ');
+        const totalVols = g.totalVolumes ?? lista.reduce((acc: number, it: any) => acc + (it.volumes || 1), 0);
+        texto += `  *${(g.estrutura || 'TORRE A').toUpperCase()}*, TOTAL ${totalVols}:\n`;
+        texto += `  ↳ ${apsStr || 'Nenhum'}\n`;
+      });
+    } else if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
+      texto += `  _Discriminação de encomendas retidas conferidas no posto:_\n`;
+      Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
+        texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n`;
+        texto += `  ↳ ${info.unidades.join(', ')}\n`;
+      });
+    } else {
+      texto += `• Situação: *Bancada livre / sem volumes retidos*\n`;
     }
+    texto += `\n`;
 
     // 2. Rondas
     texto += `🛡️ *MÓDULO 07 - RONDAS PATRIMONIAIS NO PLANTÃO*\n` +
@@ -1411,7 +1358,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
       {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS (ACIONADA PELO BOTÃO RESUMO PLANTÃO DO CABEÇALHO) */}
       {exibirResumoPlantao && (
         <div className="space-y-2 animate-in fade-in duration-200">
-          <TabelasResumoPosto consolidacao={consolidacao} isBancadaAtiva={isBancadaAtiva} />
+          <TabelasResumoPosto consolidacao={consolidacao} />
         </div>
       )}
 
@@ -1622,7 +1569,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
                   </div>
 
                   {visualizacaoModal === 'tabelas' && (
-                    <TabelasResumoPosto consolidacao={consolidacao} modoConferencia={true} isBancadaAtiva={isBancadaAtiva} />
+                    <TabelasResumoPosto consolidacao={consolidacao} modoConferencia={true} />
                   )}
 
                   {visualizacaoModal === 'cards' && (
@@ -1800,28 +1747,26 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
                     </button>
 
                     {/* Bancada (Balcão Físico) */}
-                    {isBancadaAtiva && (
-                      <button
-                        type="button"
-                        onClick={() => setModuloAtivo('bancada')}
-                        className={`p-3 rounded-xl border text-left transition ${
-                          moduloAtivo === 'bancada' ? 'ring-2 ring-amber-600 bg-amber-50/50 border-amber-300' : 'bg-white hover:bg-slate-50 border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-amber-700 mb-1">
-                          <span className="text-[10px] font-bold uppercase flex items-center gap-1">
-                            <Layers className="w-3.5 h-3.5" /> Bancada (Balcão)
-                          </span>
-                          <Layers className="w-4 h-4" />
-                        </div>
-                        <div className="text-xs font-bold text-slate-900">
-                          {consolidacao.bancada?.totalVolumes || 0} volume(s)
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          {consolidacao.bancada?.totalUnidades || 0} unidade(s) sob custódia
-                        </div>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setModuloAtivo('bancada')}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        moduloAtivo === 'bancada' ? 'ring-2 ring-amber-600 bg-amber-50/50 border-amber-300' : 'bg-white hover:bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-amber-700 mb-1">
+                        <span className="text-[10px] font-bold uppercase flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5" /> Bancada (Balcão)
+                        </span>
+                        <Layers className="w-4 h-4" />
+                      </div>
+                      <div className="text-xs font-bold text-slate-900">
+                        {consolidacao.bancada?.totalVolumes || 0} volume(s)
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {consolidacao.bancada?.totalUnidades || 0} unidade(s) sob custódia
+                      </div>
+                    </button>
                   </div>
 
                   {/* ABAS / SEÇÕES DETALHADAS DE CADA MÓDULO */}
@@ -1835,7 +1780,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
                         {moduloAtivo === 'custodia' && <><Box className="w-4 h-4 text-sky-600" /> Detalhamento: Objetos de Custódia</>}
                         {moduloAtivo === 'materiais' && <><Radio className="w-4 h-4 text-emerald-600" /> Detalhamento: Inventário e Equipamentos</>}
                         {moduloAtivo === 'ocorrencias' && <><AlertTriangle className="w-4 h-4 text-red-600" /> Detalhamento: Ocorrências Pendentes (Sem importar a data!)</>}
-                        {isBancadaAtiva && moduloAtivo === 'bancada' && <><Layers className="w-4 h-4 text-amber-600" /> Detalhamento: Volumes Físicos na Bancada (Por Torre & Unidade)</>}
+                        {moduloAtivo === 'bancada' && <><Layers className="w-4 h-4 text-amber-600" /> Detalhamento: Volumes Físicos na Bancada (Por Torre & Unidade)</>}
                         {moduloAtivo === 'todos' && <><ShieldCheck className="w-4 h-4 text-emerald-600" /> Visão Consolidada Completa</>}
                       </span>
 
@@ -1908,7 +1853,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
                     )}
 
                     {/* SEÇÃO 1.1: BANCADA (CONFERÊNCIA DETALHADA POR TORRE E APARTAMENTO) */}
-                    {isBancadaAtiva && (moduloAtivo === 'todos' || moduloAtivo === 'bancada') && (
+                    {(moduloAtivo === 'todos' || moduloAtivo === 'bancada') && (
                       <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-sm space-y-2.5">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-amber-950 flex items-center gap-1.5 font-bold uppercase">
@@ -2765,66 +2710,64 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador, feature
                         </div>
 
                         {/* 1.8 Bancada (Balcão Físico) */}
-                        {isBancadaAtiva && (
-                          <div className={`p-3 rounded-xl border transition ${
-                            auditModulos.bancada?.status === 'ok' 
-                              ? 'bg-emerald-50/70 border-emerald-300' 
-                              : auditModulos.bancada?.status === 'divergente'
-                              ? 'bg-amber-50/80 border-amber-300'
-                              : 'bg-white border-slate-200'
-                          }`}>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div>
-                                <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
-                                  <Layers className="w-3.5 h-3.5 text-amber-600" /> Módulo 11: Bancada & Balcão Físico
-                                </strong>
-                                <span className="text-[11px] text-slate-500">
-                                  {consolidacao.bancada?.totalVolumes || 0} volume(s) em {consolidacao.bancada?.totalUnidades || 0} unidade(s) na guarita
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => marcarModuloAudit('bancada', 'ok')}
-                                  className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
-                                    auditModulos.bancada?.status === 'ok'
-                                      ? 'bg-emerald-600 text-white shadow-xs'
-                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  <CheckCircle className="w-3.5 h-3.5" /> OK
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => marcarModuloAudit('bancada', 'divergente')}
-                                  className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
-                                    auditModulos.bancada?.status === 'divergente'
-                                      ? 'bg-amber-600 text-white shadow-xs'
-                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  <AlertTriangle className="w-3.5 h-3.5" /> Divergente
-                                </button>
-                              </div>
+                        <div className={`p-3 rounded-xl border transition ${
+                          auditModulos.bancada?.status === 'ok' 
+                            ? 'bg-emerald-50/70 border-emerald-300' 
+                            : auditModulos.bancada?.status === 'divergente'
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <Layers className="w-3.5 h-3.5 text-amber-600" /> Módulo 11: Bancada & Balcão Físico
+                              </strong>
+                              <span className="text-[11px] text-slate-500">
+                                {consolidacao.bancada?.totalVolumes || 0} volume(s) em {consolidacao.bancada?.totalUnidades || 0} unidade(s) na guarita
+                              </span>
                             </div>
 
-                            {auditModulos.bancada?.status === 'divergente' && (
-                              <div className="mt-2 pt-2 border-t border-amber-200">
-                                <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
-                                  Observação da Divergência na Bancada:
-                                </label>
-                                <input
-                                  type="text"
-                                  value={auditModulos.bancada?.obs || ''}
-                                  onChange={(e) => setObsModuloAudit('bancada', e.target.value)}
-                                  placeholder="Descreva o pacote faltante, avariado ou sem identificação..."
-                                  className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
-                                />
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('bancada', 'ok')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.bancada?.status === 'ok'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => marcarModuloAudit('bancada', 'divergente')}
+                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer ${
+                                  auditModulos.bancada?.status === 'divergente'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" /> Divergente
+                              </button>
+                            </div>
                           </div>
-                        )}
+
+                          {auditModulos.bancada?.status === 'divergente' && (
+                            <div className="mt-2 pt-2 border-t border-amber-200">
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                                Observação da Divergência na Bancada:
+                              </label>
+                              <input
+                                type="text"
+                                value={auditModulos.bancada?.obs || ''}
+                                onChange={(e) => setObsModuloAudit('bancada', e.target.value)}
+                                placeholder="Descreva o pacote faltante, avariado ou sem identificação..."
+                                className="w-full p-2 bg-white rounded-lg border border-amber-300 text-xs text-amber-950 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
