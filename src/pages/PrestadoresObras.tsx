@@ -1017,7 +1017,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
           }`}
         >
           <Timer className="w-4 h-4" />
-          <span>Dentro do Condomínio</span>
+          <span>No Condomínio</span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
             totalEstourados > 0 
               ? 'bg-red-600 text-white animate-pulse' 
@@ -1036,7 +1036,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Liberações & Cadastros</span>
+          <span>Liberados</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-900/60 text-slate-300">
             {cadastros.length}
           </span>
@@ -1051,7 +1051,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
           }`}
         >
           <Clock className="w-4 h-4" />
-          <span>Histórico de Entradas & Saídas</span>
+          <span>Histórico</span>
         </button>
       </div>
 
@@ -1219,43 +1219,46 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
       {abaAtiva === 'cadastros' && (
         <div className="space-y-3">
           {/* Barra Superior com Botão de Pesquisa e Filtros */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <button
-              type="button"
-              onClick={() => setMostrarFiltrosCadastros(!mostrarFiltrosCadastros)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border shadow-2xs ${
-                mostrarFiltrosCadastros || (busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos')
-                  ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-500'
-                  : 'bg-slate-900 hover:bg-slate-850 text-slate-200 border-slate-800'
-              }`}
-            >
-              <Search className="w-3.5 h-3.5" />
-              <Filter className="w-3.5 h-3.5" />
-              <span>Pesquisa e Filtros</span>
-              {(busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos') && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Filtros ativos" />
-              )}
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${mostrarFiltrosCadastros ? 'rotate-180' : ''}`} />
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setMostrarFiltrosCadastros(!mostrarFiltrosCadastros)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border shadow-2xs ${
+                  mostrarFiltrosCadastros || (busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos')
+                    ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-500'
+                    : 'bg-slate-900 hover:bg-slate-850 text-slate-200 border-slate-800'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                <Filter className="w-3.5 h-3.5" />
+                <span>Pesquisa e Filtros</span>
+                {(busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos') && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Filtros ativos" />
+                )}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${mostrarFiltrosCadastros ? 'rotate-180' : ''}`} />
+              </button>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              {(busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBusca('');
-                    setFiltroPerfil('todos');
-                    setFiltroValidade('todos');
-                  }}
-                  className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1 font-bold transition cursor-pointer"
-                >
-                  <X className="w-3 h-3" /> Limpar filtros
-                </button>
-              )}
-              <span className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-slate-300 font-bold">
-                {cadastrosFiltrados.length} {cadastrosFiltrados.length === 1 ? 'liberação' : 'liberações'}
+              {/* 4º Mover para o lado do botão pesquisa e filtros */}
+              <span className="bg-slate-900 border border-slate-800 px-2.5 py-2 rounded-xl text-slate-300 font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs">
+                <span>{cadastrosFiltrados.length}</span>
+                <span className="text-slate-400 font-normal">{cadastrosFiltrados.length === 1 ? 'liberação' : 'liberações'}</span>
               </span>
             </div>
+
+            {(busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBusca('');
+                  setFiltroPerfil('todos');
+                  setFiltroValidade('todos');
+                }}
+                className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1 font-bold transition cursor-pointer px-2 py-1 rounded-lg hover:bg-red-950/40"
+              >
+                <X className="w-3 h-3" /> Limpar filtros
+              </button>
+            )}
           </div>
 
           {/* Menus de Pesquisa e Filtros (Colocados dentro do botão) */}
