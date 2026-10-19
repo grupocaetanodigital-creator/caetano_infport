@@ -45,7 +45,9 @@ import {
   AlertCircle,
   FileSpreadsheet,
   Pencil,
-  HardHat
+  HardHat,
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 
 export type PerfilAcesso = 'autorizado' | 'prestador_unidade' | 'prestador_condominio';
@@ -107,6 +109,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
   const [busca, setBusca] = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState<string>('todos');
   const [filtroValidade, setFiltroValidade] = useState<string>('todos');
+  const [mostrarFiltrosCadastros, setMostrarFiltrosCadastros] = useState(false);
 
   // Hora atual em tempo real para cálculo dos cronômetros regressivos
   const [tempoAtual, setTempoAtual] = useState(Date.now());
@@ -1214,58 +1217,101 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
       {/* ABA 2: LIBERAÇÕES & CADASTROS */}
       {abaAtiva === 'cadastros' && (
-        <div className="space-y-4">
-          <div className="bg-slate-900 p-4 rounded-3xl border border-slate-800 space-y-3 shadow-xl">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
-                  Buscar Autorizado / Prestador
-                </label>
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                  <input
-                    type="text"
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
-                    placeholder="Nome, documento, ap., empresa..."
-                    className="w-full bg-slate-950 text-white text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
+        <div className="space-y-3">
+          {/* Barra Superior com Botão de Pesquisa e Filtros */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <button
+              type="button"
+              onClick={() => setMostrarFiltrosCadastros(!mostrarFiltrosCadastros)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border shadow-2xs ${
+                mostrarFiltrosCadastros || (busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos')
+                  ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-500'
+                  : 'bg-slate-900 hover:bg-slate-850 text-slate-200 border-slate-800'
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <Filter className="w-3.5 h-3.5" />
+              <span>Pesquisa e Filtros</span>
+              {(busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos') && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Filtros ativos" />
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${mostrarFiltrosCadastros ? 'rotate-180' : ''}`} />
+            </button>
 
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
-                  Filtrar por Perfil
-                </label>
-                <select
-                  value={filtroPerfil}
-                  onChange={(e) => setFiltroPerfil(e.target.value)}
-                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              {(busca.trim() || filtroPerfil !== 'todos' || filtroValidade !== 'todos') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusca('');
+                    setFiltroPerfil('todos');
+                    setFiltroValidade('todos');
+                  }}
+                  className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1 font-bold transition cursor-pointer"
                 >
-                  <option value="todos">Todos os Perfis (3 Categorias)</option>
-                  <option value="autorizado">🟣 1. Autorizados (Visitantes / Família)</option>
-                  <option value="prestador_unidade">🔵 2. Prestadores da Unidade</option>
-                  <option value="prestador_condominio">🟠 3. Prestadores do Condomínio</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
-                  Status da Validade
-                </label>
-                <select
-                  value={filtroValidade}
-                  onChange={(e) => setFiltroValidade(e.target.value)}
-                  className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500"
-                >
-                  <option value="todos">Todas as Validades</option>
-                  <option value="validos">🟢 Liberações Válidas</option>
-                  <option value="vencidos">⚠️ Liberações Expiradas (Aviso Amarelo)</option>
-                  <option value="permanentes">♾️ Permanentes / Recorrentes</option>
-                </select>
-              </div>
+                  <X className="w-3 h-3" /> Limpar filtros
+                </button>
+              )}
+              <span className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-slate-300 font-bold">
+                {cadastrosFiltrados.length} {cadastrosFiltrados.length === 1 ? 'liberação' : 'liberações'}
+              </span>
             </div>
           </div>
+
+          {/* Menus de Pesquisa e Filtros (Colocados dentro do botão) */}
+          {mostrarFiltrosCadastros && (
+            <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-3 shadow-xl animate-in fade-in duration-150">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                    Buscar Autorizado / Prestador
+                  </label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                    <input
+                      type="text"
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Nome, documento, ap., empresa..."
+                      className="w-full bg-slate-950 text-white text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                    Filtrar por Perfil
+                  </label>
+                  <select
+                    value={filtroPerfil}
+                    onChange={(e) => setFiltroPerfil(e.target.value)}
+                    className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-semibold cursor-pointer"
+                  >
+                    <option value="todos">Todos os Perfis (3 Categorias)</option>
+                    <option value="autorizado">🟣 1. Autorizados (Visitantes / Família)</option>
+                    <option value="prestador_unidade">🔵 2. Prestadores da Unidade</option>
+                    <option value="prestador_condominio">🟠 3. Prestadores do Condomínio</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
+                    Status da Validade
+                  </label>
+                  <select
+                    value={filtroValidade}
+                    onChange={(e) => setFiltroValidade(e.target.value)}
+                    className="w-full bg-slate-950 text-white text-xs p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-purple-500 font-semibold cursor-pointer"
+                  >
+                    <option value="todos">Todas as Validades</option>
+                    <option value="validos">🟢 Liberações Válidas</option>
+                    <option value="vencidos">⚠️ Liberações Expiradas (Aviso Amarelo)</option>
+                    <option value="permanentes">♾️ Permanentes / Recorrentes</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {cadastrosFiltrados.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center space-y-3">
