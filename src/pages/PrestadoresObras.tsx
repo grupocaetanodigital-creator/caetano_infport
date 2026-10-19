@@ -272,6 +272,9 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
 
         if (histDb) setHistoricoAcessos(histDb);
       } catch {}
+      try {
+        window.dispatchEvent(new CustomEvent('prestadores_atualizados'));
+      } catch {}
     } catch (err: any) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao carregar dados: ' + err.message });
     } finally {
@@ -1085,7 +1088,7 @@ export default function PrestadoresObras({ usuarioLogado }: PrestadoresObrasProp
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition inline-flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
               >
                 <Users className="w-4 h-4" />
-                <span>Ver Liberados</span>
+                <span>Lista de Liberados</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

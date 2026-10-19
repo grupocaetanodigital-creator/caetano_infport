@@ -27,6 +27,7 @@ import LeitorNFC from './components/LeitorNFC';
 import ModalMeuPerfil from './components/ModalMeuPerfil';
 import SupabaseDoctorModal from './components/SupabaseDoctorModal';
 import BotaoNotificacoesLembretes from './components/BotaoNotificacoesLembretes';
+import AlertaNoCondominioTopo from './components/AlertaNoCondominioTopo';
 import ModalLembretesPortaria from './components/ModalLembretesPortaria';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
@@ -905,8 +906,14 @@ export default function App() {
               </div>
             </div>
 
-            {/* Ações no Topo Superior Direito: Botão de Notificações/Lembretes */}
+            {/* Ações no Topo Superior Direito: Botão de Notificações/Lembretes e Alerta de Presentes no Condomínio */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Alerta de pessoas presentes no condomínio logo ao lado do botão de lembrete */}
+              <AlertaNoCondominioTopo
+                condominioId={condominioAtivoId || operador?.condominio_id || ''}
+                onNavegar={() => mudarModulo('prestadores')}
+              />
+
               {/* Ícone de Notificações (Sino/Mensagens) com Alerta Piscante e Contador em Tempo Real */}
               <BotaoNotificacoesLembretes
                 condominioId={condominioAtivoId || operador?.condominio_id || ''}
