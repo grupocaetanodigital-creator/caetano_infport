@@ -546,28 +546,25 @@ export default function Custodia({ usuarioLogado }: CustodiaProps) {
                 <button
                   type="button"
                   onClick={() => setFluxo('M-M')}
-                  className={`p-2 rounded-lg border text-center transition cursor-pointer ${fluxo === 'M-M' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                  className={`p-2.5 rounded-lg border text-center transition cursor-pointer font-bold ${fluxo === 'M-M' ? 'bg-slate-900 text-white border-slate-900 shadow-xs' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'}`}
                 >
-                  <p className="text-xs">Morador ➔ Morador</p>
-                  <span className="text-[9px] opacity-75">Chaves, documentos</span>
+                  <p className="text-xs font-bold">Morador ➔ Morador</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFluxo('M-T')}
-                  className={`p-2 rounded-lg border text-center transition cursor-pointer ${fluxo === 'M-T' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                  className={`p-2.5 rounded-lg border text-center transition cursor-pointer font-bold ${fluxo === 'M-T' ? 'bg-slate-900 text-white border-slate-900 shadow-xs' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'}`}
                 >
-                  <p className="text-xs">Morador ➔ Terceiro</p>
-                  <span className="text-[9px] opacity-75">Para prestador / visita</span>
+                  <p className="text-xs font-bold">Morador ➔ Terceiro</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFluxo('T-M')}
-                  className={`p-2 rounded-lg border text-center transition cursor-pointer ${fluxo === 'T-M' ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                  className={`p-2.5 rounded-lg border text-center transition cursor-pointer font-bold ${fluxo === 'T-M' ? 'bg-slate-900 text-white border-slate-900 shadow-xs' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'}`}
                 >
-                  <p className="text-xs">Terceiro ➔ Morador</p>
-                  <span className="text-[9px] opacity-75">Farmácia / lavanderia</span>
+                  <p className="text-xs font-bold">Terceiro ➔ Morador</p>
                 </button>
               </div>
             </div>
