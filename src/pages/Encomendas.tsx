@@ -215,6 +215,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [modalFotoAmpliada, setModalFotoAmpliada] = useState<string | null>(null);
   const [modalBaixaAberta, setModalBaixaAberta] = useState(false);
   const [nomeRetirante, setNomeRetirante] = useState('');
+  const [nomeRetiranteManual, setNomeRetiranteManual] = useState('');
   const [fotoRetiranteUrl, setFotoRetiranteUrl] = useState('');
   const [assinaturaDigitalUrl, setAssinaturaDigitalUrl] = useState('');
   const [baixaConcluidaWhats, setBaixaConcluidaWhats] = useState<any | null>(null);
@@ -1851,10 +1852,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       });
       return;
     }
-    if (!nomeRetirante.trim()) {
+    const nomeFinalRetirante = (nomeRetirante === '__OUTRO__' ? nomeRetiranteManual : nomeRetirante).trim();
+    if (!nomeFinalRetirante) {
       setMensagem({ 
         tipo: 'erro', 
-        texto: 'Por favor, selecione o morador ou informe o nome de quem está retirando.' 
+        texto: 'Por favor, selecione o morador ou digite o nome de quem está retirando.' 
       });
       return;
     }
@@ -1870,7 +1872,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     try {
       const retiranteFormatado = [
-        nomeRetirante.trim(),
+        nomeFinalRetirante,
         baixaDocRetirante ? `(Doc: ${baixaDocRetirante.trim()})` : '',
         baixaParentesco ? `[${baixaParentesco}]` : ''
       ].filter(Boolean).join(' ');
@@ -1961,7 +1963,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       setItensSelecionadosIds([]);
       setItensCandidatosEntrega([]);
       setModalBaixaAberta(false);
-      setNomeRetirante(''); setFotoRetiranteUrl(''); setAssinaturaDigitalUrl('');
+      setNomeRetirante(''); setNomeRetiranteManual(''); setFotoRetiranteUrl(''); setAssinaturaDigitalUrl('');
       setBaixaDocRetirante(''); setBaixaParentesco('Titular / Morador');
       setBaixaObsEspecial(''); setBaixaNotificarSupervisor(false);
       setMostrarOpcoesBaixa(false);
@@ -3131,35 +3133,38 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       <div className="space-y-1.5">
                         <select
                           value={nomeRetirante}
-                          onChange={(e) => setNomeRetirante(e.target.value)}
+                          onChange={(e) => {
+                            setNomeRetirante(e.target.value);
+                            if (e.target.value !== '__OUTRO__') {
+                              setNomeRetiranteManual('');
+                            }
+                          }}
                           required
                           className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition cursor-pointer shadow-2xs"
                         >
-                          <option value="">Selecione o morador da unidade...</option>
+                          <option value="">Selecione quem está retirando...</option>
                           {moradoresDasUnidadesBaixa.map((m: any) => (
                             <option key={m.id} value={m.nome}>
                               👤 {m.nome} {m.tipo ? `(${m.tipo})` : ''}
                             </option>
                           ))}
+                          <option value="__OUTRO__">✍️ Outro (digitar nome)...</option>
                         </select>
 
-                        {/* Botões rápidos em 1 clique para agilidade do operador */}
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {moradoresDasUnidadesBaixa.map((m: any) => (
-                            <button
-                              key={m.id}
-                              type="button"
-                              onClick={() => setNomeRetirante(m.nome)}
-                              className={`text-[10px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer font-bold border ${
-                                nomeRetirante === m.nome 
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' 
-                                  : 'bg-white border-slate-300 text-slate-700 hover:bg-emerald-50'
-                              }`}
-                            >
-                              <User className="w-3 h-3" /> {m.nome}
-                            </button>
-                          ))}
-                        </div>
+                        {/* Campo para digitação de Outro */}
+                        {nomeRetirante === '__OUTRO__' && (
+                          <div className="pt-0.5 animate-in fade-in duration-150">
+                            <input
+                              type="text"
+                              value={nomeRetiranteManual}
+                              onChange={(e) => setNomeRetiranteManual(e.target.value)}
+                              placeholder="Digite o nome completo de quem está retirando..."
+                              required
+                              autoFocus
+                              className="w-full p-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition shadow-2xs"
+                            />
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <input
@@ -3379,35 +3384,38 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       <div className="space-y-1.5">
                         <select
                           value={nomeRetirante}
-                          onChange={(e) => setNomeRetirante(e.target.value)}
+                          onChange={(e) => {
+                            setNomeRetirante(e.target.value);
+                            if (e.target.value !== '__OUTRO__') {
+                              setNomeRetiranteManual('');
+                            }
+                          }}
                           required
                           className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition cursor-pointer shadow-2xs"
                         >
-                          <option value="">Selecione o morador da unidade...</option>
+                          <option value="">Selecione quem está retirando...</option>
                           {moradoresDasUnidadesBaixa.map((m: any) => (
                             <option key={m.id} value={m.nome}>
                               👤 {m.nome} {m.tipo ? `(${m.tipo})` : ''}
                             </option>
                           ))}
+                          <option value="__OUTRO__">✍️ Outro (digitar nome)...</option>
                         </select>
 
-                        {/* Botões rápidos em 1 clique para agilidade do operador */}
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {moradoresDasUnidadesBaixa.map((m: any) => (
-                            <button
-                              key={m.id}
-                              type="button"
-                              onClick={() => setNomeRetirante(m.nome)}
-                              className={`text-[10px] px-2 py-0.5 rounded-md transition flex items-center gap-1 cursor-pointer font-bold border ${
-                                nomeRetirante === m.nome 
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' 
-                                  : 'bg-white border-slate-300 text-slate-700 hover:bg-emerald-50'
-                              }`}
-                            >
-                              <User className="w-3 h-3" /> {m.nome}
-                            </button>
-                          ))}
-                        </div>
+                        {/* Campo para digitação de Outro */}
+                        {nomeRetirante === '__OUTRO__' && (
+                          <div className="pt-0.5 animate-in fade-in duration-150">
+                            <input
+                              type="text"
+                              value={nomeRetiranteManual}
+                              onChange={(e) => setNomeRetiranteManual(e.target.value)}
+                              placeholder="Digite o nome completo de quem está retirando..."
+                              required
+                              autoFocus
+                              className="w-full p-2 bg-white border border-emerald-500 rounded-lg text-slate-900 text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition shadow-2xs"
+                            />
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <input
