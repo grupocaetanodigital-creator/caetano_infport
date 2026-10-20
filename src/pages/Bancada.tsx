@@ -27,7 +27,8 @@ import {
   X,
   Sliders,
   MapPin,
-  Archive
+  Archive,
+  ListChecks
 } from 'lucide-react';
 import {
   ItemBancada,
@@ -118,6 +119,41 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
 
   // Busca na lista da torre ativa
   const [buscaListaTorre, setBuscaListaTorre] = useState<string>('');
+
+  // Checklist de Conferência Física de Balcão
+  const [itensConferidos, setItensConferidos] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== 'undefined' && condominioId) {
+      try {
+        const salvo = localStorage.getItem(`bancada_checklist_${condominioId}`);
+        if (salvo) return JSON.parse(salvo);
+      } catch {}
+    }
+    return {};
+  });
+  const [filtroChecklist, setFiltroChecklist] = useState<'todos' | 'pendentes' | 'conferidos'>('todos');
+
+  const toggleItemConferido = (itemId: string) => {
+    setItensConferidos(prev => {
+      const atualizado = { ...prev, [itemId]: !prev[itemId] };
+      try {
+        localStorage.setItem(`bancada_checklist_${condominioId}`, JSON.stringify(atualizado));
+      } catch {}
+      return atualizado;
+    });
+  };
+
+  const handleMarcarTodosEstrutura = (marcar: boolean) => {
+    setItensConferidos(prev => {
+      const atualizado = { ...prev };
+      itensEstruturaAtiva.forEach(it => {
+        atualizado[it.id] = marcar;
+      });
+      try {
+        localStorage.setItem(`bancada_checklist_${condominioId}`, JSON.stringify(atualizado));
+      } catch {}
+      return atualizado;
+    });
+  };
 
   const [feedbackUltimoLancamento, setFeedbackUltimoLancamento] = useState<{
     mensagem: string;
@@ -236,17 +272,34 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     );
   }, [itens, estruturaSelecionada]);
 
-  // Itens da estrutura filtrados pela busca rápida da lista
+  // Itens da estrutura filtrados pela busca rápida da lista e pelo filtro de checklist
   const itensEstruturaAtivaFiltrados = useMemo(() => {
-    if (!buscaListaTorre.trim()) return itensEstruturaAtiva;
+    let base = itensEstruturaAtiva;
+    if (filtroChecklist === 'pendentes') {
+      base = base.filter(it => !itensConferidos[it.id]);
+    } else if (filtroChecklist === 'conferidos') {
+      base = base.filter(it => !!itensConferidos[it.id]);
+    }
+
+    if (!buscaListaTorre.trim()) return base;
     const termo = buscaListaTorre.trim().toLowerCase();
-    return itensEstruturaAtiva.filter(it =>
+    return base.filter(it =>
       it.unidade.toLowerCase().includes(termo) ||
       (it.tipo_volume && it.tipo_volume.toLowerCase().includes(termo)) ||
       (it.local_armazenamento && it.local_armazenamento.toLowerCase().includes(termo)) ||
       (it.observacao && it.observacao.toLowerCase().includes(termo))
     );
-  }, [itensEstruturaAtiva, buscaListaTorre]);
+  }, [itensEstruturaAtiva, buscaListaTorre, filtroChecklist, itensConferidos]);
+
+  // Estatísticas de Checklist da estrutura ativa
+  const estatisticasChecklistEstrutura = useMemo(() => {
+    const totalItens = itensEstruturaAtiva.length;
+    const conferidos = itensEstruturaAtiva.filter(it => !!itensConferidos[it.id]).length;
+    const pendentes = totalItens - conferidos;
+    const porcentagem = totalItens > 0 ? Math.round((conferidos / totalItens) * 100) : 0;
+    const todosConferidos = totalItens > 0 && conferidos === totalItens;
+    return { totalItens, conferidos, pendentes, porcentagem, todosConferidos };
+  }, [itensEstruturaAtiva, itensConferidos]);
 
   // Total de volumes da estrutura selecionada
   const totalVolumesEstruturaAtiva = useMemo(() => {
@@ -927,7 +980,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                     Volumes na {estruturaSelecionada}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {itensEstruturaAtivaFiltrados.length} {rotuloUnidade.toLowerCase()}(s) • {totalVolumesEstruturaAtiva} volume(s) físicos
+                    {itensEstruturaAtivaFiltrados.length} de {itensEstruturaAtiva.length} {rotuloUnidade.toLowerCase()}(s) • {totalVolumesEstruturaAtiva} volume(s) físicos
                   </p>
                 </div>
 
@@ -937,7 +990,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                       {totalVolumesEstruturaAtiva} vol.
                     </span>
                   )}
-                  {/* Ícone de engrenagem bem no cantinho acima da barra de pesquisa */}
+                  {/* Ícone de engrenagem para configurar locais */}
                   <button
                     type="button"
                     onClick={abrirModalConfigLocais}
@@ -948,6 +1001,96 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                   </button>
                 </div>
               </div>
+
+              {/* BARRA DE CHECKLIST DE AUDITORIA FÍSICA */}
+              {itensEstruturaAtiva.length > 0 && (
+                <div className="mb-3 p-2.5 bg-gradient-to-r from-emerald-50 via-slate-50 to-amber-50 rounded-xl border border-emerald-200/80 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <ListChecks className="w-4 h-4 text-emerald-600" />
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                        Checklist de Balcão
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                        estatisticasChecklistEstrutura.todosConferidos
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      }`}>
+                        {estatisticasChecklistEstrutura.conferidos}/{estatisticasChecklistEstrutura.totalItens} ({estatisticasChecklistEstrutura.porcentagem}%)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {estatisticasChecklistEstrutura.todosConferidos ? (
+                        <button
+                          type="button"
+                          onClick={() => handleMarcarTodosEstrutura(false)}
+                          className="text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 cursor-pointer"
+                          title="Desmarcar todos os itens desta torre"
+                        >
+                          Desmarcar Todos
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleMarcarTodosEstrutura(true)}
+                          className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          title="Marcar todos os itens desta torre como conferidos"
+                        >
+                          <Check className="w-3 h-3 stroke-[3]" />
+                          Marcar Todos
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Barra de Progresso do Checklist */}
+                  <div className="w-full bg-slate-200/80 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${estatisticasChecklistEstrutura.porcentagem}%` }}
+                    />
+                  </div>
+
+                  {/* Filtro Rápido do Checklist (Todos / Pendentes / Conferidos) */}
+                  <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-slate-200/60">
+                    <span className="text-[10px] font-bold text-slate-500 mr-0.5">Filtrar:</span>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroChecklist('todos')}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        filtroChecklist === 'todos'
+                          ? 'bg-slate-800 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      Todos ({estatisticasChecklistEstrutura.totalItens})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroChecklist('pendentes')}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        filtroChecklist === 'pendentes'
+                          ? 'bg-amber-600 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 hover:bg-amber-50 border border-slate-200'
+                      }`}
+                    >
+                      Pendentes ({estatisticasChecklistEstrutura.pendentes})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroChecklist('conferidos')}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        filtroChecklist === 'conferidos'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 hover:bg-emerald-50 border border-slate-200'
+                      }`}
+                    >
+                      Conferidos ({estatisticasChecklistEstrutura.conferidos})
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* BARRA DE PESQUISA RÁPIDA DA LISTA DE VOLUMES */}
               <div className="relative mb-3">
@@ -970,7 +1113,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                 )}
               </div>
 
-              {/* CONTEÚDO DA LISTA */}
+              {/* CONTEÚDO DA LISTA COM CARDS MELHORADOS E CHECKLIST */}
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px]">
                 {itensEstruturaAtivaFiltrados.length === 0 ? (
                   <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl my-auto">
@@ -983,91 +1126,151 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                     </p>
                   </div>
                 ) : (
-                  itensEstruturaAtivaFiltrados.map(item => (
-                    <div
-                      key={item.id}
-                      className="bg-slate-50 hover:bg-amber-50/60 p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3 transition"
-                    >
-                      {/* IDENTIFICAÇÃO DA UNIDADE */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-amber-600 text-white font-black text-base flex items-center justify-center shadow-xs flex-shrink-0">
-                          {item.unidade}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-black text-slate-900">
-                              {rotuloUnidade} {item.unidade}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
-                              {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
-                            </span>
-                            {item.local_armazenamento && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-0.5">
-                                <MapPin className="w-3 h-3 text-amber-700" />
-                                {item.local_armazenamento}
-                              </span>
-                            )}
+                  itensEstruturaAtivaFiltrados.map(item => {
+                    const isConferido = !!itensConferidos[item.id];
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 shadow-2xs ${
+                          isConferido
+                            ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-300/40'
+                            : 'bg-slate-50 hover:bg-amber-50/50 border-slate-200'
+                        }`}
+                      >
+                        {/* IDENTIFICAÇÃO DA UNIDADE + BOTAO DE CHECKLIST TOUCH */}
+                        <div className="flex items-center gap-2.5 sm:gap-3">
+                          {/* BOTÃO TOUCH DE CHECKLIST */}
+                          <button
+                            type="button"
+                            onClick={() => toggleItemConferido(item.id)}
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition active:scale-90 cursor-pointer border ${
+                              isConferido
+                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                : 'bg-white hover:bg-emerald-50 border-slate-300 text-transparent hover:text-emerald-500 hover:border-emerald-400'
+                            }`}
+                            title={isConferido ? "Item conferido no balcão! Toque para desmarcar" : "Toque para marcar como conferido no balcão"}
+                          >
+                            <Check className={`w-5 h-5 stroke-[3] ${isConferido ? 'text-white' : 'text-slate-300 hover:text-emerald-500'}`} />
+                          </button>
+
+                          {/* IDENTIFICADOR DA UNIDADE */}
+                          <div
+                            onClick={() => toggleItemConferido(item.id)}
+                            className={`w-11 h-11 rounded-xl font-black text-base flex items-center justify-center shadow-xs flex-shrink-0 cursor-pointer select-none transition active:scale-95 ${
+                              isConferido
+                                ? 'bg-emerald-700 text-white'
+                                : 'bg-amber-600 text-white'
+                            }`}
+                            title="Toque para alternar conferência do checklist"
+                          >
+                            {item.unidade}
                           </div>
-                          {item.observacao && (
-                            <p className="text-[11px] text-slate-600 font-medium italic mt-0.5">
-                              {item.observacao}
-                            </p>
-                          )}
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Clock className="w-3 h-3" />
-                            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • por {item.operador_nome || 'Portaria'}
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* AÇÕES RÁPIDAS (INCREMENTAR, DECREMENTAR, BAIXA E EXCLUIR) */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {/* BOTÕES + E - */}
-                        <div className="flex items-center bg-white rounded-lg border border-slate-300 shadow-2xs">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-black text-slate-900">
+                                {rotuloUnidade} {item.unidade}
+                              </span>
+
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
+                                {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
+                              </span>
+
+                              {item.local_armazenamento && (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border flex items-center gap-0.5 ${
+                                  item.local_armazenamento.toLowerCase().includes('chão') || item.local_armazenamento.toLowerCase().includes('chao')
+                                    ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                    : item.local_armazenamento.toLowerCase().includes('fora')
+                                    ? 'bg-slate-200 text-slate-800 border-slate-300'
+                                    : 'bg-amber-100 text-amber-900 border-amber-300'
+                                }`}>
+                                  <MapPin className="w-3 h-3 text-amber-700" />
+                                  {item.local_armazenamento}
+                                </span>
+                              )}
+
+                              {isConferido && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-0.5">
+                                  <Check className="w-3 h-3" />
+                                  Conferido
+                                </span>
+                              )}
+                            </div>
+
+                            {item.observacao && (
+                              <p className="text-[11px] text-slate-600 font-medium italic mt-0.5">
+                                {item.observacao}
+                              </p>
+                            )}
+
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Clock className="w-3 h-3" />
+                              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • por {item.operador_nome || 'Portaria'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* AÇÕES RÁPIDAS (INCREMENTAR, DECREMENTAR, BAIXA E EXCLUIR) */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {/* BOTÕES + E - */}
+                          <div className="flex items-center bg-white rounded-lg border border-slate-300 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAlterarVolumeItem(item, -1);
+                              }}
+                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-l-lg transition cursor-pointer"
+                              title="Diminuir 1 volume"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="px-2 text-xs font-black text-slate-900">
+                              {item.volumes}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAlterarVolumeItem(item, 1);
+                              }}
+                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-r-lg transition cursor-pointer"
+                              title="Adicionar +1 volume"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* BOTÃO DAR BAIXA / ENTREGAR */}
                           <button
                             type="button"
-                            onClick={() => handleAlterarVolumeItem(item, -1)}
-                            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-l-lg transition"
-                            title="Diminuir 1 volume"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              abrirMenuBaixa(item);
+                            }}
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                            title="Opções de baixa e entrega"
                           >
-                            <Minus className="w-3.5 h-3.5" />
+                            <Check className="w-3.5 h-3.5" />
+                            Baixa
                           </button>
-                          <span className="px-2 text-xs font-black text-slate-900">
-                            {item.volumes}
-                          </span>
+
+                          {/* BOTÃO EXCLUIR */}
                           <button
                             type="button"
-                            onClick={() => handleAlterarVolumeItem(item, 1)}
-                            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-r-lg transition"
-                            title="Adicionar +1 volume"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoverItem(item);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer active:scale-95"
+                            title="Excluir lançamento"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-
-                        {/* BOTÃO DAR BAIXA / ENTREGAR */}
-                        <button
-                          type="button"
-                          onClick={() => abrirMenuBaixa(item)}
-                          className="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
-                          title="Opções de baixa e entrega"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          Baixa
-                        </button>
-
-                        {/* BOTÃO EXCLUIR */}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoverItem(item)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                          title="Excluir lançamento"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
