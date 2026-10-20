@@ -120,7 +120,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
   // Busca na lista da torre ativa
   const [buscaListaTorre, setBuscaListaTorre] = useState<string>('');
 
-  // Checklist de Conferência Física de Balcão
+  // Checklist de Conferência Física de Balcão (armazenamento persistente local)
   const [itensConferidos, setItensConferidos] = useState<Record<string, boolean>>(() => {
     if (typeof window !== 'undefined' && condominioId) {
       try {
@@ -131,6 +131,9 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     return {};
   });
   const [filtroChecklist, setFiltroChecklist] = useState<'todos' | 'pendentes' | 'conferidos'>('todos');
+  const [estruturaChecklist, setEstruturaChecklist] = useState<string>('todas');
+  const [buscaChecklist, setBuscaChecklist] = useState<string>('');
+  const [checklistCopiadoWhats, setChecklistCopiadoWhats] = useState<boolean>(false);
 
   const toggleItemConferido = (itemId: string) => {
     setItensConferidos(prev => {
@@ -142,10 +145,14 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     });
   };
 
-  const handleMarcarTodosEstrutura = (marcar: boolean) => {
+  const handleMarcarTodosChecklist = (marcar: boolean) => {
+    const itensAlvo = estruturaChecklist === 'todas'
+      ? itens
+      : itens.filter(it => it.estrutura.toLowerCase() === estruturaChecklist.toLowerCase());
+    
     setItensConferidos(prev => {
       const atualizado = { ...prev };
-      itensEstruturaAtiva.forEach(it => {
+      itensAlvo.forEach(it => {
         atualizado[it.id] = marcar;
       });
       try {
@@ -155,6 +162,15 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     });
   };
 
+  const handleReiniciarChecklist = () => {
+    if (window.confirm('Deseja realmente zerar a conferência deste checklist? Todos os itens voltarão para o status pendente.')) {
+      setItensConferidos({});
+      try {
+        localStorage.removeItem(`bancada_checklist_${condominioId}`);
+      } catch {}
+    }
+  };
+
   const [feedbackUltimoLancamento, setFeedbackUltimoLancamento] = useState<{
     mensagem: string;
     tipo: 'novo' | 'incremento';
@@ -162,9 +178,9 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     estrutura: string;
   } | null>(null);
 
-  // Busca e visualização
+  // Busca e visualização com aba direcionada de checklist
   const [termoBusca, setTermoBusca] = useState<string>('');
-  const [abaVisualizacao, setAbaVisualizacao] = useState<'lancamento' | 'visao_geral' | 'historico'>('lancamento');
+  const [abaVisualizacao, setAbaVisualizacao] = useState<'lancamento' | 'visao_geral' | 'checklist' | 'historico'>('lancamento');
 
   // Modais
   const [modalZerarAberto, setModalZerarAberto] = useState<boolean>(false);
@@ -272,36 +288,68 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     );
   }, [itens, estruturaSelecionada]);
 
-  // Itens da estrutura filtrados pela busca rápida da lista e pelo filtro de checklist
+  // Itens da estrutura filtrados pela busca rápida da lista no lançamento normal
   const itensEstruturaAtivaFiltrados = useMemo(() => {
-    let base = itensEstruturaAtiva;
+    if (!buscaListaTorre.trim()) return itensEstruturaAtiva;
+    const termo = buscaListaTorre.trim().toLowerCase();
+    return itensEstruturaAtiva.filter(it =>
+      it.unidade.toLowerCase().includes(termo) ||
+      (it.local_armazenamento && it.local_armazenamento.toLowerCase().includes(termo)) ||
+      (it.observacao && it.observacao.toLowerCase().includes(termo))
+    );
+  }, [itensEstruturaAtiva, buscaListaTorre]);
+
+  // Estatísticas de Checklist Geral (toda a bancada)
+  const estatisticasChecklistGeral = useMemo(() => {
+    const totalItens = itens.length;
+    const conferidos = itens.filter(it => !!itensConferidos[it.id]).length;
+    const pendentes = totalItens - conferidos;
+    const totalVolumes = itens.reduce((acc, it) => acc + (it.volumes || 1), 0);
+    const volumesConferidos = itens.filter(it => !!itensConferidos[it.id]).reduce((acc, it) => acc + (it.volumes || 1), 0);
+    const porcentagem = totalItens > 0 ? Math.round((conferidos / totalItens) * 100) : 0;
+    const todosConferidos = totalItens > 0 && conferidos === totalItens;
+    return { totalItens, conferidos, pendentes, totalVolumes, volumesConferidos, porcentagem, todosConferidos };
+  }, [itens, itensConferidos]);
+
+  // Estatísticas de Checklist para a estrutura atualmente selecionada no Checklist
+  const estatisticasChecklistEstruturaAtual = useMemo(() => {
+    const itensBase = estruturaChecklist === 'todas'
+      ? itens
+      : itens.filter(it => it.estrutura.toLowerCase() === estruturaChecklist.toLowerCase());
+    const totalItens = itensBase.length;
+    const conferidos = itensBase.filter(it => !!itensConferidos[it.id]).length;
+    const pendentes = totalItens - conferidos;
+    const totalVolumes = itensBase.reduce((acc, it) => acc + (it.volumes || 1), 0);
+    const volumesConferidos = itensBase.filter(it => !!itensConferidos[it.id]).reduce((acc, it) => acc + (it.volumes || 1), 0);
+    const porcentagem = totalItens > 0 ? Math.round((conferidos / totalItens) * 100) : 0;
+    const todosConferidos = totalItens > 0 && conferidos === totalItens;
+    return { totalItens, conferidos, pendentes, totalVolumes, volumesConferidos, porcentagem, todosConferidos };
+  }, [itens, estruturaChecklist, itensConferidos]);
+
+  // Itens filtrados para a tela direcionada de Checklist
+  const itensChecklistFiltrados = useMemo(() => {
+    let base = itens;
+    if (estruturaChecklist !== 'todas') {
+      base = base.filter(it => it.estrutura.toLowerCase() === estruturaChecklist.toLowerCase());
+    }
     if (filtroChecklist === 'pendentes') {
       base = base.filter(it => !itensConferidos[it.id]);
     } else if (filtroChecklist === 'conferidos') {
       base = base.filter(it => !!itensConferidos[it.id]);
     }
+    if (buscaChecklist.trim()) {
+      const termo = buscaChecklist.trim().toLowerCase();
+      base = base.filter(it =>
+        it.unidade.toLowerCase().includes(termo) ||
+        it.estrutura.toLowerCase().includes(termo) ||
+        (it.local_armazenamento && it.local_armazenamento.toLowerCase().includes(termo)) ||
+        (it.observacao && it.observacao.toLowerCase().includes(termo))
+      );
+    }
+    return base;
+  }, [itens, estruturaChecklist, filtroChecklist, buscaChecklist, itensConferidos]);
 
-    if (!buscaListaTorre.trim()) return base;
-    const termo = buscaListaTorre.trim().toLowerCase();
-    return base.filter(it =>
-      it.unidade.toLowerCase().includes(termo) ||
-      (it.tipo_volume && it.tipo_volume.toLowerCase().includes(termo)) ||
-      (it.local_armazenamento && it.local_armazenamento.toLowerCase().includes(termo)) ||
-      (it.observacao && it.observacao.toLowerCase().includes(termo))
-    );
-  }, [itensEstruturaAtiva, buscaListaTorre, filtroChecklist, itensConferidos]);
-
-  // Estatísticas de Checklist da estrutura ativa
-  const estatisticasChecklistEstrutura = useMemo(() => {
-    const totalItens = itensEstruturaAtiva.length;
-    const conferidos = itensEstruturaAtiva.filter(it => !!itensConferidos[it.id]).length;
-    const pendentes = totalItens - conferidos;
-    const porcentagem = totalItens > 0 ? Math.round((conferidos / totalItens) * 100) : 0;
-    const todosConferidos = totalItens > 0 && conferidos === totalItens;
-    return { totalItens, conferidos, pendentes, porcentagem, todosConferidos };
-  }, [itensEstruturaAtiva, itensConferidos]);
-
-  // Total de volumes da estrutura selecionada
+  // Total de volumes da estrutura selecionada na bancada
   const totalVolumesEstruturaAtiva = useMemo(() => {
     return itensEstruturaAtiva.reduce((acc, it) => acc + (it.volumes || 1), 0);
   }, [itensEstruturaAtiva]);
@@ -447,6 +495,43 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
     navigator.clipboard.writeText(texto).then(() => {
       setCopiadoWhats(true);
       setTimeout(() => setCopiadoWhats(false), 3000);
+    });
+  };
+
+  // Copiar Relatório Detalhado do Checklist de Balcão para o WhatsApp
+  const handleCopiarRelatorioChecklistWhats = () => {
+    const agora = new Date();
+    const dataFormatada = agora.toLocaleDateString('pt-BR');
+    const horaFormatada = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
+    let txt = `📋 *RELATÓRIO DE AUDITORIA & CHECKLIST DE BALCÃO*\n`;
+    txt += `🏢 *Condomínio:* ${nomeCondominio}\n`;
+    txt += `👤 *Operador:* ${nomeOperador}\n`;
+    txt += `📅 *Data/Hora:* ${dataFormatada} às ${horaFormatada}\n`;
+    txt += `------------------------------------\n`;
+    txt += `📦 *Total na Bancada:* ${estatisticasChecklistGeral.totalVolumes} volumes (${estatisticasChecklistGeral.totalItens} unidades)\n`;
+    txt += `✅ *Conferidos:* ${estatisticasChecklistGeral.conferidos} un (${estatisticasChecklistGeral.porcentagem}%)\n`;
+    txt += `⏳ *Pendentes:* ${estatisticasChecklistGeral.pendentes} un\n`;
+    txt += `------------------------------------\n`;
+    
+    estruturasDisponiveis.forEach(estr => {
+      const itensTorre = itens.filter(it => it.estrutura.toLowerCase() === estr.toLowerCase());
+      if (itensTorre.length > 0) {
+        const confTorre = itensTorre.filter(it => !!itensConferidos[it.id]).length;
+        const totalVolsTorre = itensTorre.reduce((acc, it) => acc + (it.volumes || 1), 0);
+        txt += `\n*${estr}:* ${confTorre}/${itensTorre.length} conferidos (${totalVolsTorre} vol)\n`;
+        itensTorre.forEach(it => {
+          const status = itensConferidos[it.id] ? '✅' : '⬜';
+          txt += `  ${status} ${rotuloUnidade} ${it.unidade}: ${it.volumes} vol [${it.local_armazenamento || 'Bancada'}]\n`;
+        });
+      }
+    });
+    
+    txt += `\n_Auditoria realizada pelo Módulo Bancada do Sistema._`;
+
+    navigator.clipboard.writeText(txt).then(() => {
+      setChecklistCopiadoWhats(true);
+      setTimeout(() => setChecklistCopiadoWhats(false), 3000);
     });
   };
 
@@ -638,31 +723,44 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
       </div>
 
       {/* NAVEGAÇÃO DE ABAS */}
-      <div className="flex border-b border-slate-200 bg-white rounded-xl p-1 shadow-xs gap-1">
+      <div className="flex border-b border-slate-200 bg-white rounded-xl p-1 shadow-xs gap-1 flex-wrap sm:flex-nowrap">
         <button
           type="button"
           onClick={() => setAbaVisualizacao('lancamento')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-2 transition ${
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer ${
             abaVisualizacao === 'lancamento'
               ? 'bg-amber-500 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Plus className="w-4 h-4" />
-          1. Lançamento Rápido por {rotuloBloco}
+          <span>1. Lançamento por {rotuloBloco}</span>
         </button>
 
         <button
           type="button"
           onClick={() => setAbaVisualizacao('visao_geral')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-2 transition ${
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer ${
             abaVisualizacao === 'visao_geral'
               ? 'bg-amber-500 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Building className="w-4 h-4" />
-          2. Visão Geral da Bancada ({estatisticas.totalVolumes} vol.)
+          <span>2. Visão Geral ({estatisticas.totalVolumes} vol.)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAbaVisualizacao('checklist')}
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer ${
+            abaVisualizacao === 'checklist'
+              ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+              : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'
+          }`}
+        >
+          <ListChecks className="w-4 h-4" />
+          <span>3. Checklist de Balcão ({estatisticasChecklistGeral.conferidos}/{estatisticasChecklistGeral.totalItens})</span>
         </button>
       </div>
 
@@ -985,6 +1083,20 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* BOTÃO INICIAR CHECKLIST DIRECIONADO */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstruturaChecklist(estruturaSelecionada);
+                      setAbaVisualizacao('checklist');
+                    }}
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer border border-emerald-500"
+                    title="Iniciar conferência e checklist físico desta torre ou de toda a bancada"
+                  >
+                    <ListChecks className="w-3.5 h-3.5" />
+                    <span>Iniciar Checklist</span>
+                  </button>
+
                   {itensEstruturaAtiva.length > 0 && (
                     <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-lg">
                       {totalVolumesEstruturaAtiva} vol.
@@ -1001,96 +1113,6 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                   </button>
                 </div>
               </div>
-
-              {/* BARRA DE CHECKLIST DE AUDITORIA FÍSICA */}
-              {itensEstruturaAtiva.length > 0 && (
-                <div className="mb-3 p-2.5 bg-gradient-to-r from-emerald-50 via-slate-50 to-amber-50 rounded-xl border border-emerald-200/80 shadow-2xs">
-                  <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <ListChecks className="w-4 h-4 text-emerald-600" />
-                      <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                        Checklist de Balcão
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
-                        estatisticasChecklistEstrutura.todosConferidos
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                      }`}>
-                        {estatisticasChecklistEstrutura.conferidos}/{estatisticasChecklistEstrutura.totalItens} ({estatisticasChecklistEstrutura.porcentagem}%)
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {estatisticasChecklistEstrutura.todosConferidos ? (
-                        <button
-                          type="button"
-                          onClick={() => handleMarcarTodosEstrutura(false)}
-                          className="text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 cursor-pointer"
-                          title="Desmarcar todos os itens desta torre"
-                        >
-                          Desmarcar Todos
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleMarcarTodosEstrutura(true)}
-                          className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1"
-                          title="Marcar todos os itens desta torre como conferidos"
-                        >
-                          <Check className="w-3 h-3 stroke-[3]" />
-                          Marcar Todos
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Barra de Progresso do Checklist */}
-                  <div className="w-full bg-slate-200/80 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${estatisticasChecklistEstrutura.porcentagem}%` }}
-                    />
-                  </div>
-
-                  {/* Filtro Rápido do Checklist (Todos / Pendentes / Conferidos) */}
-                  <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-slate-200/60">
-                    <span className="text-[10px] font-bold text-slate-500 mr-0.5">Filtrar:</span>
-                    <button
-                      type="button"
-                      onClick={() => setFiltroChecklist('todos')}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        filtroChecklist === 'todos'
-                          ? 'bg-slate-800 text-white shadow-2xs'
-                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                      }`}
-                    >
-                      Todos ({estatisticasChecklistEstrutura.totalItens})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFiltroChecklist('pendentes')}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        filtroChecklist === 'pendentes'
-                          ? 'bg-amber-600 text-white shadow-2xs'
-                          : 'bg-white text-slate-600 hover:bg-amber-50 border border-slate-200'
-                      }`}
-                    >
-                      Pendentes ({estatisticasChecklistEstrutura.pendentes})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFiltroChecklist('conferidos')}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        filtroChecklist === 'conferidos'
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'bg-white text-slate-600 hover:bg-emerald-50 border border-slate-200'
-                      }`}
-                    >
-                      Conferidos ({estatisticasChecklistEstrutura.conferidos})
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* BARRA DE PESQUISA RÁPIDA DA LISTA DE VOLUMES */}
               <div className="relative mb-3">
@@ -1113,7 +1135,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                 )}
               </div>
 
-              {/* CONTEÚDO DA LISTA COM CARDS MELHORADOS E CHECKLIST */}
+              {/* CONTEÚDO DA LISTA COM CARDS LIMPOS E INTUITIVOS */}
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px]">
                 {itensEstruturaAtivaFiltrados.length === 0 ? (
                   <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl my-auto">
@@ -1133,35 +1155,18 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                         key={item.id}
                         className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 shadow-2xs ${
                           isConferido
-                            ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-300/40'
+                            ? 'bg-emerald-50/50 border-emerald-300/80'
                             : 'bg-slate-50 hover:bg-amber-50/50 border-slate-200'
                         }`}
                       >
-                        {/* IDENTIFICAÇÃO DA UNIDADE + BOTAO DE CHECKLIST TOUCH */}
+                        {/* IDENTIFICAÇÃO DA UNIDADE */}
                         <div className="flex items-center gap-2.5 sm:gap-3">
-                          {/* BOTÃO TOUCH DE CHECKLIST */}
-                          <button
-                            type="button"
-                            onClick={() => toggleItemConferido(item.id)}
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition active:scale-90 cursor-pointer border ${
-                              isConferido
-                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                                : 'bg-white hover:bg-emerald-50 border-slate-300 text-transparent hover:text-emerald-500 hover:border-emerald-400'
-                            }`}
-                            title={isConferido ? "Item conferido no balcão! Toque para desmarcar" : "Toque para marcar como conferido no balcão"}
-                          >
-                            <Check className={`w-5 h-5 stroke-[3] ${isConferido ? 'text-white' : 'text-slate-300 hover:text-emerald-500'}`} />
-                          </button>
-
-                          {/* IDENTIFICADOR DA UNIDADE */}
                           <div
-                            onClick={() => toggleItemConferido(item.id)}
-                            className={`w-11 h-11 rounded-xl font-black text-base flex items-center justify-center shadow-xs flex-shrink-0 cursor-pointer select-none transition active:scale-95 ${
+                            className={`w-11 h-11 rounded-xl font-black text-base flex items-center justify-center shadow-xs flex-shrink-0 select-none ${
                               isConferido
                                 ? 'bg-emerald-700 text-white'
                                 : 'bg-amber-600 text-white'
                             }`}
-                            title="Toque para alternar conferência do checklist"
                           >
                             {item.unidade}
                           </div>
@@ -1441,6 +1446,433 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA 3: AUDITORIA & CHECKLIST DE BALCÃO (PRÁTICO, LIMPO E INTUITIVO)       */}
+      {/* ========================================================================= */}
+      {abaVisualizacao === 'checklist' && (
+        <div className="space-y-4 animate-fadeIn">
+          {/* CABEÇALHO DO CHECKLIST COM IDENTIFICAÇÃO E AÇÕES RÁPIDAS */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <ListChecks className="w-3.5 h-3.5 text-emerald-600" />
+                  Módulo de Auditoria & Conferência
+                </span>
+                <span className="text-[11px] text-slate-400 font-semibold">
+                  Operador: <strong className="text-slate-700">{nomeOperador}</strong>
+                </span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                Checklist Físico de Balcão
+              </h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Confira fisicamente se os volumes na portaria batem exatamente com os registros da bancada.
+              </p>
+            </div>
+
+            {/* BOTÕES DE AÇÃO DO CHECKLIST */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopiarRelatorioChecklistWhats}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer border border-emerald-500"
+                title="Copiar relatório formatado de auditoria para o WhatsApp"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{checklistCopiadoWhats ? '✓ Copiado!' : 'Relatório Whats'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReiniciarChecklist}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer border border-slate-300"
+                title="Reiniciar e desmarcar todos os itens conferidos"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Zerar Checklist</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAbaVisualizacao('lancamento')}
+                className="px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+                title="Voltar para a tela de lançamento rápido"
+              >
+                <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                <span>Voltar ao Lançamento</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SELETOR DE TORRES / ESTRUTURAS DO CHECKLIST */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+            <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-2">
+              Filtrar por {rotuloBloco}:
+            </span>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setEstruturaChecklist('todas')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                  estruturaChecklist === 'todas'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                <Building className="w-3.5 h-3.5" />
+                <span>Todas as Torres</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  estruturaChecklist === 'todas' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-800'
+                }`}>
+                  {estatisticasChecklistGeral.totalItens} un
+                </span>
+              </button>
+
+              {estruturasDisponiveis.map(estr => {
+                const itensTorre = itens.filter(it => it.estrutura.toLowerCase() === estr.toLowerCase());
+                const confTorre = itensTorre.filter(it => !!itensConferidos[it.id]).length;
+                const totalTorre = itensTorre.length;
+                const completa = totalTorre > 0 && confTorre === totalTorre;
+                const ativa = estruturaChecklist.toLowerCase() === estr.toLowerCase();
+
+                return (
+                  <button
+                    key={estr}
+                    type="button"
+                    onClick={() => setEstruturaChecklist(estr)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                      ativa
+                        ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-300'
+                        : completa
+                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <span>{estr}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      ativa
+                        ? 'bg-white/20 text-white'
+                        : completa
+                        ? 'bg-emerald-200 text-emerald-900'
+                        : 'bg-slate-200 text-slate-800'
+                    }`}>
+                      {confTorre}/{totalTorre}
+                    </span>
+                    {completa && <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* PAINEL DE MÉTRICAS E PROGRESSO EM TEMPO REAL */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-700/60">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <span className="text-sm font-black uppercase tracking-wider">
+                  Progresso da Auditoria {estruturaChecklist === 'todas' ? '(Toda a Bancada)' : `(${estruturaChecklist})`}
+                </span>
+              </div>
+              <span className="text-xs font-black text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-3 py-1 rounded-full">
+                {estatisticasChecklistEstruturaAtual.porcentagem}% Concluído
+              </span>
+            </div>
+
+            {/* BARRA DE PROGRESSO COM ANIMAÇÃO */}
+            <div className="w-full bg-slate-700/60 h-3 rounded-full overflow-hidden p-0.5 mb-4 border border-slate-600">
+              <div
+                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500 shadow-sm"
+                style={{ width: `${estatisticasChecklistEstruturaAtual.porcentagem}%` }}
+              />
+            </div>
+
+            {/* 4 CARDS DE INDICADORES */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 block">
+                  A Conferir
+                </span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black text-white">
+                    {estatisticasChecklistEstruturaAtual.totalItens}
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-bold">unidades</span>
+                </div>
+              </div>
+
+              <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 block">
+                  Conferidos ✓
+                </span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black text-emerald-400">
+                    {estatisticasChecklistEstruturaAtual.conferidos}
+                  </span>
+                  <span className="text-[11px] text-emerald-300/80 font-bold">unidades</span>
+                </div>
+              </div>
+
+              <div className="bg-amber-900/30 border border-amber-500/30 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 block">
+                  Pendentes ⏳
+                </span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black text-amber-400">
+                    {estatisticasChecklistEstruturaAtual.pendentes}
+                  </span>
+                  <span className="text-[11px] text-amber-300/80 font-bold">restantes</span>
+                </div>
+              </div>
+
+              <div className="bg-purple-900/30 border border-purple-500/30 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 block">
+                  Volumes Físicos
+                </span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black text-purple-300">
+                    {estatisticasChecklistEstruturaAtual.totalVolumes}
+                  </span>
+                  <span className="text-[11px] text-purple-300/80 font-bold">volumes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* BANNER COMEMORATIVO SE 100% CONFERIDO */}
+          {estatisticasChecklistEstruturaAtual.todosConferidos && estatisticasChecklistEstruturaAtual.totalItens > 0 && (
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl shadow-md border border-emerald-400/40 flex items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-6 h-6 text-emerald-200" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black">
+                    Conferência 100% Batida com Sucesso!
+                  </h4>
+                  <p className="text-xs text-emerald-100 font-medium">
+                    Todos os volumes físicos desta seleção foram devidamente auditados no balcão da portaria.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopiarRelatorioChecklistWhats}
+                className="px-3 py-1.5 bg-white text-emerald-800 rounded-xl text-xs font-black hover:bg-emerald-50 transition active:scale-95 shadow-sm whitespace-nowrap cursor-pointer"
+              >
+                Enviar Comprovante Whats
+              </button>
+            </div>
+          )}
+
+          {/* BARRA DE CONTROLE: PESQUISA, FILTROS E AÇÕES EM MASSA */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* CAMPO DE BUSCA RÁPIDA */}
+            <div className="relative w-full md:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder={`Buscar unidade, torre ou local...`}
+                value={buscaChecklist}
+                onChange={e => setBuscaChecklist(e.target.value)}
+                className="w-full text-xs font-semibold pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 outline-none transition"
+              />
+              {buscaChecklist && (
+                <button
+                  type="button"
+                  onClick={() => setBuscaChecklist('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* FILTROS (TODOS / PENDENTES / CONFERIDOS) E BOTÕES EM MASSA */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setFiltroChecklist('todos')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                    filtroChecklist === 'todos'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Todos ({estatisticasChecklistEstruturaAtual.totalItens})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroChecklist('pendentes')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                    filtroChecklist === 'pendentes'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Pendentes ({estatisticasChecklistEstruturaAtual.pendentes})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroChecklist('conferidos')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                    filtroChecklist === 'conferidos'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Conferidos ({estatisticasChecklistEstruturaAtual.conferidos})
+                </button>
+              </div>
+
+              {/* AÇÕES EM MASSA (MARCAR TODOS / DESMARCAR TODOS) */}
+              {estatisticasChecklistEstruturaAtual.todosConferidos ? (
+                <button
+                  type="button"
+                  onClick={() => handleMarcarTodosChecklist(false)}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-300 transition active:scale-95 cursor-pointer"
+                  title="Desmarcar todos os itens desta seleção"
+                >
+                  Desmarcar Todos
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleMarcarTodosChecklist(true)}
+                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black border border-emerald-500 shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                  title="Marcar todos os itens desta seleção como conferidos"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  Marcar Todos
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* LISTA DE ITENS DO CHECKLIST COM DESIGN PRÁTICO E ULTRA TOUCH */}
+          <div className="space-y-2">
+            {itensChecklistFiltrados.length === 0 ? (
+              <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 shadow-sm">
+                <PackageCheck className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <h4 className="text-sm font-black text-slate-700">
+                  {buscaChecklist
+                    ? `Nenhum item encontrado com o termo "${buscaChecklist}"`
+                    : filtroChecklist === 'pendentes'
+                    ? 'Parabéns! Não há nenhum item pendente de conferência nesta seleção.'
+                    : 'Nenhum volume cadastrado na bancada para esta seleção.'}
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  {buscaChecklist
+                    ? 'Tente buscar por outro número de unidade ou limpar o filtro.'
+                    : 'Acesse a aba 1 para realizar novos lançamentos rápidos de volumes.'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {itensChecklistFiltrados.map(item => {
+                  const isConferido = !!itensConferidos[item.id];
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => toggleItemConferido(item.id)}
+                      className={`p-3.5 rounded-2xl border transition-all duration-200 flex items-center justify-between gap-3 cursor-pointer select-none shadow-xs active:scale-[0.99] ${
+                        isConferido
+                          ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-300/60 shadow-emerald-100'
+                          : 'bg-white hover:bg-amber-50/40 border-slate-200 hover:border-amber-300'
+                      }`}
+                    >
+                      {/* BOTAO TOUCH DE CONFERÊNCIA + DADOS DA UNIDADE */}
+                      <div className="flex items-center gap-3">
+                        {/* CHECKBOX GRANDE TOUCH-FRIENDLY */}
+                        <div
+                          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 flex-shrink-0 border-2 ${
+                            isConferido
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
+                              : 'bg-slate-50 border-slate-300 text-transparent hover:border-emerald-400'
+                          }`}
+                        >
+                          <Check className={`w-6 h-6 stroke-[3] ${isConferido ? 'opacity-100' : 'opacity-0'}`} />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">
+                              {item.estrutura}
+                            </span>
+                            <span className="text-base font-black text-slate-900">
+                              {rotuloUnidade} {item.unidade}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-black border ${
+                              isConferido
+                                ? 'bg-emerald-200 text-emerald-950 border-emerald-300'
+                                : 'bg-amber-100 text-amber-900 border-amber-300'
+                            }`}>
+                              {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
+                            </span>
+                            {item.local_armazenamento && (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-0.5 ${
+                                item.local_armazenamento.toLowerCase().includes('chão') || item.local_armazenamento.toLowerCase().includes('chao')
+                                  ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                  : item.local_armazenamento.toLowerCase().includes('fora')
+                                  ? 'bg-slate-200 text-slate-800 border-slate-300'
+                                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                              }`}>
+                                <MapPin className="w-3 h-3 text-amber-700" />
+                                {item.local_armazenamento}
+                              </span>
+                            )}
+                          </div>
+
+                          {item.observacao && (
+                            <p className="text-xs text-slate-600 font-medium italic mt-0.5">
+                              {item.observacao}
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {item.operador_nome || 'Portaria'}
+                            </span>
+                            {isConferido ? (
+                              <span className="text-[10px] font-black text-emerald-700 flex items-center gap-0.5">
+                                ✓ Conferido no Balcão
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5">
+                                ⏳ Pendente de Checagem
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AÇÃO RÁPIDA DE BAIXA CASO O MORADOR APAREÇA DURANTE A AUDITORIA */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          abrirMenuBaixa(item);
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-600 hover:text-white text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-slate-300 hover:border-emerald-600 flex-shrink-0 cursor-pointer active:scale-95"
+                        title="Entregar ou dar baixa imediata deste item"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Baixa</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
