@@ -68,9 +68,10 @@ export const LOCAIS_PADRAO_BANCADA: BotaoLocalConfig[] = [
 
 interface BancadaProps {
   usuarioLogado: any;
+  onNavegar?: (modulo: string, opts?: any) => void;
 }
 
-export default function Bancada({ usuarioLogado }: BancadaProps) {
+export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
   const condominioId = usuarioLogado?.condominio_id || '';
   const nomeCondominio = usuarioLogado?.condominio_nome || 'Condomínio';
   const nomeOperador = usuarioLogado?.nome || usuarioLogado?.login || 'Portaria';
@@ -81,6 +82,15 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const [configCondominio, setConfigCondominio] = useState<CondominioConfig | null>(null);
   const [estruturasDisponiveis, setEstruturasDisponiveis] = useState<string[]>([]);
   const [estruturaSelecionada, setEstruturaSelecionada] = useState<string>('');
+
+  // Estado para Menu de Baixa (Deseja baixar ou ajustar a bancada?)
+  const [itemParaBaixa, setItemParaBaixa] = useState<ItemBancada | null>(null);
+  const [modalBaixaMenuAberto, setModalBaixaMenuAberto] = useState<boolean>(false);
+
+  const abrirMenuBaixa = (item: ItemBancada) => {
+    setItemParaBaixa(item);
+    setModalBaixaMenuAberto(true);
+  };
 
   // Configuração dos Botões de Locais de Armazenamento (Bancada, Chão, Fora...)
   const [locaisConfig, setLocaisConfig] = useState<BotaoLocalConfig[]>(() => {
@@ -1030,9 +1040,9 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                         {/* BOTÃO DAR BAIXA / ENTREGAR */}
                         <button
                           type="button"
-                          onClick={() => handleDarBaixa(item)}
+                          onClick={() => abrirMenuBaixa(item)}
                           className="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
-                          title="Morador retirou volume"
+                          title="Opções de baixa e entrega"
                         >
                           <Check className="w-3.5 h-3.5" />
                           Baixa
@@ -1192,9 +1202,9 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => handleDarBaixa(item)}
+                            onClick={() => abrirMenuBaixa(item)}
                             className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md text-[11px] font-bold transition flex items-center gap-0.5 cursor-pointer"
-                            title="Dar baixa / Entregar"
+                            title="Opções de baixa e entrega"
                           >
                             <Check className="w-3 h-3 text-emerald-600" /> Baixa
                           </button>
@@ -1686,6 +1696,118 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                 className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-md"
               >
                 Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* MODAL: MENU DE AÇÃO DE BAIXA (BAIXAR ENCOMENDA OU AJUSTAR A BANCADA)      */}
+      {/* ========================================================================= */}
+      {modalBaixaMenuAberto && itemParaBaixa && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-2xl">
+                  <Check className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-slate-900">
+                    Ação de Baixa / Retirada
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {rotuloUnidade} {itemParaBaixa.unidade} {itemParaBaixa.estrutura ? `• ${itemParaBaixa.estrutura}` : ''} • {itemParaBaixa.volumes} volume(s)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalBaixaMenuAberto(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center space-y-1">
+              <span className="text-xs font-black text-slate-800 block">
+                Deseja baixar ou ajustar a bancada?
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Escolha se deseja registrar a entrega oficial ao morador na aba de baixa ou apenas descontar os volumes na bancada física.
+              </p>
+            </div>
+
+            {/* AS DUAS OPÇÕES */}
+            <div className="space-y-2.5 pt-1">
+              {/* OPÇÃO 1: BAIXAR ENCOMENDA (DIRECIONA PARA ABA DE BAIXA ENCOMENDAS) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const unidadeAlvo = itemParaBaixa.unidade;
+                  const estruturaAlvo = itemParaBaixa.estrutura || '';
+                  sessionStorage.setItem('encomendas_etapa_inicial', '3'); // Etapa 3 = Baixa
+                  sessionStorage.setItem('encomenda_filtro_unidade', unidadeAlvo);
+                  if (estruturaAlvo) sessionStorage.setItem('encomenda_filtro_bloco', estruturaAlvo);
+
+                  window.dispatchEvent(new CustomEvent('navegar_modulo', {
+                    detail: { modulo: 'encomendas', etapa: '3', unidade: unidadeAlvo, bloco: estruturaAlvo }
+                  }));
+
+                  onNavegar?.('encomendas', { etapa: '3', unidade: unidadeAlvo, bloco: estruturaAlvo });
+                  setModalBaixaMenuAberto(false);
+                }}
+                className="w-full p-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white flex items-center gap-3.5 shadow-md shadow-emerald-600/20 transition cursor-pointer text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:bg-white/30 transition">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-black flex items-center justify-between">
+                    <span>Baixar Encomenda</span>
+                    <span className="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-bold uppercase">
+                      Ir para Baixa
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                    Direciona para a aba de Baixa de Encomendas para colher assinatura ou foto e registrar a entrega ao morador.
+                  </p>
+                </div>
+              </button>
+
+              {/* OPÇÃO 2: AJUSTAR A BANCADA (DESCONTA NA BANCADA FÍSICA) */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (itemParaBaixa) {
+                    await handleDarBaixa(itemParaBaixa);
+                  }
+                  setModalBaixaMenuAberto(false);
+                }}
+                className="w-full p-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 active:scale-[0.99] border border-slate-300 text-slate-800 flex items-center gap-3.5 transition cursor-pointer text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center shrink-0 group-hover:bg-slate-300 transition text-slate-700">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-black text-slate-900">
+                    Ajustar a Bancada
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Apenas diminui 1 volume ou zera a bancada física da portaria sem registrar no módulo de encomendas.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setModalBaixaMenuAberto(false)}
+                className="w-full py-2.5 text-center text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
               </button>
             </div>
           </div>

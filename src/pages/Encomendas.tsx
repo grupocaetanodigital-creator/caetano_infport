@@ -235,6 +235,42 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [condoConfig, setCondoConfig] = useState<CondominioConfig | null>(null);
   const condoAlvoId = loteAtivo?.condominio_id || idCondominioAtivo || condominioNovoLoteId;
 
+  // Redirecionamento inteligente vindo da Bancada (quando o operador clica em "Baixar Encomenda")
+  useEffect(() => {
+    try {
+      const etapaIni = sessionStorage.getItem('encomendas_etapa_inicial');
+      const uni = sessionStorage.getItem('encomenda_filtro_unidade');
+      const blk = sessionStorage.getItem('encomenda_filtro_bloco');
+
+      if (etapaIni === '3') {
+        setEtapa('3');
+        if (uni) {
+          setBuscaBaixaGeral(uni);
+        }
+        if (blk && blk !== 'TODOS') {
+          setAbaBlocoSelecionada(blk);
+        }
+        sessionStorage.removeItem('encomendas_etapa_inicial');
+        sessionStorage.removeItem('encomenda_filtro_unidade');
+        sessionStorage.removeItem('encomenda_filtro_bloco');
+      }
+    } catch {}
+
+    const handleNavegar = (e: any) => {
+      if (e.detail?.etapa === '3') {
+        setEtapa('3');
+        if (e.detail.unidade) {
+          setBuscaBaixaGeral(e.detail.unidade);
+        }
+        if (e.detail.bloco && e.detail.bloco !== 'TODOS') {
+          setAbaBlocoSelecionada(e.detail.bloco);
+        }
+      }
+    };
+    window.addEventListener('navegar_modulo', handleNavegar);
+    return () => window.removeEventListener('navegar_modulo', handleNavegar);
+  }, []);
+
   useEffect(() => {
     if (condoAlvoId) {
       carregarCondominioConfig(condoAlvoId).then((cfg) => {

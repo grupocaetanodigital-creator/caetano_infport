@@ -41,8 +41,10 @@ import {
   Building2,
   Sun,
   Moon,
-  Layers
+  Layers,
+  Scan
 } from 'lucide-react';
+import AbaModelosDocumentosOCR from '../components/AbaModelosDocumentosOCR';
 import { obterTemaAtual, aplicarTema, TipoTema } from '../services/themeService';
 import SeletorTema from '../components/SeletorTema';
 import ModalGerenciarSetores from '../components/ModalGerenciarSetores';
@@ -83,7 +85,7 @@ interface ConfiguracoesProps {
 }
 
 export default function Configuracoes({ usuarioLogado, onConfigSalva }: ConfiguracoesProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'permissoes_rbac' | 'templates' | 'emergencia' | 'backup' | 'whats_modulos' | 'locais_triagem' | 'setores_ronda'>('flags');
+  const [abaAtiva, setAbaAtiva] = useState<'flags' | 'permissoes_rbac' | 'templates' | 'emergencia' | 'backup' | 'whats_modulos' | 'locais_triagem' | 'setores_ronda' | 'modelos_documentos'>('flags');
   const [loading, setLoading] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
@@ -1076,6 +1078,15 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
           }`}
         >
           <ShieldCheck className="w-3.5 h-3.5 text-blue-600" /> 11.7 Setores de Ronda
+        </button>
+
+        <button
+          onClick={() => setAbaAtiva('modelos_documentos')}
+          className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition ${
+            abaAtiva === 'modelos_documentos' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100'
+          }`}
+        >
+          <Scan className="w-3.5 h-3.5" /> 11.8 Design & Modelos de Documentos (OCR)
         </button>
       </div>
 
@@ -2656,6 +2667,10 @@ export default function Configuracoes({ usuarioLogado, onConfigSalva }: Configur
             </div>
           </div>
         </div>
+      )}
+
+      {abaAtiva === 'modelos_documentos' && (
+        <AbaModelosDocumentosOCR />
       )}
 
       {/* MODAL GERENCIAR SETORES */}

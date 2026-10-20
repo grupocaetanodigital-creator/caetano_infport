@@ -262,6 +262,17 @@ export default function App() {
     };
   }, [operador?.condominio_id, condominioAtivoId, eAdmin]);
 
+  // Listener para navegação rápida entre módulos (ex: da Bancada para Baixa de Encomendas)
+  useEffect(() => {
+    const handleNavegarModulo = (e: any) => {
+      if (e.detail?.modulo) {
+        setModuloAtual(e.detail.modulo);
+      }
+    };
+    window.addEventListener('navegar_modulo', handleNavegarModulo);
+    return () => window.removeEventListener('navegar_modulo', handleNavegarModulo);
+  }, []);
+
   // Mantém a variável global idCondominioAtivo sempre sincronizada para prevenir ReferenceError em todo o sistema
   useEffect(() => {
     const idAtivo = condominioAtivoId || operador?.condominio_id || '';
@@ -1023,7 +1034,10 @@ export default function App() {
                   <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
                 )}
                 {moduloAtual === 'bancada' && featureFlags.mod11_bancada_conferencia && (
-                  <Bancada usuarioLogado={operadorContextoGlobal} />
+                  <Bancada 
+                    usuarioLogado={operadorContextoGlobal} 
+                    onNavegar={(mod) => setModuloAtual(mod)}
+                  />
                 )}
                 {moduloAtual === 'cadastros' && podeAcessarCadastros && Boolean(featureFlags.mod01_cadastros_base ?? true) && (
                   <Cadastros usuarioLogado={operadorContextoGlobal} />
