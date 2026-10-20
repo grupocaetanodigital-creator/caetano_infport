@@ -262,10 +262,13 @@ export default function App() {
     };
   }, [operador?.condominio_id, condominioAtivoId, eAdmin]);
 
-  // Listener para navegação rápida entre módulos (ex: da Bancada para Baixa de Encomendas)
+  // Listener para navegação rápida entre módulos (ex: da Bancada para Baixa ou da Passagem para Checklist)
   useEffect(() => {
     const handleNavegarModulo = (e: any) => {
       if (e.detail?.modulo) {
+        if (e.detail.aba) {
+          sessionStorage.setItem('bancada_aba_ativa', e.detail.aba);
+        }
         setModuloAtual(e.detail.modulo);
       }
     };
@@ -1028,6 +1031,12 @@ export default function App() {
                     onTrocarOperador={handleTrocarOperador} 
                     featureFlags={featureFlags} 
                     condominioConfig={condominio} 
+                    onNavegar={(mod, params) => {
+                      if (params?.aba) {
+                        sessionStorage.setItem('bancada_aba_ativa', params.aba);
+                      }
+                      setModuloAtual(mod);
+                    }}
                   />
                 )}
                 {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
