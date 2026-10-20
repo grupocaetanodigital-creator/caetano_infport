@@ -1829,33 +1829,38 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                             <span>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             <span className="text-slate-300">•</span>
                             <span className="truncate">Operador: <strong className="text-slate-700 font-semibold">{item.operador_nome || 'Portaria'}</strong></span>
-                            <span className="text-slate-300">•</span>
-                            {isConferido ? (
-                              <span className="text-[11px] font-black text-emerald-700">
-                                ✓ Conferido
-                              </span>
-                            ) : (
-                              <span className="text-[11px] font-bold text-amber-700">
-                                ⏳ Pendente
-                              </span>
-                            )}
                           </div>
                         </div>
                       </div>
 
-                      {/* AÇÃO RÁPIDA DE BAIXA CASO O MORADOR APAREÇA DURANTE A AUDITORIA */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          abrirMenuBaixa(item);
-                        }}
-                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-600 hover:text-white text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-slate-300 hover:border-emerald-600 flex-shrink-0 cursor-pointer active:scale-95"
-                        title="Entregar ou dar baixa imediata deste item"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Baixa</span>
-                      </button>
+                      {/* COLUNA DE AÇÕES DO CHECKLIST: BOTÃO BAIXA EM CIMA E STATUS LOGO ABAIXO */}
+                      <div className="flex flex-col items-end justify-center gap-1.5 flex-shrink-0">
+                        {/* BOTÃO DE BAIXA (EM CIMA) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            abrirMenuBaixa(item);
+                          }}
+                          className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                          title="Entregar ou dar baixa imediata deste item"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Baixa</span>
+                        </button>
+
+                        {/* STATUS PENDENTE OU CONFERIDO (LOGO ABAIXO DO BOTÃO DE BAIXA) */}
+                        {isConferido ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 whitespace-nowrap">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                            Conferido
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 whitespace-nowrap">
+                            ⏳ Pendente
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
