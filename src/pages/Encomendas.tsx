@@ -4110,7 +4110,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               }
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {itensFiltrados.map((item) => {
                     const estaEntregue = item.status === 'entregue';
                     const rastreioExibicao = item.codigo_barras || item.codigo_rastreio || item.rastreio || (item.lotes_re?.codigo_re ? `Lote ${item.lotes_re.codigo_re}` : null);
@@ -4119,181 +4119,158 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     return (
                       <div 
                         key={item.id} 
-                        className={`bg-white rounded-2xl border p-4 shadow-sm space-y-3 transition hover:shadow-md ${
+                        className={`bg-white rounded-xl border p-2.5 sm:p-3 shadow-2xs space-y-2 transition hover:shadow-xs ${
                           estaEntregue ? 'border-emerald-200' : 'border-amber-200'
                         }`}
                       >
-                        {/* Cabeçalho do Card */}
-                        <div className="flex items-start justify-between gap-2 border-b pb-2">
-                          <div>
+                        {/* Cabeçalho do Card Compacto */}
+                        <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-1.5">
+                          <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-black text-slate-900 text-sm">
+                              <span className="font-extrabold text-slate-900 text-xs sm:text-sm">
                                 {formatarIdentificacaoUnidade(item.unidade, item.bloco, condoConfig?.tipo_estrutura)}
                               </span>
-                              <span className="text-[11px] text-slate-500">
+                              <span className="text-[11px] text-slate-500 truncate max-w-[140px]">
                                 ({item.moradores?.nome || 'Morador'})
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              <span className="text-[10px] font-bold uppercase text-slate-500 flex items-center gap-1">
-                                <QrCode className="w-3.5 h-3.5 text-purple-600" /> Rastreio:
-                              </span>
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap text-[10px]">
                               {rastreioExibicao ? (
-                                <span className="bg-purple-100 text-purple-950 font-mono font-black text-[11px] px-2 py-0.5 rounded border border-purple-200 tracking-wider">
-                                  {rastreioExibicao}
+                                <span className="bg-purple-50 text-purple-900 font-mono font-bold px-1.5 py-0.2 rounded border border-purple-200 truncate max-w-[160px]" title={rastreioExibicao}>
+                                  #{rastreioExibicao}
                                 </span>
                               ) : (
-                                <span className="italic text-slate-400 text-[11px]">Sem rastreio digitado</span>
+                                <span className="italic text-slate-400">Sem rastreio</span>
                               )}
 
                               {item.lotes_re?.codigo_re && (
-                                <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-slate-200">
-                                  RE: {item.lotes_re.codigo_re}
+                                <span className="bg-slate-100 text-slate-700 font-bold px-1 py-0.2 rounded border border-slate-200">
+                                  RE {item.lotes_re.codigo_re}
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 ${
+                          <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold uppercase shrink-0 flex items-center gap-1 ${
                             estaEntregue ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
                           }`}>
-                            {estaEntregue ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Clock className="w-3 h-3 text-amber-600" />}
-                            {estaEntregue ? 'Entregue' : 'Retido no Posto'}
+                            {estaEntregue ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> : <Clock className="w-2.5 h-2.5 text-amber-600" />}
+                            {estaEntregue ? 'Entregue' : 'Retido'}
                           </span>
                         </div>
 
-                        {/* Seção de Fotos Auditáveis: só exibe as fotos quando selecionado */}
+                        {/* Corpo do Card: Resumo em texto ou Fotos expandidas */}
                         {fotosAbertas ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-xs pb-1">
-                              <span className="font-bold text-slate-700 flex items-center gap-1 text-[11px]">
-                                <Camera className="w-3.5 h-3.5 text-purple-600" /> Fotos Auditáveis (Recebimento & Entrega)
+                          <div className="space-y-1.5 bg-slate-50/80 p-2 rounded-lg border border-slate-200">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-slate-700 flex items-center gap-1 text-[10px] uppercase">
+                                <Camera className="w-3 h-3 text-purple-600" /> Fotos Auditáveis
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setItensFotosExpandidasDossie(prev => ({ ...prev, [item.id]: false }))}
                                 className="text-[10px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-0.5 cursor-pointer"
                               >
-                                <ChevronUp className="w-3 h-3" /> Ocultar fotos
+                                <ChevronUp className="w-3 h-3" /> Ocultar
                               </button>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              {/* FOTO 1: RECEBIMENTO */}
-                              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5 flex flex-col justify-between">
-                                <span className="text-[10px] font-black uppercase text-purple-800 block flex items-center gap-1">
-                                  <Camera className="w-3 h-3 text-purple-600" /> 1. Recebimento (RE)
-                                </span>
-
+                            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                              {/* Foto 1: Recebimento */}
+                              <div className="space-y-1">
+                                <span className="font-bold text-purple-900 block truncate">1. Recebimento</span>
                                 <div 
                                   onClick={() => item.foto_etiqueta_url && setModalFotoAmpliada(item.foto_etiqueta_url)}
-                                  className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
+                                  className="h-20 bg-slate-200 rounded-md overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
                                 >
                                   {item.foto_etiqueta_url ? (
                                     <>
                                       <img src={item.foto_etiqueta_url} alt="Etiqueta" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
-                                      <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
-                                        <Eye className="w-2.5 h-2.5" /> Ver Foto
+                                      <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[8.5px] font-bold px-1 rounded flex items-center gap-0.5">
+                                        <Eye className="w-2 h-2" /> Ver
                                       </span>
                                     </>
                                   ) : (
-                                    <div className="text-center text-slate-400 text-[10px]">
-                                      <Package className="w-6 h-6 mx-auto mb-0.5 opacity-40" />
-                                      Sem foto etiqueta
-                                    </div>
+                                    <span className="text-slate-400 text-[9px]">Sem foto</span>
                                   )}
                                 </div>
-
-                                <div className="text-[10px] text-slate-500 leading-tight">
-                                  <div>Entrada: <strong>{new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
-                                  <div className="truncate">Local: <strong className="text-slate-800">{item.local_armazenamento || 'Escaninho'}</strong></div>
+                                <div className="text-[9.5px] text-slate-500 leading-tight truncate">
+                                  {new Date(item.created_at).toLocaleDateString('pt-BR')} {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                               </div>
 
-                              {/* FOTO 2: ENTREGA AO MORADOR */}
-                              <div className={`p-2.5 rounded-xl border space-y-1.5 flex flex-col justify-between ${
-                                estaEntregue ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-dashed border-slate-300'
-                              }`}>
-                                <span className="text-[10px] font-black uppercase text-emerald-800 block flex items-center gap-1">
-                                  <UserCheck className="w-3 h-3 text-emerald-600" /> 2. Entrega (Saída)
-                                </span>
-
+                              {/* Foto 2: Saída */}
+                              <div className="space-y-1">
+                                <span className="font-bold text-emerald-900 block truncate">2. Entrega</span>
                                 <div 
                                   onClick={() => item.foto_retirada_url && setModalFotoAmpliada(item.foto_retirada_url)}
-                                  className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
+                                  className="h-20 bg-slate-200 rounded-md overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
                                 >
                                   {item.foto_retirada_url ? (
                                     <>
-                                      <img src={item.foto_retirada_url} alt="Comprovante Retirada" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
-                                      <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
-                                        <Eye className="w-2.5 h-2.5" /> Ver Foto
+                                      <img src={item.foto_retirada_url} alt="Comprovante" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                      <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[8.5px] font-bold px-1 rounded flex items-center gap-0.5">
+                                        <Eye className="w-2 h-2" /> Ver
                                       </span>
                                     </>
                                   ) : (
-                                    <div className="text-center text-slate-400 text-[10px] p-2">
-                                      <Clock className="w-6 h-6 mx-auto mb-0.5 text-amber-500/70" />
-                                      Aguardando retirada pelo morador
-                                    </div>
+                                    <span className="text-slate-400 text-[9px]">{estaEntregue ? 'Sem foto' : 'Aguardando'}</span>
                                   )}
                                 </div>
-
-                                <div className="text-[10px] text-slate-600 leading-tight">
+                                <div className="text-[9.5px] text-slate-500 leading-tight truncate">
                                   {estaEntregue ? (
-                                    <>
-                                      <div className="truncate">Retirante: <strong className="text-emerald-950">{item.retirado_por}</strong></div>
-                                      <div>Data: <strong>{new Date(item.data_retirada).toLocaleDateString('pt-BR')} às {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
-                                      <div className="text-[9px] text-slate-400">Op: {item.operador_baixa_id || 'Portaria'}</div>
-                                    </>
+                                    <span>{new Date(item.data_retirada).toLocaleDateString('pt-BR')} • {item.retirado_por || 'Morador'}</span>
                                   ) : (
-                                    <div className="text-amber-800 font-medium italic">
-                                      Pacote retido na portaria.
-                                    </div>
+                                    <span className="text-amber-700 italic">No posto</span>
                                   )}
                                 </div>
                               </div>
                             </div>
                           </div>
                         ) : (
-                          /* Resumo compacto quando as fotos não estão selecionadas */
-                          <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="space-y-0.5 text-[11px] text-slate-600">
-                              <div>
-                                <span className="font-bold text-purple-900">Entrada:</span> {new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Local: <strong>{item.local_armazenamento || 'Escaninho'}</strong>
-                              </div>
+                          <div className="bg-slate-50/80 rounded-lg p-2 border border-slate-200/80 text-[10.5px] space-y-0.5 leading-snug">
+                            <div className="truncate text-slate-600">
+                              <span className="font-bold text-purple-900 text-[10px] uppercase">Entrada:</span> {new Date(item.created_at).toLocaleDateString('pt-BR')} {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • <strong>{item.local_armazenamento || 'Escaninho'}</strong>
+                            </div>
+                            <div className="truncate text-slate-600">
                               {estaEntregue ? (
-                                <div>
-                                  <span className="font-bold text-emerald-900">Saída:</span> {new Date(item.data_retirada).toLocaleDateString('pt-BR')} às {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Retirado por: <strong>{item.retirado_por}</strong>
-                                </div>
+                                <>
+                                  <span className="font-bold text-emerald-900 text-[10px] uppercase">Saída:</span> {new Date(item.data_retirada).toLocaleDateString('pt-BR')} {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • <strong className="text-slate-800">{item.retirado_por}</strong>
+                                </>
                               ) : (
-                                <div className="text-amber-700 italic">
-                                  Aguardando retirada na guarita
-                                </div>
+                                <span className="text-amber-700 italic">📦 Aguardando retirada na guarita</span>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setItensFotosExpandidasDossie(prev => ({ ...prev, [item.id]: true }))}
-                              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
-                              title="Visualizar fotos do pacote"
-                            >
-                              <Camera className="w-3.5 h-3.5 text-purple-600" />
-                              <span>Ver Fotos</span>
-                              <ChevronDown className="w-3 h-3 text-slate-400" />
-                            </button>
                           </div>
                         )}
 
-                        {/* Botões de Ação do Dossiê */}
-                        <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => setItemModalDossie(item)}
-                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
-                            title="Visualizar Dossiê Completo"
-                          >
-                            <FileText className="w-3.5 h-3.5" /> Dossiê
-                          </button>
+                        {/* Barra de Ações Compacta */}
+                        <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-slate-100">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setItensFotosExpandidasDossie(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                              className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer border ${
+                                fotosAbertas 
+                                  ? 'bg-purple-50 text-purple-800 border-purple-200' 
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                              }`}
+                              title={fotosAbertas ? "Ocultar fotos" : "Ver fotos"}
+                            >
+                              <Camera className="w-3 h-3 text-purple-600" />
+                              <span>{fotosAbertas ? 'Ocultar' : 'Fotos'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setItemModalDossie(item)}
+                              className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 transition shadow-2xs cursor-pointer"
+                              title="Visualizar Dossiê Completo"
+                            >
+                              <FileText className="w-3 h-3" /> Dossiê
+                            </button>
+                          </div>
 
                           {estaEntregue && (
                             <button
@@ -4316,10 +4293,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                                 const link = `https://wa.me/${tel ? (tel.startsWith('55') ? tel : '55' + tel) : ''}?text=${encodeURIComponent(msg)}`;
                                 window.open(link, '_blank');
                               }}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
-                              title="Enviar comprovação via WhatsApp para o morador"
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 transition shadow-2xs cursor-pointer shrink-0"
+                              title="Enviar comprovante via WhatsApp"
                             >
-                              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp Morador
+                              <MessageCircle className="w-3 h-3" /> WhatsApp
                             </button>
                           )}
                         </div>
