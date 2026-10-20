@@ -353,7 +353,6 @@ export default function PassagemPosto({
   const [condominioConfig, setCondominioConfig] = useState<CondominioConfig | null>(propCondominioConfig || null);
   const [copiadoTexto, setCopiadoTexto] = useState(false);
   const [modalCompartilharWhatsApp, setModalCompartilharWhatsApp] = useState<any | null>(null);
-  const [exibirResumoPlantao, setExibirResumoPlantao] = useState(false);
 
   const [modalNova, setModalNova] = useState(false);
   const [etapa, setEtapa] = useState(1);
@@ -371,7 +370,6 @@ export default function PassagemPosto({
 
   // Módulo ativo para visualização detalhada na etapa 1
   const [moduloAtivo, setModuloAtivo] = useState<string>('todos');
-  const [visualizacaoModal, setVisualizacaoModal] = useState<'tabelas' | 'cards'>('tabelas');
 
   // Estado consolidado completo
   const [consolidacao, setConsolidacao] = useState<ConsolidacaoPosto>(estadoInicialConsolidacao);
@@ -1423,20 +1421,7 @@ export default function PassagemPosto({
             </a>
           )}
 
-          <button
-            type="button"
-            onClick={() => setExibirResumoPlantao(prev => !prev)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer ${
-              exibirResumoPlantao
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-            }`}
-            title="Exibir ou ocultar tabelas do resumo do plantão"
-          >
-            <Table className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Resumo Plantão</span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${exibirResumoPlantao ? 'rotate-180' : ''}`} />
-          </button>
+
 
           <button
             onClick={abrirNovaPassagem}
@@ -1508,12 +1493,7 @@ export default function PassagemPosto({
         </div>
       )}
 
-      {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS (ACIONADA PELO BOTÃO RESUMO PLANTÃO DO CABEÇALHO) */}
-      {exibirResumoPlantao && (
-        <div className="space-y-2 animate-in fade-in duration-200">
-          <TabelasResumoPosto consolidacao={consolidacao} featureFlags={featureFlags} />
-        </div>
-      )}
+
 
       {/* Histórico de Trocas de Turno */}
       <div className="space-y-4">
@@ -1693,41 +1673,18 @@ export default function PassagemPosto({
                     </div>
                   )}
 
-                  {/* SELETOR DE MODO DE CONFERÊNCIA NO MODAL */}
-                  <div className="flex justify-between items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-                    <span className="text-xs font-bold text-slate-700 px-2 flex items-center gap-1.5">
-                      <Table className="w-3.5 h-3.5 text-emerald-600" />
-                      Visualização da Auditoria do Posto:
+                  {/* AUDITORIA DO POSTO POR MÓDULO */}
+                  <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl border border-slate-200">
+                    <span className="text-xs font-bold text-slate-800 px-1 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Auditoria do Posto por Módulo
                     </span>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setVisualizacaoModal('tabelas')}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                          visualizacaoModal === 'tabelas' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <Table className="w-3 h-3" /> Tabelas de Resumo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setVisualizacaoModal('cards')}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                          visualizacaoModal === 'cards' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3 h-3" /> Cartões por Módulo
-                      </button>
-                    </div>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Conferência ativa em tempo real
+                    </span>
                   </div>
 
-                  {visualizacaoModal === 'tabelas' && (
-                    <TabelasResumoPosto consolidacao={consolidacao} modoConferencia={true} featureFlags={featureFlags} />
-                  )}
-
-                  {visualizacaoModal === 'cards' && (
-                    <>
-                      {/* CARDS RESUMO DE ALTO NÍVEL */}
+                  {/* CARDS RESUMO DE ALTO NÍVEL */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {/* RE / Encomendas */}
                     {isModuloHabilitado('encomendas', featureFlags) && (
@@ -2415,8 +2372,7 @@ export default function PassagemPosto({
                       </div>
                     )}
                   </div>
-                </>
-              )}
+
 
                   {/* CHECKLIST DE CONFERÊNCIA DOS MÓDULOS OPERACIONAIS (SEM CHECKLIST FÍSICO REDUNDANTE) */}
                   <div className="space-y-4 border-t pt-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
