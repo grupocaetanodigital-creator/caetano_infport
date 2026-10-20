@@ -340,110 +340,60 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
         console.warn('Aviso ao carregar condominios:', errC);
       }
 
-      let entQuery = supabase
+      const condId = usuarioLogado?.condominio_id;
+
+      const { data: entData } = await supabase
         .from('entregadores')
         .select('*')
+        .eq('condominio_id', condId)
         .order('nome');
-      if (!isGlobal) {
-        entQuery = entQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      const { data: entData } = await entQuery;
       setEntregadores(entData || []);
 
-      const mapaEntregadores = new Map((entData || []).map((e: any) => [e.id, e]));
-
-      let lotesQuery = supabase
+      const { data: lotesData } = await supabase
         .from('lotes_re')
-        .select('*')
+        .select('*, entregadores(nome, empresa, documento)')
+        .eq('condominio_id', condId)
         .in('status', ['aguardando_triagem', 'em_triagem'])
         .order('created_at', { ascending: false });
-      if (!isGlobal) {
-        lotesQuery = lotesQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      const { data: lotesData } = await lotesQuery;
-
-      const lotesFormatados = (lotesData || []).map((l: any) => ({
-        ...l,
-        entregadores: mapaEntregadores.get(l.entregador_id) || l.entregadores || null,
-        condominios: { nome: mapaCondos.get(l.condominio_id) || '' }
-      }));
-      setLotesPendentes(lotesFormatados);
+      setLotesPendentes(lotesData || []);
 
       // Carrega histórico completo de REs (Recebimento de Entregas) para a 1ª Etapa
-      let todosLotesQuery = supabase
+      const { data: todosLData } = await supabase
         .from('lotes_re')
-        .select('*')
+        .select('*, entregadores(nome, empresa, documento)')
+        .eq('condominio_id', condId)
         .order('created_at', { ascending: false })
         .limit(100);
-      if (!isGlobal) {
-        todosLotesQuery = todosLotesQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      const { data: todosLData } = await todosLotesQuery;
-      const todosFormatados = (todosLData || []).map((l: any) => ({
-        ...l,
-        entregadores: mapaEntregadores.get(l.entregador_id) || l.entregadores || null,
-        condominios: { nome: mapaCondos.get(l.condominio_id) || '' }
-      }));
-      setTodosLotesRE(todosFormatados);
+      setTodosLotesRE(todosLData || []);
 
-      let moradQuery = supabase
+      const { data: moradData } = await supabase
         .from('moradores')
         .select('*')
+        .eq('condominio_id', condId)
         .order('nome');
-      if (!isGlobal) {
-        moradQuery = moradQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      const { data: moradData } = await moradQuery;
       setMoradores(moradData || []);
 
-      let retidosQuery = supabase
+      const { data: retidosData } = await supabase
         .from('encomendas_itens')
         .select('*, moradores(nome, telefone)')
+        .eq('condominio_id', condId)
         .eq('status', 'retido')
         .order('created_at', { ascending: false });
-      if (!isGlobal) {
-        retidosQuery = retidosQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      let { data: retidosData, error: retidosErr } = await retidosQuery;
-      if (retidosErr || !retidosData) {
-        console.warn('Fallback simples para encomendas_itens retidos:', retidosErr?.message);
-        let fbRetidosQuery = supabase
-          .from('encomendas_itens')
-          .select('*')
-          .eq('status', 'retido')
-          .order('created_at', { ascending: false });
-        if (!isGlobal) {
-          fbRetidosQuery = fbRetidosQuery.eq('condominio_id', idCondominioAtivo);
-        }
-        const { data: fbRetData } = await fbRetidosQuery;
-        retidosData = fbRetData || [];
-      }
+      setTodosItensRetidos(retidosData || []);
 
-      const retidosFormatados = (retidosData || []).map((r: any) => ({
-        ...r,
-        condominios: { nome: mapaCondos.get(r.condominio_id) || '' }
-      }));
-      setTodosItensRetidos(retidosFormatados);
-
-      let lotesHojeQuery = supabase
+      const { data: lotesHojeData } = await supabase
         .from('lotes_re')
         .select('id, qtd_declarada, qtd_triada')
+        .eq('condominio_id', condId)
         .gte('created_at', inicioDia.toISOString())
         .lte('created_at', fimDia.toISOString());
-      if (!isGlobal) {
-        lotesHojeQuery = lotesHojeQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      const { data: lotesHojeData } = await lotesHojeQuery;
 
-      let triadosHojeQuery = supabase
+      const { data: triadosHojeData } = await supabase
         .from('encomendas_itens')
         .select('id')
+        .eq('condominio_id', condId)
         .gte('created_at', inicioDia.toISOString())
         .lte('created_at', fimDia.toISOString());
-      if (!isGlobal) {
-        triadosHojeQuery = triadosHojeQuery.eq('condominio_id', idCondominioAtivo);
-      }
-      const { data: triadosHojeData } = await triadosHojeQuery;
 
       const totalLotesHoje = lotesHojeData?.length || 0;
       const totalTriadasHoje = triadosHojeData?.length || 0;

@@ -552,13 +552,11 @@ export default function App() {
     ...operador,
     somenteLeitura: eSindico,
     eSindico: eSindico,
-    eSuperAdminGlobal,
-    condominio_id: eSuperAdminGlobal ? (condominioAtivoId || '') : (operador.condominio_id || ''),
-    condominio_nome: eSuperAdminGlobal 
-      ? (objCondominioSelecionado?.nome || (condominioAtivoId ? 'Condomínio Selecionado' : 'Visão Global (Todos)'))
+    condominio_id: (eAdmin && condominioAtivoId) ? condominioAtivoId : (operador.condominio_id || condominioAtivoId || ''),
+    condominio_nome: (eAdmin && objCondominioSelecionado?.nome) 
+      ? objCondominioSelecionado.nome 
       : (condominio?.nome || 'Condomínio Geral'),
-    isGlobal: eSuperAdminGlobal && !condominioAtivoId,
-    listaCondominios: eSuperAdminGlobal ? listaCondominios : (condominio ? [condominio] : [])
+    listaCondominios: listaCondominios
   } : null;
 
   const podeAcessarConfiguracoes = Boolean(

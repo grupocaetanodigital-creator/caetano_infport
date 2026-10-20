@@ -491,24 +491,47 @@ export function agruparItensPorEstrutura(itens: ItemBancada[]): EstruturaResumoB
 
 /**
  * Sincroniza e importa encomendas físicas retidas do Módulo 02 (encomendas_itens)
- * diretamente para a bancada com 1 toque
+ * diretamente para a bancada automaticamente com conferência e espelhamento exato
  */
 export async function sincronizarComEncomendasRetidas(
   condominioId: string,
-  operadorNome: string = 'Portaria'
+  operadorNome: string = 'Portaria',
+  espelharExato: boolean = true
 ): Promise<{ importados: number; totalAtual: number; itens: ItemBancada[] }> {
   if (!condominioId) return { importados: 0, totalAtual: 0, itens: [] };
 
   const itensAtuais = await carregarItensBancada(condominioId);
 
   // Busca encomendas pendentes de retirada no Módulo 02
-  const { data: encomendasRetidas, error } = await supabase
-    .from('encomendas_itens')
-    .select('id, bloco, unidade, observacoes, created_at')
-    .eq('condominio_id', condominioId)
-    .eq('status', 'retido');
+  let encomendasRetidas: any[] = [];
+  try {
+    const { data, error } = await supabase
+      .from('encomendas_itens')
+      .select('id, bloco, unidade, observacoes, created_at')
+      .eq('condominio_id', condominioId)
+      .eq('status', 'retido');
 
-  if (error || !encomendasRetidas || encomendasRetidas.length === 0) {
+    if (!error && Array.isArray(data)) {
+      encomendasRetidas = data;
+    }
+  } catch (e) {
+    console.warn('Erro ao consultar encomendas retidas para bancada:', e);
+  }
+
+  // Se não há encomendas retidas pendentes e o espelhamento exato estiver ativo, limpa a bancada
+  if (encomendasRetidas.length === 0) {
+    if (espelharExato && itensAtuais.length > 0) {
+      try {
+        await supabase
+          .from('bancada_volumes')
+          .update({ status: 'entregue', updated_at: new Date().toISOString() })
+          .eq('condominio_id', condominioId)
+          .eq('status', 'ativo');
+      } catch {}
+      salvarCacheLocal(CACHE_KEY_ITENS, [], condominioId);
+      notificarAtualizacaoBancada(condominioId);
+      return { importados: 0, totalAtual: 0, itens: [] };
+    }
     return { importados: 0, totalAtual: itensAtuais.reduce((a, b) => a + (b.volumes || 1), 0), itens: itensAtuais };
   }
 
@@ -537,8 +560,24 @@ export async function sincronizarComEncomendasRetidas(
   });
 
   let importadosCount = 0;
+  const novosItensFinais: ItemBancada[] = [];
 
-  // Itera sobre o mapa e adiciona ou ajusta na bancada
+  // Se espelharExato for verdadeiro, desativa itens na bancada que já foram entregues
+  if (espelharExato) {
+    for (const itemAntigo of itensAtuais) {
+      const chaveAntiga = `${itemAntigo.estrutura.toLowerCase()}_${itemAntigo.unidade.toLowerCase()}`;
+      if (!mapaRetidas.has(chaveAntiga)) {
+        try {
+          await supabase
+            .from('bancada_volumes')
+            .update({ status: 'entregue', updated_at: new Date().toISOString() })
+            .eq('id', itemAntigo.id);
+        } catch {}
+      }
+    }
+  }
+
+  // Atualiza ou insere itens exatos da bancada correspondentes aos retidos
   for (const [, val] of mapaRetidas) {
     const idxExistente = itensAtuais.findIndex(
       it =>
@@ -547,20 +586,29 @@ export async function sincronizarComEncomendasRetidas(
     );
 
     if (idxExistente >= 0) {
-      // Se na bancada tiver menos que as retidas registradas no RE, atualiza
-      if (itensAtuais[idxExistente].volumes < val.volumes) {
-        itensAtuais[idxExistente].volumes = val.volumes;
-        itensAtuais[idxExistente].updated_at = new Date().toISOString();
-        importadosCount += (val.volumes - itensAtuais[idxExistente].volumes);
-        try {
-          await supabase
-            .from('bancada_volumes')
-            .update({ volumes: val.volumes, updated_at: new Date().toISOString() })
-            .eq('id', itensAtuais[idxExistente].id);
-        } catch {
-          // offline
-        }
+      const itemExistente = itensAtuais[idxExistente];
+      const volAnterior = itemExistente.volumes;
+      itemExistente.volumes = val.volumes;
+      itemExistente.updated_at = new Date().toISOString();
+      if (val.observacoes.length > 0) {
+        itemExistente.observacao = val.observacoes.join(' | ');
       }
+      novosItensFinais.push(itemExistente);
+      if (val.volumes > volAnterior) {
+        importadosCount += (val.volumes - volAnterior);
+      }
+
+      try {
+        await supabase
+          .from('bancada_volumes')
+          .update({ 
+            volumes: val.volumes, 
+            observacao: itemExistente.observacao, 
+            status: 'ativo',
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', itemExistente.id);
+      } catch {}
     } else {
       // Novo lançamento importado do RE
       const novoItem: ItemBancada = {
@@ -574,7 +622,7 @@ export async function sincronizarComEncomendasRetidas(
         operador_nome: operadorNome,
         created_at: new Date().toISOString()
       };
-      itensAtuais.push(novoItem);
+      novosItensFinais.push(novoItem);
       importadosCount += val.volumes;
 
       try {
@@ -590,24 +638,22 @@ export async function sincronizarComEncomendasRetidas(
           status: 'ativo',
           created_at: novoItem.created_at
         });
-      } catch {
-        // offline
-      }
+      } catch {}
     }
   }
 
   // Ordena por estrutura e unidade
-  itensAtuais.sort((a, b) => {
+  novosItensFinais.sort((a, b) => {
     const compEstr = a.estrutura.localeCompare(b.estrutura, undefined, { numeric: true });
     if (compEstr !== 0) return compEstr;
     return a.unidade.localeCompare(b.unidade, undefined, { numeric: true });
   });
 
-  salvarCacheLocal(CACHE_KEY_ITENS, itensAtuais, condominioId);
+  salvarCacheLocal(CACHE_KEY_ITENS, novosItensFinais, condominioId);
   notificarAtualizacaoBancada(condominioId);
 
-  const totalFinal = itensAtuais.reduce((a, b) => a + (b.volumes || 1), 0);
-  return { importados: importadosCount, totalAtual: totalFinal, itens: itensAtuais };
+  const totalFinal = novosItensFinais.reduce((a, b) => a + (b.volumes || 1), 0);
+  return { importados: importadosCount, totalAtual: totalFinal, itens: novosItensFinais };
 }
 
 /**

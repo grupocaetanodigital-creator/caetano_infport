@@ -55,6 +55,7 @@ import { registrarAtividade } from '../services/auditoriaService';
 import { 
   carregarItensBancada, 
   agruparItensPorEstrutura, 
+  sincronizarComEncomendasRetidas,
   ItemBancada, 
   EstruturaResumoBancada 
 } from '../services/bancadaService';
@@ -111,6 +112,7 @@ export interface ConsolidacaoPosto {
   // 3. Chaves fora do quadro
   chaves: {
     totalFora: number;
+    totalCadastradas?: number;
     listaChavesFora: Array<{
       id: string;
       nomeChave: string;
@@ -434,6 +436,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     setTemDivergencia(false);
     setDivergencia('');
     setObservacoes('');
+
+    // Sincroniza a Bancada com todas as encomendas pendentes automaticamente ao apertar + Troca de Turno
+    const condId = usuarioLogado?.condominio_id;
+    if (condId) {
+      try {
+        await sincronizarComEncomendasRetidas(condId, usuarioLogado?.nome || usuarioLogado?.login || 'Portaria', true);
+      } catch (errSync) {
+        console.warn('Erro ao auto-sincronizar bancada:', errSync);
+      }
+    }
+
     carregarOperadores();
     await consolidarModulosPosto();
   };
@@ -587,6 +600,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       }));
 
       // 3. MÓDULO 05 - QUADRO DE CHAVES (Chaves fora do quadro, quem está com ela)
+      let totalCadastradasChaves = 23;
+      try {
+        const { count: countChaves } = await supabase
+          .from('chaves')
+          .select('*', { count: 'exact', head: true })
+          .eq('condominio_id', condId);
+        if (countChaves !== null && countChaves !== undefined && countChaves > 0) {
+          totalCadastradasChaves = countChaves;
+        }
+      } catch {}
+
       const { data: movsChavesData } = await supabase
         .from('movimentacao_chaves')
         .select('*, chaves(*)')
@@ -799,6 +823,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         },
         chaves: {
           totalFora: listaChavesFora.length,
+          totalCadastradas: totalCadastradasChaves,
           listaChavesFora
         },
         prestadores: {
@@ -959,12 +984,16 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       const ano = String(agora.getFullYear()).slice(-2);
       const codigoPas = `PAS:${dia}${mes}${ano}OPER${String(agora.getMinutes()).padStart(2, '0')}`;
 
+      const nomeCondominioFinal = condominioConfig?.nome || usuarioLogado?.condominio_nome || usuarioLogado?.condominio?.nome || 'Village Di Padova';
+
       // Snapshot consolidado completo do plantão (8 módulos)
       const snapshotConsolidado = {
         ...consolidacao,
         auditModulos,
         chavesFora: consolidacao.chaves.totalFora,
+        totalChavesCadastradas: (consolidacao.chaves as any).totalCadastradas || 23,
         listaChaves: consolidacao.chaves.listaChavesFora,
+        condominio_nome: nomeCondominioFinal,
         materiaisOk: consolidacao.materiais.avariados === 0,
         qtdMateriais: consolidacao.materiais.totalEquipamentos,
         listaMateriaisAvariados: consolidacao.materiais.listaAvariados,
@@ -978,6 +1007,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
 
       const novaPassagem = {
         condominio_id: usuarioLogado.condominio_id,
+        condominio_nome: nomeCondominioFinal,
         codigo: codigoPas,
         operador_sainte_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_entrante_nome: opEntrante.nome || opEntrante.login,
@@ -1047,9 +1077,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   };
 
   const gerarTextoRelatorio = (item: any) => {
-    const dataHora = new Date(item.created_at).toLocaleString('pt-BR');
+    const dataHora = new Date(item.created_at || Date.now()).toLocaleString('pt-BR');
     const c = item.pendencias || {};
     const enc = c.encomendas || {};
+    const ban = c.bancada || {};
     const ron = c.rondas || {};
     const cha = c.chaves || {};
     const pre = c.prestadores || {};
@@ -1057,41 +1088,33 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     const mat = c.materiais || {};
     const oco = c.ocorrencias || {};
 
+    const nomeCondominio = item.condominio_nome || item.pendencias?.condominio_nome || condominioConfig?.nome || usuarioLogado?.condominio_nome || usuarioLogado?.condominio?.nome || 'Village Di Padova';
+
     let texto = `🔄 *RELATÓRIO CONSOLIDADO DE PASSAGEM DE POSTO - INFPORT*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `📋 *Código:* ${item.codigo || 'PAS:INFPORT'}\n` +
+      `🏢 *${nomeCondominio}*\n` +
+      `🔑 *Código:* ${item.codigo || 'PAS:INFPORT'}\n` +
       `📅 *Data/Hora da Troca:* ${dataHora}\n` +
-      `👤 *Operador Sainte (Saindo):* ${item.operador_sainte_nome}\n` +
-      `👤 *Operador Entrante (Assumiu):* ${item.operador_entrante_nome}\n` +
-      `📌 *Status do Turno:* ${item.status === 'Divergência Registrada' ? '⚠️ DIVERGÊNCIA APONTADA' : '🟢 100% AUDITADO E VALIDADO'}\n` +
+      `👤 *Operador Sainte:* ${item.operador_sainte_nome || usuarioLogado?.nome || usuarioLogado?.login || 'Portaria'}\n` +
+      `👤 *Operador Entrante:* ${item.operador_entrante_nome || 'Operador'}\n` +
+      `📊 *Status do Turno:* ${item.status === 'Divergência Registrada' ? '⚠️ DIVERGÊNCIA APONTADA' : '🟢 100% AUDITADO E VALIDADO'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // 1. RE / Encomendas
-    texto += `📦 *MÓDULO 02 - RECEBIMENTO DE ENCOMENDAS (RE)*\n` +
-      `• REs recebidas no plantão: *${enc.totalRePlantao ?? (c.encomendasPendentes ? 'Auditado' : 0)}*\n` +
-      `• REs aguardando triagem: *${enc.reFaltandoTriagem ?? 0} lote(s)*\n` +
-      `• Volumes que faltam triar: *${enc.qtdFaltaTriagem ?? 0} pacote(s)*\n` +
-      `• Pacotes triados no plantão: *${enc.qtdPacotesTriadosPlantao ?? 0}*\n` +
-      `• Pacotes entregues/retirados no plantão: *${enc.qtdPacotesRetiradosPlantao ?? 0}*\n` +
-      `• Total retido no posto aguardando moradores: *${enc.totalRetidasNoPosto ?? c.encomendasPendentes ?? 0} volume(s)*\n`;
-    if (enc.lotesPendentes && enc.lotesPendentes.length > 0) {
-      texto += `  _Lotes que faltam triar:_\n` +
-        enc.lotesPendentes.map((l: any) => `  ↳ ${l.codigo} (${l.entregadorEmpresa || 'Entregador'}): faltam ${l.qtdDeclarada - l.qtdTriada} de ${l.qtdDeclarada} vol.`).join('\n') + `\n`;
+    // 1. MÓDULO UNIFICADO - RECEBIMENTO DE ENCOMENDAS (RE)
+    const totalVolumes = ban.totalVolumes ?? enc.totalRetidasNoPosto ?? c.encomendasPendentes ?? 0;
+    let totalUnidades = ban.totalUnidades ?? 0;
+    if (!totalUnidades) {
+      if (enc.retidasPorBloco) {
+        totalUnidades = Object.values(enc.retidasPorBloco).reduce((acc: number, b: any) => acc + (b.unidades?.length || 0), 0);
+      } else {
+        totalUnidades = totalVolumes;
+      }
     }
-    if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
-      texto += `  _Relação de encomendas retidas no sistema (Módulo 02):_\n`;
-      Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
-        texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n  ↳ ${info.unidades.join(', ')}\n`;
-      });
-    }
-    texto += `\n`;
 
-    // 1.1 Bancada / Balcão Físico
-    const ban = c.bancada || {};
-    const totalVolumesBancada = ban.totalVolumes ?? 0;
-    const totalUnidadesBancada = ban.totalUnidades ?? 0;
-    texto += `📦 *MÓDULO 11 - CONFERÊNCIA DE BANCADA (VOLUMES FÍSICOS NO BALCÃO)*\n` +
-      `• Total de volumes na bancada: *${totalVolumesBancada} volume(s)* em *${totalUnidadesBancada} unidade(s)*\n`;
+    texto += `📦 *RECEBIMENTO DE ENCOMENDAS (RE)*\n` +
+      `• Total retido no posto aguardando moradores: *${totalVolumes} volume(s) em ${totalUnidades} unidade(s)*\n`;
+
+    // Relação física detalhada por torre/bloco e unidades
     if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
       texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
       ban.estruturasResumo.forEach((g: any) => {
@@ -1107,109 +1130,76 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         texto += `  ↳ ${apsStr || 'Nenhum'}\n`;
       });
     } else if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
-      texto += `  _Discriminação de encomendas retidas conferidas no posto:_\n`;
+      texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
       Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
         texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n`;
         texto += `  ↳ ${info.unidades.join(', ')}\n`;
       });
     } else {
-      texto += `• Situação: *Bancada livre / sem volumes retidos*\n`;
+      texto += `• Situação: *Nenhum volume retido no posto no momento*\n`;
     }
     texto += `\n`;
 
-    // 2. Rondas
-    texto += `🛡️ *MÓDULO 07 - RONDAS PATRIMONIAIS NO PLANTÃO*\n` +
-      `• Rondas executadas no plantão: *${ron.totalExecutadasPlantao ?? c.rondasUltimas12h ?? 0}*\n` +
-      `• Rondas concluídas 100%: *${ron.concluidas ?? 0}*\n` +
-      `• Rondas incompletas / com falhas: *${ron.incompletas ?? 0}*\n`;
-    if (ron.temDivergencias && ron.listaDivergencias && ron.listaDivergencias.length > 0) {
-      texto += `🚨 *Divergências/Alertas nas Rondas:*\n` +
-        ron.listaDivergencias.map((d: string) => `  ⚠️ ${d}`).join('\n') + `\n`;
-    } else {
-      texto += `• Auditoria de rondas: *Sem divergências registradas*\n`;
-    }
-    texto += `\n`;
-
-    // 3. Chaves fora do quadro
+    // 2. QUADRO DE CHAVES
     const totalChavesFora = cha.totalFora ?? c.chavesFora ?? 0;
-    texto += `🔑 *MÓDULO 05 - QUADRO DE CHAVES*\n` +
-      `• Chaves fora do quadro: *${totalChavesFora}*\n`;
-    const listaChaves = cha.listaChavesFora || c.listaChaves || [];
-    if (totalChavesFora > 0 && listaChaves.length > 0) {
-      texto += `🚨 *Chaves em posse de terceiros/moradores:*\n` +
-        listaChaves.map((k: any) => 
-          `  🔑 *${k.nomeChave || k.nome_chave || 'Chave'}* (${k.codigoChave || k.codigo_chave || 'S/C'})\n` +
-          `     ↳ Com quem tá: *${k.comQuemTa || k.nome_retirante || 'Portador'}* (${k.empresaOuApto || k.empresa_ou_apto || 'N/A'})\n` +
-          `     ↳ Doc: ${k.documento || k.documento_retirante || 'N/A'} | Fone: ${k.telefone || k.telefone_retirante || 'N/A'}\n` +
-          `     ↳ Retirada em: ${new Date(k.retiradaEm || k.data_hora_retirada || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${k.atrasado ? ' ⚠️ *ATRASADO!*' : ''}`
-        ).join('\n\n') + `\n`;
+    const totalChavesGeral = cha.totalCadastradas ?? c.totalChavesCadastradas ?? (totalChavesFora + (cha.totalNoQuadro || 23));
+    texto += `🔑 *QUADRO DE CHAVES*\n`;
+    if (totalChavesFora === 0) {
+      texto += `• Situação: *TODAS AS ${totalChavesGeral} CHAVES ESTÃO guardadas no quadro*\n`;
     } else {
-      texto += `• Situação: *Todas as chaves guardadas no quadro*\n`;
+      texto += `• Situação: *${totalChavesFora} chave(s) fora do quadro de um total de ${totalChavesGeral} chaves*\n`;
+      const listaChaves = cha.listaChavesFora || c.listaChaves || [];
+      if (listaChaves.length > 0) {
+        texto += `🚨 *Chaves em posse de terceiros/moradores:*\n` +
+          listaChaves.map((k: any) => 
+            `  🔑 *${k.nomeChave || k.nome_chave || 'Chave'}* (${k.codigoChave || k.codigo_chave || 'S/C'})\n` +
+            `     ↳ Com quem tá: *${k.comQuemTa || k.nome_retirante || 'Portador'}* (${k.empresaOuApto || k.empresa_ou_apto || 'N/A'})\n` +
+            `     ↳ Doc: ${k.documento || k.documento_retirante || 'N/A'} | Fone: ${k.telefone || k.telefone_retirante || 'N/A'}\n` +
+            `     ↳ Retirada em: ${new Date(k.retiradaEm || k.data_hora_retirada || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${k.atrasado ? ' ⚠️ *ATRASADO!*' : ''}`
+          ).join('\n\n') + `\n`;
+      }
     }
     texto += `\n`;
 
-    // 4. Prestadores e Autorizados (Presentes e Liberados)
-    const totalPrestadores = pre.totalPresentes ?? 0;
-    const totalLiberados = pre.totalLiberados ?? (pre.listaLiberados?.length || 0);
-    texto += `👷 *MÓDULO 06 - AUTORIZADOS E PRESTADORES NO CONDOMÍNIO*\n` +
-      `• Pessoas DENTRO no momento: *${totalPrestadores}*\n`;
-    if (totalPrestadores > 0 && pre.listaPresentes && pre.listaPresentes.length > 0) {
-      texto += pre.listaPresentes.map((p: any) => 
-        `  • *${p.nome}* (${p.empresa || 'Visitante/Serviço'})\n` +
-        `    ↳ Destino: ${p.destino || 'Área Comum'} | Crachá: ${p.cracha || 'N/A'}${p.estourado ? ' 🚨 *TEMPO ESTOURADO!*' : ''}\n` +
-        `    ↳ Entrada: ${new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-      ).join('\n') + `\n`;
-    } else {
-      texto += `• Situação dentro: *Nenhuma pessoa presente no momento*\n`;
-    }
-    texto += `• Cadastros LIBERADOS ativos: *${totalLiberados}*\n`;
-    if (totalLiberados > 0 && pre.listaLiberados && pre.listaLiberados.length > 0) {
-      texto += pre.listaLiberados.slice(0, 10).map((p: any) => 
-        `  ↳ *${p.nome}* (${p.empresa || 'Familiar/Serviço'}) ➔ ${p.destino || 'Geral'} [${p.validade || 'Ativo'}]`
-      ).join('\n') + (totalLiberados > 10 ? `\n  ↳ _...e mais ${totalLiberados - 10} liberados_` : '') + `\n`;
-    }
-    texto += `\n`;
-
-    // 5. Custódia
+    // 3. CUSTÓDIA DE OBJETOS NA PORTARIA
     const totalCustodia = cus.totalAguardando ?? c.custodiasPendentes ?? 0;
-    texto += `🎁 *MÓDULO 03 - CUSTÓDIA DE OBJETOS NA PORTARIA*\n` +
+    texto += `📦 *CUSTÓDIA DE OBJETOS NA PORTARIA*\n` +
       `• Itens guardados aguardando retirada: *${totalCustodia}*\n`;
-    if (totalCustodia > 0 && cus.listaCustodias && cus.listaCustodias.length > 0) {
-      texto += cus.listaCustodias.map((cItem: any) => 
-        `  • [${cItem.codigo}] *${cItem.descricao}*\n` +
-        `    ↳ De: ${cItem.origem} ➔ Para: ${cItem.destino}`
+    const listaCustodias = cus.listaCustodias || c.listaCustodias || [];
+    if (totalCustodia > 0 && listaCustodias.length > 0) {
+      texto += listaCustodias.map((cItem: any) => 
+        `  • [${cItem.codigo || 'CUST'}] *${cItem.descricao || 'Item em custódia'}*\n` +
+        `    ↳ De: ${cItem.origem || 'Morador/Terceiro'} ➔ Para: ${cItem.destino || 'Destinatário'}`
       ).join('\n') + `\n`;
     }
     texto += `\n`;
 
-    // 6. Materiais do posto
+    // 4. EQUIPAMENTOS E MATERIAIS DA GUARITA
     const totalAvariados = mat.avariados ?? (c.materiaisOk === false ? 1 : 0);
-    texto += `📻 *MÓDULO 04 - EQUIPAMENTOS E MATERIAIS DA GUARITA*\n` +
-      `• Total de itens inventariados: *${mat.totalEquipamentos ?? c.qtdMateriais ?? 0}*\n` +
-      `• Em perfeito estado: *${mat.perfeitos ?? (c.materiaisOk ? '100% OK' : 'Com Avarias')}*\n` +
+    const totalEquip = mat.totalEquipamentos ?? c.qtdMateriais ?? 0;
+    const totalPerfeitos = mat.perfeitos ?? (totalEquip - totalAvariados);
+    texto += `🛠 *EQUIPAMENTOS E MATERIAIS DA GUARITA*\n` +
+      `• Total de itens inventariados: *${totalEquip}*\n` +
+      `• Em perfeito estado: *${totalPerfeitos}*\n` +
       `• Com avaria / em manutenção: *${totalAvariados}*\n`;
     const listaAvarias = mat.listaAvariados || c.listaMateriaisAvariados || [];
     if (totalAvariados > 0 && listaAvarias.length > 0) {
       texto += `  🚨 *Itens com Avaria/Defeito:*\n` +
-        listaAvarias.map((a: any) => `  ↳ *${a.nome}*: ${a.observacao || a.observacao_avaria || a.estado}`).join('\n') + `\n`;
-    }
-    if (mat.alteracoesPlantao && mat.alteracoesPlantao.length > 0) {
-      texto += `  📝 *Alterações/Movimentações no Turno:*\n` +
-        mat.alteracoesPlantao.map((alt: any) => `  ↳ [${alt.tipo}] ${alt.detalhe?.nome || 'Item'} por ${alt.operador}`).join('\n') + `\n`;
+        listaAvarias.map((a: any) => `  ↳ *${a.nome}*: ${a.observacao || a.observacao_avaria || a.estado || 'Avariado'}`).join('\n') + `\n`;
     }
     texto += `\n`;
 
-    // 7. Ocorrências pendentes
+    // 5. LIVRO DE OCORRÊNCIAS PENDENTES
     const totalOcorrencias = oco.totalPendentes ?? c.ocorrenciasAbertas ?? 0;
-    texto += `⚠️ *MÓDULO 08 - LIVRO DE OCORRÊNCIAS PENDENTES*\n` +
-      `• Total de ocorrências não resolvidas: *${totalOcorrencias}*\n`;
+    texto += `📖 *LIVRO DE OCORRÊNCIAS PENDENTES*\n` +
+      `• Total não resolvido: *${totalOcorrencias}*\n`;
     const listaOcorrencias = oco.listaPendentes || c.listaOcorrencias || [];
     if (totalOcorrencias > 0 && listaOcorrencias.length > 0) {
-      texto += `🚨 *Atenção aos casos pendentes (independente de quantos dias em aberto):*\n` +
+      texto += `🚨 *Alerta detalhado dos casos pendentes:*\n` +
         listaOcorrencias.map((o: any) => 
           `  • [${(o.prioridade || 'Média').toUpperCase()}] *${o.titulo}*\n` +
-          `    ↳ ⏳ *Há ${o.diasEmAberto ?? 'X'} dia(s) em aberto!* (${new Date(o.criadaEm || o.created_at || Date.now()).toLocaleDateString('pt-BR')})\n` +
-          `    ↳ Local: ${o.unidadeBloco || o.unidade_bloco || 'Área Geral'} | Reg: ${o.operador || o.operador_nome || 'Portaria'}\n` +
+          `    ↳ ⏳ *Há ${o.diasEmAberto ?? 0} dia(s) em aberto!* (${new Date(o.criadaEm || o.created_at || Date.now()).toLocaleDateString('pt-BR')})\n` +
+          `    ↳ Local: ${o.unidadeBloco || o.unidade_bloco || 'Área Comum'} | Responsável: ${o.operador || o.operador_nome || 'Portaria'}\n` +
           `    ↳ Resumo: ${o.descricao}`
         ).join('\n\n') + `\n`;
     } else {
@@ -1217,7 +1207,37 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     }
     texto += `\n`;
 
-    // Recados e Divergências
+    // 6. AUTORIZADOS E PRESTADORES NO CONDOMÍNIO
+    const totalPrestadores = pre.totalPresentes ?? 0;
+    const totalLiberados = pre.totalLiberados ?? (pre.listaLiberados?.length || 0);
+    texto += `👥 *AUTORIZADOS E PRESTADORES NO CONDOMÍNIO*\n` +
+      `• Pessoas presentes no momento: *${totalPrestadores}*\n`;
+    if (totalPrestadores > 0 && pre.listaPresentes && pre.listaPresentes.length > 0) {
+      texto += pre.listaPresentes.map((p: any) => 
+        `  • *${p.nome}* (${p.empresa || 'Visitante/Serviço'})\n` +
+        `    ↳ Destino: ${p.destino || 'Área Comum'} | Crachá: ${p.cracha || 'N/A'}${p.estourado ? ' 🚨 *TEMPO ESTOURADO!*' : ''}\n` +
+        `    ↳ Entrada: ${new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      ).join('\n') + `\n`;
+    }
+    texto += `• Lista de liberações ativas: *${totalLiberados}*\n`;
+    if (totalLiberados > 0 && pre.listaLiberados && pre.listaLiberados.length > 0) {
+      texto += pre.listaLiberados.slice(0, 8).map((p: any) => 
+        `  ↳ *${p.nome}* (${p.empresa || 'Familiar/Serviço'}) ➔ ${p.destino || 'Geral'} [${p.validade || 'Ativo'}]`
+      ).join('\n') + (totalLiberados > 8 ? `\n  ↳ _...e mais ${totalLiberados - 8} liberados_` : '') + `\n`;
+    }
+    texto += `\n`;
+
+    // 7. RONDAS (se houver dados de rondas no plantão)
+    if (ron.totalExecutadasPlantao > 0 || ron.temDivergencias) {
+      texto += `🛡️ *RONDAS PATRIMONIAIS NO PLANTÃO*\n` +
+        `• Total executadas: *${ron.totalExecutadasPlantao || 0}* | Concluídas: *${ron.concluidas || 0}* | Falhas: *${ron.incompletas || 0}*\n`;
+      if (ron.temDivergencias && ron.listaDivergencias && ron.listaDivergencias.length > 0) {
+        texto += ron.listaDivergencias.map((d: string) => `  ⚠️ ${d}`).join('\n') + `\n`;
+      }
+      texto += `\n`;
+    }
+
+    // 8. INSTRUÇÕES E RECADOS DO TURNO
     texto += `💬 *INSTRUÇÕES E RECADOS DO TURNO:*\n"${item.observacoes || 'Nenhuma observação registrada.'}"\n`;
     if (item.divergencia) {
       texto += `\n🚨 *DIVERGÊNCIA APONTADA PELO OPERADOR:*\n"${item.divergencia}"\n`;
