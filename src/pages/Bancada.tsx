@@ -1202,8 +1202,8 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                             </p>
                           )}
 
-                          {/* HORA E OPERADOR EM LINHA ÚNICA */}
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium whitespace-nowrap mt-1">
+                          {/* HORA E OPERADOR EM LINHA ÚNICA TRUNCADA SE NECESSÁRIO */}
+                          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-500 font-medium truncate mt-1">
                             <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             <span className="text-slate-300">•</span>
@@ -1211,64 +1211,62 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                           </div>
                         </div>
 
-                        {/* COLUNA DE AÇÕES: QTD NO TOPO E BOTÃO DE BAIXA LOGO ABAIXO DE ONDE CONFIGURA QTD */}
-                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                          {/* LINHA SUPERIOR: AJUSTAR QTD COM - E + E BOTÃO EXCLUIR */}
-                          <div className="flex items-center gap-1">
-                            <div className="flex items-center bg-white rounded-lg border border-slate-300 shadow-2xs">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAlterarVolumeItem(item, -1);
-                                }}
-                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-l-lg transition cursor-pointer"
-                                title="Diminuir 1 volume"
-                              >
-                                <Minus className="w-3.5 h-3.5" />
-                              </button>
-                              <span className="px-2 text-xs font-black text-slate-900 min-w-[20px] text-center">
-                                {item.volumes}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAlterarVolumeItem(item, 1);
-                                }}
-                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-r-lg transition cursor-pointer"
-                                title="Adicionar +1 volume"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-
-                            {/* BOTÃO EXCLUIR */}
+                        {/* AÇÕES RÁPIDAS: QTD DE VOLUMES [- 1 +], BOTÃO BAIXA AO LADO E EXCLUIR */}
+                        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+                          {/* CONTROLE DE QTD DE VOLUMES [- 1 +] */}
+                          <div className="flex items-center bg-white rounded-lg border border-slate-300 shadow-2xs h-8">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleRemoverItem(item);
+                                handleAlterarVolumeItem(item, -1);
                               }}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer active:scale-95"
-                              title="Excluir lançamento"
+                              className="px-1.5 h-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-l-lg transition cursor-pointer flex items-center justify-center"
+                              title="Diminuir 1 volume"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="px-2 text-xs font-black text-slate-900 min-w-[20px] text-center">
+                              {item.volumes}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAlterarVolumeItem(item, 1);
+                              }}
+                              className="px-1.5 h-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-r-lg transition cursor-pointer flex items-center justify-center"
+                              title="Adicionar +1 volume"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
                             </button>
                           </div>
 
-                          {/* LINHA INFERIOR: BOTÃO DE BAIXA LOGO ABAIXO DE ONDE CONFIGURA QTD */}
+                          {/* BOTÃO DE BAIXA AO LADO DA QTD DE VOLUMES */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               abrirMenuBaixa(item);
                             }}
-                            className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-                            title="Opções de baixa e entrega"
+                            className="h-8 px-2.5 sm:px-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95 shrink-0"
+                            title="Dar baixa / entregar volumes"
                           >
                             <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                             <span>Baixa</span>
+                          </button>
+
+                          {/* BOTÃO EXCLUIR */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoverItem(item);
+                            }}
+                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer active:scale-95 shrink-0"
+                            title="Excluir lançamento"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
