@@ -62,7 +62,69 @@ import {
 
 interface PassagemPostoProps {
   usuarioLogado?: any;
+  condominioConfig?: any;
+  onVoltar?: () => void;
   onTrocarOperador?: (novoOperador: any) => void;
+  featureFlags?: any;
+}
+
+export function isModuloHabilitado(modulo: string, flags?: any): boolean {
+  if (!flags || typeof flags !== 'object') return true;
+  const f = (flags.feature_flags && typeof flags.feature_flags === 'object')
+    ? { ...flags.feature_flags, ...flags }
+    : flags;
+
+  const isDesabilitado = (val: any) => val === false || val === 'false' || val === 0;
+
+  switch (modulo) {
+    case 'encomendas':
+      return !isDesabilitado(f.mod02_gestao_encomendas) && !isDesabilitado(f.encomendas);
+    case 'bancada':
+      return !isDesabilitado(f.mod11_bancada_conferencia) && !isDesabilitado(f.bancada);
+    case 'rondas':
+      return !isDesabilitado(f.mod07_gestao_ronda) && !isDesabilitado(f.rondas);
+    case 'chaves':
+      return !isDesabilitado(f.mod05_quadro_chaves) && !isDesabilitado(f.chaves);
+    case 'prestadores':
+      return !isDesabilitado(f.mod10_prestadores_servico) && !isDesabilitado(f.prestadores);
+    case 'custodia':
+      return !isDesabilitado(f.mod03_custodia_itens) && !isDesabilitado(f.custodia);
+    case 'materiais':
+      return !isDesabilitado(f.mod04_materiais_posto) && !isDesabilitado(f.materiais);
+    case 'ocorrencias':
+      return !isDesabilitado(f.mod08_livro_ocorrencias) && !isDesabilitado(f.ocorrencias);
+    case 'manutencao':
+      return !isDesabilitado(f.mod06_gestao_manutencao) && !isDesabilitado(f.manutencao);
+    default:
+      return true;
+  }
+}
+
+export function carregarFlagsCondominioLocal(condominioId?: string): Record<string, boolean> {
+  const padroes: Record<string, boolean> = {
+    mod01_cadastros_base: true,
+    mod02_gestao_encomendas: true,
+    mod03_custodia_itens: true,
+    mod04_materiais_posto: true,
+    mod05_quadro_chaves: true,
+    mod06_gestao_manutencao: true,
+    mod07_gestao_ronda: true,
+    mod08_livro_ocorrencias: true,
+    mod09_passagem_posto: true,
+    mod10_prestadores_servico: true,
+    mod11_bancada_conferencia: true,
+    mod12_historico_absoluto: true,
+    mod_portal_sindico: true
+  };
+  if (!condominioId) return padroes;
+  try {
+    const raw = localStorage.getItem(`infport_flags_${condominioId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...padroes, ...parsed };
+    }
+  } catch {}
+  return padroes;
 }
 
 export interface ConsolidacaoPosto {
@@ -276,12 +338,19 @@ const estadoInicialConsolidacao: ConsolidacaoPosto = {
   }
 };
 
-export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: PassagemPostoProps) {
+export default function PassagemPosto({ 
+  usuarioLogado, 
+  condominioConfig: propCondominioConfig, 
+  onVoltar, 
+  onTrocarOperador, 
+  featureFlags: propFlags 
+}: PassagemPostoProps) {
+  const [featureFlags, setFeatureFlags] = useState<any>(propFlags || null);
   const [passagens, setPassagens] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingAuditoria, setLoadingAuditoria] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
-  const [condominioConfig, setCondominioConfig] = useState<CondominioConfig | null>(null);
+  const [condominioConfig, setCondominioConfig] = useState<CondominioConfig | null>(propCondominioConfig || null);
   const [copiadoTexto, setCopiadoTexto] = useState(false);
   const [modalCompartilharWhatsApp, setModalCompartilharWhatsApp] = useState<any | null>(null);
   const [exibirResumoPlantao, setExibirResumoPlantao] = useState(false);
@@ -310,7 +379,18 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   // Modal para ver relatório histórico completo
   const [modalHistoricoDetalhes, setModalHistoricoDetalhes] = useState<any | null>(null);
 
-  // 1. Auditoria Obrigatória dos 8 Módulos do Sistema (Sem checklist físico redundante)
+  // 1. Configuração de auditoria dos módulos do sistema
+  const modulosAuditConfig: Array<{ key: string; label: string }> = [
+    { key: 'encomendas', label: 'Módulo 02: Gestão de Encomendas & RE' },
+    { key: 'bancada', label: 'Módulo 11: Bancada Física do Posto' },
+    { key: 'rondas', label: 'Módulo 07: Rondas Patrimoniais' },
+    { key: 'chaves', label: 'Módulo 05: Quadro de Chaves' },
+    { key: 'prestadores', label: 'Módulo 10: Prestadores & Autorizados' },
+    { key: 'custodia', label: 'Módulo 03: Custódia na Portaria' },
+    { key: 'materiais', label: 'Módulo 04: Equipamentos & Materiais' },
+    { key: 'ocorrencias', label: 'Módulo 08: Livro de Ocorrências' }
+  ];
+
   const [auditModulos, setAuditModulos] = useState<Record<string, { status: 'ok' | 'divergente' | null; obs: string }>>({
     encomendas: { status: null, obs: '' },
     bancada: { status: null, obs: '' },
@@ -334,16 +414,17 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     limpezaOk: true
   });
 
-  // Totalizadores de auditoria obrigatória dos 8 módulos
-  const totalModulosAvaliados = Object.values(auditModulos).filter(m => m.status !== null).length;
-  const totalModulosObrigatorios = Object.keys(auditModulos).length; // 8 módulos
+  // Totalizadores de auditoria obrigatória considerando APENAS os módulos habilitados para o condomínio em questão
+  const modulosObrigatoriosAtivos = modulosAuditConfig.filter(m => isModuloHabilitado(m.key, featureFlags));
+  const totalModulosObrigatorios = modulosObrigatoriosAtivos.length;
+  const totalModulosAvaliados = modulosObrigatoriosAtivos.filter(m => auditModulos[m.key]?.status !== null).length;
   const checklistCompletoValido = totalModulosAvaliados === totalModulosObrigatorios;
 
   const marcarTodosModulosOk = () => {
     setAuditModulos(prev => {
-      const atualizado: Record<string, { status: 'ok' | 'divergente' | null; obs: string }> = {};
-      Object.keys(prev).forEach(key => {
-        atualizado[key] = {
+      const atualizado: Record<string, { status: 'ok' | 'divergente' | null; obs: string }> = { ...prev };
+      modulosObrigatoriosAtivos.forEach(m => {
+        atualizado[m.key] = {
           status: 'ok',
           obs: ''
         };
@@ -380,6 +461,15 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   };
 
   useEffect(() => {
+    if (propFlags) {
+      setFeatureFlags(propFlags);
+    } else if (usuarioLogado?.condominio_id) {
+      const local = carregarFlagsCondominioLocal(usuarioLogado.condominio_id);
+      if (local) setFeatureFlags(local);
+    }
+  }, [propFlags, usuarioLogado?.condominio_id]);
+
+  useEffect(() => {
     if (usuarioLogado?.condominio_id) {
       carregarPassagens();
       carregarConfigEConsolidar(usuarioLogado.condominio_id);
@@ -390,6 +480,43 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
   const carregarConfigEConsolidar = async (condId: string) => {
     const cfg = await carregarCondominioConfig(condId);
     setCondominioConfig(cfg);
+
+    try {
+      const { data: cfgDb } = await supabase
+        .from('configuracoes')
+        .select('*')
+        .eq('condominio_id', condId)
+        .maybeSingle();
+
+      if (cfgDb) {
+        const ff = typeof cfgDb.feature_flags === 'object' && cfgDb.feature_flags !== null ? cfgDb.feature_flags : {};
+        const resolverFlag = (chave: string) => {
+          if (ff[chave] !== undefined && ff[chave] !== null) return Boolean(ff[chave]);
+          if ((cfgDb as any)[chave] !== undefined && (cfgDb as any)[chave] !== null) return Boolean((cfgDb as any)[chave]);
+          return true;
+        };
+        const flagsAtualizadas = {
+          mod01_cadastros_base: resolverFlag('mod01_cadastros_base'),
+          mod02_gestao_encomendas: resolverFlag('mod02_gestao_encomendas'),
+          mod03_custodia_itens: resolverFlag('mod03_custodia_itens'),
+          mod04_materiais_posto: resolverFlag('mod04_materiais_posto'),
+          mod05_quadro_chaves: resolverFlag('mod05_quadro_chaves'),
+          mod06_gestao_manutencao: resolverFlag('mod06_gestao_manutencao'),
+          mod07_gestao_ronda: resolverFlag('mod07_gestao_ronda'),
+          mod08_livro_ocorrencias: resolverFlag('mod08_livro_ocorrencias'),
+          mod09_passagem_posto: resolverFlag('mod09_passagem_posto'),
+          mod10_prestadores_servico: resolverFlag('mod10_prestadores_servico'),
+          mod11_bancada_conferencia: resolverFlag('mod11_bancada_conferencia'),
+          mod12_historico_absoluto: resolverFlag('mod12_historico_absoluto'),
+          mod_portal_sindico: resolverFlag('mod_portal_sindico')
+        };
+        setFeatureFlags(flagsAtualizadas);
+        localStorage.setItem(`infport_flags_${condId}`, JSON.stringify(flagsAtualizadas));
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar flags do condomínio:', e);
+    }
+
     await consolidarModulosPosto(cfg);
   };
 
@@ -989,6 +1116,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       // Snapshot consolidado completo do plantão (8 módulos)
       const snapshotConsolidado = {
         ...consolidacao,
+        featureFlags: featureFlags || carregarFlagsCondominioLocal(usuarioLogado?.condominio_id),
         auditModulos,
         chavesFora: consolidacao.chaves.totalFora,
         totalChavesCadastradas: (consolidacao.chaves as any).totalCadastradas || 23,
@@ -1084,14 +1212,15 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
     const ban = c.bancada || {};
     const ron = c.rondas || {};
     const cha = c.chaves || {};
-    const pre = c.prestadores || {};
     const cus = c.custodia || {};
     const mat = c.materiais || {};
     const oco = c.ocorrencias || {};
 
+    const flags = c.featureFlags || featureFlags || carregarFlagsCondominioLocal(usuarioLogado?.condominio_id || item.condominio_id);
+
     const nomeCondominio = item.condominio_nome || item.pendencias?.condominio_nome || condominioConfig?.nome || usuarioLogado?.condominio_nome || usuarioLogado?.condominio?.nome || 'Village Di Padova';
 
-    let texto = `🔄 *RELATÓRIO CONSOLIDADO DE PASSAGEM DE POSTO - INFPORT*\n` +
+    let texto = `🔄 *RELATÓRIO COMPLETO DE TROCA DE PLANTÃO - INFPORT*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🏢 *${nomeCondominio}*\n` +
       `🔑 *Código:* ${item.codigo || 'PAS:INFPORT'}\n` +
@@ -1101,144 +1230,147 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       `📊 *Status do Turno:* ${item.status === 'Divergência Registrada' ? '⚠️ DIVERGÊNCIA APONTADA' : '🟢 100% AUDITADO E VALIDADO'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // 1. MÓDULO UNIFICADO - RECEBIMENTO DE ENCOMENDAS (RE)
-    const totalVolumes = ban.totalVolumes ?? enc.totalRetidasNoPosto ?? c.encomendasPendentes ?? 0;
-    let totalUnidades = ban.totalUnidades ?? 0;
-    if (!totalUnidades) {
-      if (enc.retidasPorBloco) {
-        totalUnidades = Object.values(enc.retidasPorBloco).reduce((acc: number, b: any) => acc + (b.unidades?.length || 0), 0);
+    // 1. MÓDULO UNIFICADO - RECEBIMENTO DE ENCOMENDAS (RE) (Apenas se habilitado para o condomínio em questão)
+    if (isModuloHabilitado('encomendas', flags) || isModuloHabilitado('bancada', flags)) {
+      const totalReRecebidas = enc.totalRePlantao ?? 0;
+      const totalTriadas = enc.qtdPacotesTriadosPlantao ?? 0;
+      const totalPendentesTriagem = enc.qtdFaltaTriagem ?? enc.reFaltandoTriagem ?? 0;
+      const totalSaidas = enc.qtdPacotesRetiradosPlantao ?? 0;
+
+      const totalVolumes = ban.totalVolumes ?? enc.totalRetidasNoPosto ?? c.encomendasPendentes ?? 0;
+      let totalUnidades = ban.totalUnidades ?? 0;
+      if (!totalUnidades) {
+        if (enc.retidasPorBloco) {
+          totalUnidades = Object.values(enc.retidasPorBloco).reduce((acc: number, b: any) => acc + (b.unidades?.length || 0), 0);
+        } else {
+          totalUnidades = totalVolumes;
+        }
+      }
+
+      texto += `📦 *RECEBIMENTO DE ENCOMENDAS (RE)*\n` +
+        `• Quantidade de RE recebida: *${totalReRecebidas}*\n` +
+        `• Quantidade triada: *${totalTriadas}*\n` +
+        `• Pendente de triagem: *${totalPendentesTriagem > 0 ? `${totalPendentesTriagem} volume(s)` : '0 (Tudo triado)'}*\n` +
+        `• Quantas encomendas saíram no plantão: *${totalSaidas}*\n` +
+        `• Total retido no posto aguardando moradores: *${totalVolumes} volume(s) em ${totalUnidades} unidade(s)*\n`;
+
+      // Relação física detalhada por torre/bloco e unidades
+      if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
+        texto += `  _Discriminação física completa:_\n`;
+        ban.estruturasResumo.forEach((g: any) => {
+          const lista = g.itens || g.unidades || [];
+          const apsStr = lista.map((u: any) => {
+            const uni = u.unidade || u;
+            const vol = (u.volumes && u.volumes > 1) ? ` (${u.volumes} vol)` : '';
+            const obs = u.observacao ? ` [${u.observacao}]` : '';
+            return `${uni}${vol}${obs}`;
+          }).join(', ');
+          const totalVols = g.totalVolumes ?? lista.reduce((acc: number, it: any) => acc + (it.volumes || 1), 0);
+          texto += `  *${(g.estrutura || 'TORRE A').toUpperCase()}*, TOTAL ${totalVols}:\n`;
+          texto += `  ↳ ${apsStr || 'Nenhum'}\n`;
+        });
+      } else if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
+        texto += `  _Discriminação física completa:_\n`;
+        Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
+          texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n`;
+          texto += `  ↳ ${info.unidades.join(', ')}\n`;
+        });
       } else {
-        totalUnidades = totalVolumes;
-      }
-    }
-
-    texto += `📦 *RECEBIMENTO DE ENCOMENDAS (RE)*\n` +
-      `• Total retido no posto aguardando moradores: *${totalVolumes} volume(s) em ${totalUnidades} unidade(s)*\n`;
-
-    // Relação física detalhada por torre/bloco e unidades
-    if (ban.estruturasResumo && Array.isArray(ban.estruturasResumo) && ban.estruturasResumo.length > 0) {
-      texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
-      ban.estruturasResumo.forEach((g: any) => {
-        const lista = g.itens || g.unidades || [];
-        const apsStr = lista.map((u: any) => {
-          const uni = u.unidade || u;
-          const vol = (u.volumes && u.volumes > 1) ? ` (${u.volumes} vol)` : '';
-          const obs = u.observacao ? ` [${u.observacao}]` : '';
-          return `${uni}${vol}${obs}`;
-        }).join(', ');
-        const totalVols = g.totalVolumes ?? lista.reduce((acc: number, it: any) => acc + (it.volumes || 1), 0);
-        texto += `  *${(g.estrutura || 'TORRE A').toUpperCase()}*, TOTAL ${totalVols}:\n`;
-        texto += `  ↳ ${apsStr || 'Nenhum'}\n`;
-      });
-    } else if (enc.retidasPorBloco && Object.keys(enc.retidasPorBloco).length > 0) {
-      texto += `  _Discriminação física completa conferida por torre/bloco e encomenda:_\n`;
-      Object.entries(enc.retidasPorBloco).forEach(([bloco, info]: [string, any]) => {
-        texto += `  *${bloco.toUpperCase()}*, TOTAL ${info.total}:\n`;
-        texto += `  ↳ ${info.unidades.join(', ')}\n`;
-      });
-    } else {
-      texto += `• Situação: *Nenhum volume retido no posto no momento*\n`;
-    }
-    texto += `\n`;
-
-    // 2. QUADRO DE CHAVES
-    const totalChavesFora = cha.totalFora ?? c.chavesFora ?? 0;
-    const totalChavesGeral = cha.totalCadastradas ?? c.totalChavesCadastradas ?? (totalChavesFora + (cha.totalNoQuadro || 23));
-    texto += `🔑 *QUADRO DE CHAVES*\n`;
-    if (totalChavesFora === 0) {
-      texto += `• Situação: *TODAS AS ${totalChavesGeral} CHAVES ESTÃO guardadas no quadro*\n`;
-    } else {
-      texto += `• Situação: *${totalChavesFora} chave(s) fora do quadro de um total de ${totalChavesGeral} chaves*\n`;
-      const listaChaves = cha.listaChavesFora || c.listaChaves || [];
-      if (listaChaves.length > 0) {
-        texto += `🚨 *Chaves em posse de terceiros/moradores:*\n` +
-          listaChaves.map((k: any) => 
-            `  🔑 *${k.nomeChave || k.nome_chave || 'Chave'}* (${k.codigoChave || k.codigo_chave || 'S/C'})\n` +
-            `     ↳ Com quem tá: *${k.comQuemTa || k.nome_retirante || 'Portador'}* (${k.empresaOuApto || k.empresa_ou_apto || 'N/A'})\n` +
-            `     ↳ Doc: ${k.documento || k.documento_retirante || 'N/A'} | Fone: ${k.telefone || k.telefone_retirante || 'N/A'}\n` +
-            `     ↳ Retirada em: ${new Date(k.retiradaEm || k.data_hora_retirada || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${k.atrasado ? ' ⚠️ *ATRASADO!*' : ''}`
-          ).join('\n\n') + `\n`;
-      }
-    }
-    texto += `\n`;
-
-    // 3. CUSTÓDIA DE OBJETOS NA PORTARIA
-    const totalCustodia = cus.totalAguardando ?? c.custodiasPendentes ?? 0;
-    texto += `📦 *CUSTÓDIA DE OBJETOS NA PORTARIA*\n` +
-      `• Itens guardados aguardando retirada: *${totalCustodia}*\n`;
-    const listaCustodias = cus.listaCustodias || c.listaCustodias || [];
-    if (totalCustodia > 0 && listaCustodias.length > 0) {
-      texto += listaCustodias.map((cItem: any) => 
-        `  • [${cItem.codigo || 'CUST'}] *${cItem.descricao || 'Item em custódia'}*\n` +
-        `    ↳ De: ${cItem.origem || 'Morador/Terceiro'} ➔ Para: ${cItem.destino || 'Destinatário'}`
-      ).join('\n') + `\n`;
-    }
-    texto += `\n`;
-
-    // 4. EQUIPAMENTOS E MATERIAIS DA GUARITA
-    const totalAvariados = mat.avariados ?? (c.materiaisOk === false ? 1 : 0);
-    const totalEquip = mat.totalEquipamentos ?? c.qtdMateriais ?? 0;
-    const totalPerfeitos = mat.perfeitos ?? (totalEquip - totalAvariados);
-    texto += `🛠 *EQUIPAMENTOS E MATERIAIS DA GUARITA*\n` +
-      `• Total de itens inventariados: *${totalEquip}*\n` +
-      `• Em perfeito estado: *${totalPerfeitos}*\n` +
-      `• Com avaria / em manutenção: *${totalAvariados}*\n`;
-    const listaAvarias = mat.listaAvariados || c.listaMateriaisAvariados || [];
-    if (totalAvariados > 0 && listaAvarias.length > 0) {
-      texto += `  🚨 *Itens com Avaria/Defeito:*\n` +
-        listaAvarias.map((a: any) => `  ↳ *${a.nome}*: ${a.observacao || a.observacao_avaria || a.estado || 'Avariado'}`).join('\n') + `\n`;
-    }
-    texto += `\n`;
-
-    // 5. LIVRO DE OCORRÊNCIAS PENDENTES
-    const totalOcorrencias = oco.totalPendentes ?? c.ocorrenciasAbertas ?? 0;
-    texto += `📖 *LIVRO DE OCORRÊNCIAS PENDENTES*\n` +
-      `• Total não resolvido: *${totalOcorrencias}*\n`;
-    const listaOcorrencias = oco.listaPendentes || c.listaOcorrencias || [];
-    if (totalOcorrencias > 0 && listaOcorrencias.length > 0) {
-      texto += `🚨 *Alerta detalhado dos casos pendentes:*\n` +
-        listaOcorrencias.map((o: any) => 
-          `  • [${(o.prioridade || 'Média').toUpperCase()}] *${o.titulo}*\n` +
-          `    ↳ ⏳ *Há ${o.diasEmAberto ?? 0} dia(s) em aberto!* (${new Date(o.criadaEm || o.created_at || Date.now()).toLocaleDateString('pt-BR')})\n` +
-          `    ↳ Local: ${o.unidadeBloco || o.unidade_bloco || 'Área Comum'} | Responsável: ${o.operador || o.operador_nome || 'Portaria'}\n` +
-          `    ↳ Resumo: ${o.descricao}`
-        ).join('\n\n') + `\n`;
-    } else {
-      texto += `• Situação: *Nenhuma ocorrência pendente no posto*\n`;
-    }
-    texto += `\n`;
-
-    // 6. AUTORIZADOS E PRESTADORES NO CONDOMÍNIO
-    const totalPrestadores = pre.totalPresentes ?? 0;
-    const totalLiberados = pre.totalLiberados ?? (pre.listaLiberados?.length || 0);
-    texto += `👥 *AUTORIZADOS E PRESTADORES NO CONDOMÍNIO*\n` +
-      `• Pessoas presentes no momento: *${totalPrestadores}*\n`;
-    if (totalPrestadores > 0 && pre.listaPresentes && pre.listaPresentes.length > 0) {
-      texto += pre.listaPresentes.map((p: any) => 
-        `  • *${p.nome}* (${p.empresa || 'Visitante/Serviço'})\n` +
-        `    ↳ Destino: ${p.destino || 'Área Comum'} | Crachá: ${p.cracha || 'N/A'}${p.estourado ? ' 🚨 *TEMPO ESTOURADO!*' : ''}\n` +
-        `    ↳ Entrada: ${new Date(p.entradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-      ).join('\n') + `\n`;
-    }
-    texto += `• Lista de liberações ativas: *${totalLiberados}*\n`;
-    if (totalLiberados > 0 && pre.listaLiberados && pre.listaLiberados.length > 0) {
-      texto += pre.listaLiberados.slice(0, 8).map((p: any) => 
-        `  ↳ *${p.nome}* (${p.empresa || 'Familiar/Serviço'}) ➔ ${p.destino || 'Geral'} [${p.validade || 'Ativo'}]`
-      ).join('\n') + (totalLiberados > 8 ? `\n  ↳ _...e mais ${totalLiberados - 8} liberados_` : '') + `\n`;
-    }
-    texto += `\n`;
-
-    // 7. RONDAS (se houver dados de rondas no plantão)
-    if (ron.totalExecutadasPlantao > 0 || ron.temDivergencias) {
-      texto += `🛡️ *RONDAS PATRIMONIAIS NO PLANTÃO*\n` +
-        `• Total executadas: *${ron.totalExecutadasPlantao || 0}* | Concluídas: *${ron.concluidas || 0}* | Falhas: *${ron.incompletas || 0}*\n`;
-      if (ron.temDivergencias && ron.listaDivergencias && ron.listaDivergencias.length > 0) {
-        texto += ron.listaDivergencias.map((d: string) => `  ⚠️ ${d}`).join('\n') + `\n`;
+        texto += `• Situação: *Nenhum volume retido no posto no momento*\n`;
       }
       texto += `\n`;
     }
 
-    // 8. INSTRUÇÕES E RECADOS DO TURNO
+    // 2. QUADRO DE CHAVES (Apenas se habilitado para o condomínio em questão)
+    if (isModuloHabilitado('chaves', flags)) {
+      const totalChavesFora = cha.totalFora ?? c.chavesFora ?? 0;
+      const totalChavesGeral = cha.totalCadastradas ?? c.totalChavesCadastradas ?? (totalChavesFora + (cha.totalNoQuadro || 23));
+      texto += `🔑 *QUADRO DE CHAVES*\n`;
+      if (totalChavesFora === 0) {
+        texto += `• Situação: *TODAS AS ${totalChavesGeral} CHAVES ESTÃO guardadas no quadro*\n`;
+      } else {
+        texto += `• Situação: *${totalChavesFora} chave(s) fora do quadro de um total de ${totalChavesGeral} chaves*\n`;
+        const listaChaves = cha.listaChavesFora || c.listaChaves || [];
+        if (listaChaves.length > 0) {
+          texto += `🚨 *Chaves em posse de terceiros/moradores:*\n` +
+            listaChaves.map((k: any) => 
+              `  🔑 *${k.nomeChave || k.nome_chave || 'Chave'}* (${k.codigoChave || k.codigo_chave || 'S/C'})\n` +
+              `     ↳ Com quem tá: *${k.comQuemTa || k.nome_retirante || 'Portador'}* (${k.empresaOuApto || k.empresa_ou_apto || 'N/A'})\n` +
+              `     ↳ Doc: ${k.documento || k.documento_retirante || 'N/A'} | Fone: ${k.telefone || k.telefone_retirante || 'N/A'}\n` +
+              `     ↳ Retirada em: ${new Date(k.retiradaEm || k.data_hora_retirada || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${k.atrasado ? ' ⚠️ *ATRASADO!*' : ''}`
+            ).join('\n\n') + `\n`;
+        }
+      }
+      texto += `\n`;
+    }
+
+    // 3. CUSTÓDIA DE OBJETOS NA PORTARIA (Apenas se habilitado para o condomínio em questão)
+    if (isModuloHabilitado('custodia', flags)) {
+      const totalCustodia = cus.totalAguardando ?? c.custodiasPendentes ?? 0;
+      texto += `📦 *CUSTÓDIA DE OBJETOS NA PORTARIA*\n` +
+        `• Itens guardados aguardando retirada: *${totalCustodia}*\n`;
+      const listaCustodias = cus.listaCustodias || c.listaCustodias || [];
+      if (totalCustodia > 0 && listaCustodias.length > 0) {
+        texto += listaCustodias.map((cItem: any) => 
+          `  • [${cItem.codigo || 'CUST'}] *${cItem.descricao || 'Item em custódia'}*\n` +
+          `    ↳ De: ${cItem.origem || 'Morador/Terceiro'} ➔ Para: ${cItem.destino || 'Destinatário'}`
+        ).join('\n') + `\n`;
+      }
+      texto += `\n`;
+    }
+
+    // 4. EQUIPAMENTOS E MATERIAIS DA GUARITA (Apenas se habilitado para o condomínio em questão)
+    if (isModuloHabilitado('materiais', flags)) {
+      const totalAvariados = mat.avariados ?? (c.materiaisOk === false ? 1 : 0);
+      const totalEquip = mat.totalEquipamentos ?? c.qtdMateriais ?? 0;
+      const totalPerfeitos = mat.perfeitos ?? (totalEquip - totalAvariados);
+      texto += `🛠 *EQUIPAMENTOS E MATERIAIS DA GUARITA*\n` +
+        `• Total de itens inventariados: *${totalEquip}*\n` +
+        `• Em perfeito estado: *${totalPerfeitos}*\n` +
+        `• Com avaria / em manutenção: *${totalAvariados}*\n`;
+      const listaAvarias = mat.listaAvariados || c.listaMateriaisAvariados || [];
+      if (totalAvariados > 0 && listaAvarias.length > 0) {
+        texto += `  🚨 *Itens com Avaria/Defeito:*\n` +
+          listaAvarias.map((a: any) => `  ↳ *${a.nome}*: ${a.observacao || a.observacao_avaria || a.estado || 'Avariado'}`).join('\n') + `\n`;
+      }
+      texto += `\n`;
+    }
+
+    // 5. LIVRO DE OCORRÊNCIAS PENDENTES (Apenas se habilitado para o condomínio em questão)
+    if (isModuloHabilitado('ocorrencias', flags)) {
+      const totalOcorrencias = oco.totalPendentes ?? c.ocorrenciasAbertas ?? 0;
+      texto += `📖 *LIVRO DE OCORRÊNCIAS PENDENTES*\n` +
+        `• Total não resolvido: *${totalOcorrencias}*\n`;
+      const listaOcorrencias = oco.listaPendentes || c.listaOcorrencias || [];
+      if (totalOcorrencias > 0 && listaOcorrencias.length > 0) {
+        texto += `🚨 *Alerta detalhado dos casos pendentes:*\n` +
+          listaOcorrencias.map((o: any) => 
+            `  • [${(o.prioridade || 'Média').toUpperCase()}] *${o.titulo}*\n` +
+            `    ↳ ⏳ *Há ${o.diasEmAberto ?? 0} dia(s) em aberto!* (${new Date(o.criadaEm || o.created_at || Date.now()).toLocaleDateString('pt-BR')})\n` +
+            `    ↳ Local: ${o.unidadeBloco || o.unidade_bloco || 'Área Comum'} | Responsável: ${o.operador || o.operador_nome || 'Portaria'}\n` +
+            `    ↳ Resumo: ${o.descricao}`
+          ).join('\n\n') + `\n`;
+      } else {
+        texto += `• Situação: *Nenhuma ocorrência pendente no posto*\n`;
+      }
+      texto += `\n`;
+    }
+
+    // NOTA: Autorizados e Prestadores no Condomínio OMITIDOS da mensagem de WhatsApp conforme especificação do usuário.
+
+    // 6. RONDAS PATRIMONIAIS NO PLANTÃO (Apenas se habilitado para o condomínio em questão)
+    if (isModuloHabilitado('rondas', flags)) {
+      if (ron.totalExecutadasPlantao > 0 || ron.temDivergencias) {
+        texto += `🛡️ *RONDAS PATRIMONIAIS NO PLANTÃO*\n` +
+          `• Total executadas: *${ron.totalExecutadasPlantao || 0}* | Concluídas: *${ron.concluidas || 0}* | Falhas: *${ron.incompletas || 0}*\n`;
+        if (ron.temDivergencias && ron.listaDivergencias && ron.listaDivergencias.length > 0) {
+          texto += ron.listaDivergencias.map((d: string) => `  ⚠️ ${d}`).join('\n') + `\n`;
+        }
+        texto += `\n`;
+      }
+    }
+
+    // 7. INSTRUÇÕES E RECADOS DO TURNO
     texto += `💬 *INSTRUÇÕES E RECADOS DO TURNO:*\n"${item.observacoes || 'Nenhuma observação registrada.'}"\n`;
     if (item.divergencia) {
       texto += `\n🚨 *DIVERGÊNCIA APONTADA PELO OPERADOR:*\n"${item.divergencia}"\n`;
@@ -1379,7 +1511,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
       {/* SEÇÃO PRINCIPAL DE TABELAS DE RESUMO CONSOLIDADAS (ACIONADA PELO BOTÃO RESUMO PLANTÃO DO CABEÇALHO) */}
       {exibirResumoPlantao && (
         <div className="space-y-2 animate-in fade-in duration-200">
-          <TabelasResumoPosto consolidacao={consolidacao} />
+          <TabelasResumoPosto consolidacao={consolidacao} featureFlags={featureFlags} />
         </div>
       )}
 
@@ -1527,7 +1659,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                   <UserCheck className="w-5 h-5 text-emerald-600" /> Relatório Completo de Troca de Plantão
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  Consolidação automática dos 7 módulos com verificação em tempo real
+                  Consolidação automática dos {modulosObrigatoriosAtivos.length} módulos habilitados com verificação em tempo real
                 </p>
               </div>
               <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
@@ -1590,7 +1722,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                   </div>
 
                   {visualizacaoModal === 'tabelas' && (
-                    <TabelasResumoPosto consolidacao={consolidacao} modoConferencia={true} />
+                    <TabelasResumoPosto consolidacao={consolidacao} modoConferencia={true} featureFlags={featureFlags} />
                   )}
 
                   {visualizacaoModal === 'cards' && (
@@ -1598,6 +1730,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                       {/* CARDS RESUMO DE ALTO NÍVEL */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {/* RE / Encomendas */}
+                    {isModuloHabilitado('encomendas', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('encomendas')}
@@ -1620,8 +1753,34 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         )}
                       </div>
                     </button>
+                    )}
+
+                    {/* Bancada (Balcão Físico) */}
+                    {isModuloHabilitado('bancada', featureFlags) && (
+                    <button
+                      type="button"
+                      onClick={() => setModuloAtivo('bancada')}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        moduloAtivo === 'bancada' ? 'ring-2 ring-amber-600 bg-amber-50/50 border-amber-300' : 'bg-white hover:bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-amber-700 mb-1">
+                        <span className="text-[10px] font-bold uppercase flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5" /> Bancada (Balcão)
+                        </span>
+                        <Layers className="w-4 h-4" />
+                      </div>
+                      <div className="text-xs font-bold text-slate-900">
+                        {consolidacao.bancada?.totalVolumes || 0} volume(s)
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {consolidacao.bancada?.totalUnidades || 0} unidade(s) sob custódia
+                      </div>
+                    </button>
+                    )}
 
                     {/* Rondas */}
+                    {isModuloHabilitado('rondas', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('rondas')}
@@ -1646,8 +1805,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         )}
                       </div>
                     </button>
+                    )}
 
                     {/* Chaves */}
+                    {isModuloHabilitado('chaves', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('chaves')}
@@ -1670,8 +1831,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         )}
                       </div>
                     </button>
+                    )}
 
                     {/* Prestadores */}
+                    {isModuloHabilitado('prestadores', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('prestadores')}
@@ -1694,8 +1857,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         )}
                       </div>
                     </button>
+                    )}
 
                     {/* Custódia */}
+                    {isModuloHabilitado('custodia', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('custodia')}
@@ -1714,8 +1879,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         Aguardando retirada
                       </div>
                     </button>
+                    )}
 
                     {/* Materiais */}
+                    {isModuloHabilitado('materiais', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('materiais')}
@@ -1738,8 +1905,10 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         )}
                       </div>
                     </button>
+                    )}
 
                     {/* Ocorrências Pendentes */}
+                    {isModuloHabilitado('ocorrencias', featureFlags) && (
                     <button
                       type="button"
                       onClick={() => setModuloAtivo('ocorrencias')}
@@ -1766,28 +1935,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                         )}
                       </div>
                     </button>
-
-                    {/* Bancada (Balcão Físico) */}
-                    <button
-                      type="button"
-                      onClick={() => setModuloAtivo('bancada')}
-                      className={`p-3 rounded-xl border text-left transition ${
-                        moduloAtivo === 'bancada' ? 'ring-2 ring-amber-600 bg-amber-50/50 border-amber-300' : 'bg-white hover:bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-amber-700 mb-1">
-                        <span className="text-[10px] font-bold uppercase flex items-center gap-1">
-                          <Layers className="w-3.5 h-3.5" /> Bancada (Balcão)
-                        </span>
-                        <Layers className="w-4 h-4" />
-                      </div>
-                      <div className="text-xs font-bold text-slate-900">
-                        {consolidacao.bancada?.totalVolumes || 0} volume(s)
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        {consolidacao.bancada?.totalUnidades || 0} unidade(s) sob custódia
-                      </div>
-                    </button>
+                    )}
                   </div>
 
                   {/* ABAS / SEÇÕES DETALHADAS DE CADA MÓDULO */}
@@ -1817,7 +1965,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     </div>
 
                     {/* SEÇÃO 1: RE / ENCOMENDAS */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'encomendas') && (
+                    {isModuloHabilitado('encomendas', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'encomendas') && (
                       <div className="bg-white p-3.5 rounded-xl border border-purple-100 shadow-sm space-y-2">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-purple-950 flex items-center gap-1.5 font-bold uppercase">
@@ -1874,7 +2022,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 1.1: BANCADA (CONFERÊNCIA DETALHADA POR TORRE E APARTAMENTO) */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'bancada') && (
+                    {isModuloHabilitado('bancada', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'bancada') && (
                       <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-sm space-y-2.5">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-amber-950 flex items-center gap-1.5 font-bold uppercase">
@@ -1924,7 +2072,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 2: RONDAS */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'rondas') && (
+                    {isModuloHabilitado('rondas', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'rondas') && (
                       <div className="bg-white p-3.5 rounded-xl border border-indigo-100 shadow-sm space-y-2">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-indigo-950 flex items-center gap-1.5 font-bold uppercase">
@@ -1966,7 +2114,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 3: CHAVES FORA DO QUADRO */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'chaves') && (
+                    {isModuloHabilitado('chaves', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'chaves') && (
                       <div className="bg-white p-3.5 rounded-xl border border-amber-100 shadow-sm space-y-2">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-amber-950 flex items-center gap-1.5 font-bold uppercase">
@@ -2026,7 +2174,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 4: PRESTADORES E AUTORIZADOS */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'prestadores') && (
+                    {isModuloHabilitado('prestadores', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'prestadores') && (
                       <div className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-sm space-y-4">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-blue-950 flex items-center gap-1.5 font-bold uppercase">
@@ -2107,7 +2255,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 5: CUSTÓDIA */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'custodia') && (
+                    {isModuloHabilitado('custodia', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'custodia') && (
                       <div className="bg-white p-3.5 rounded-xl border border-sky-100 shadow-sm space-y-2">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-sky-950 flex items-center gap-1.5 font-bold uppercase">
@@ -2143,7 +2291,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 6: MATERIAIS */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'materiais') && (
+                    {isModuloHabilitado('materiais', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'materiais') && (
                       <div className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-sm space-y-2">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-emerald-950 flex items-center gap-1.5 font-bold uppercase">
@@ -2208,7 +2356,7 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                     )}
 
                     {/* SEÇÃO 7: OCORRÊNCIAS PENDENTES (MESMO HÁ 10+ DIAS!) */}
-                    {(moduloAtivo === 'todos' || moduloAtivo === 'ocorrencias') && (
+                    {isModuloHabilitado('ocorrencias', featureFlags) && (moduloAtivo === 'todos' || moduloAtivo === 'ocorrencias') && (
                       <div className="bg-white p-3.5 rounded-xl border border-red-200 shadow-sm space-y-2">
                         <div className="flex justify-between items-center">
                           <strong className="text-xs text-red-950 flex items-center gap-1.5 font-bold uppercase">
@@ -3216,66 +3364,111 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
                 </h5>
 
                 {/* Encomendas */}
-                <div className="p-3 rounded-xl border border-purple-100 bg-purple-50/30 space-y-1">
-                  <div className="font-bold text-purple-950 flex items-center gap-1.5 uppercase text-[11px]">
-                    <Package className="w-3.5 h-3.5 text-purple-600" /> Módulo Encomendas & RE
+                {isModuloHabilitado('encomendas', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && (
+                  <div className="p-3 rounded-xl border border-purple-100 bg-purple-50/30 space-y-1">
+                    <div className="font-bold text-purple-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <Package className="w-3.5 h-3.5 text-purple-600" /> Módulo Encomendas & RE
+                    </div>
+                    <p className="text-slate-600">
+                      Retidas no posto: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.totalRetidasNoPosto ?? modalHistoricoDetalhes.pendencias?.encomendasPendentes ?? 0} vol.</strong> • 
+                      REs no turno: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.totalRePlantao ?? 'N/A'}</strong> • 
+                      Triadas no turno: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.qtdPacotesTriadosPlantao ?? 'N/A'}</strong> • 
+                      Entregues no turno: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.qtdPacotesRetiradosPlantao ?? 'N/A'}</strong>
+                    </p>
                   </div>
-                  <p className="text-slate-600">
-                    Retidas no posto: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.totalRetidasNoPosto ?? modalHistoricoDetalhes.pendencias?.encomendasPendentes ?? 0} vol.</strong> • 
-                    REs no turno: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.totalRePlantao ?? 'N/A'}</strong> • 
-                    Triadas no turno: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.qtdPacotesTriadosPlantao ?? 'N/A'}</strong> • 
-                    Entregues no turno: <strong>{modalHistoricoDetalhes.pendencias?.encomendas?.qtdPacotesRetiradosPlantao ?? 'N/A'}</strong>
-                  </p>
-                </div>
+                )}
+
+                {/* Bancada */}
+                {isModuloHabilitado('bancada', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && modalHistoricoDetalhes.pendencias?.bancada && (
+                  <div className="p-3 rounded-xl border border-amber-100 bg-amber-50/30 space-y-1">
+                    <div className="font-bold text-amber-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <Layers className="w-3.5 h-3.5 text-amber-600" /> Módulo Bancada (Balcão)
+                    </div>
+                    <p className="text-slate-600">
+                      Volumes físicos: <strong>{modalHistoricoDetalhes.pendencias?.bancada?.totalVolumes || 0} vol.</strong> em <strong>{modalHistoricoDetalhes.pendencias?.bancada?.totalUnidades || 0} unidade(s)</strong>
+                    </p>
+                  </div>
+                )}
 
                 {/* Rondas */}
-                <div className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/30 space-y-1">
-                  <div className="font-bold text-indigo-950 flex items-center gap-1.5 uppercase text-[11px]">
-                    <Footprints className="w-3.5 h-3.5 text-indigo-600" /> Módulo Rondas Patrimoniais
+                {isModuloHabilitado('rondas', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && (
+                  <div className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/30 space-y-1">
+                    <div className="font-bold text-indigo-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <Footprints className="w-3.5 h-3.5 text-indigo-600" /> Módulo Rondas Patrimoniais
+                    </div>
+                    <p className="text-slate-600">
+                      Total executadas: <strong>{modalHistoricoDetalhes.pendencias?.rondas?.totalExecutadasPlantao ?? modalHistoricoDetalhes.pendencias?.rondasUltimas12h ?? 0}</strong> • 
+                      Status: <strong>{modalHistoricoDetalhes.pendencias?.ultimaRondaStatus || 'Auditada'}</strong>
+                    </p>
                   </div>
-                  <p className="text-slate-600">
-                    Total executadas: <strong>{modalHistoricoDetalhes.pendencias?.rondas?.totalExecutadasPlantao ?? modalHistoricoDetalhes.pendencias?.rondasUltimas12h ?? 0}</strong> • 
-                    Status: <strong>{modalHistoricoDetalhes.pendencias?.ultimaRondaStatus || 'Auditada'}</strong>
-                  </p>
-                </div>
+                )}
 
                 {/* Chaves Fora */}
-                <div className="p-3 rounded-xl border border-amber-100 bg-amber-50/30 space-y-1">
-                  <div className="font-bold text-amber-950 flex items-center gap-1.5 uppercase text-[11px]">
-                    <Key className="w-3.5 h-3.5 text-amber-600" /> Módulo Quadro de Chaves
-                  </div>
-                  <p className="text-slate-600">
-                    Chaves fora do quadro: <strong>{modalHistoricoDetalhes.pendencias?.chaves?.totalFora ?? modalHistoricoDetalhes.pendencias?.chavesFora ?? 0}</strong>
-                  </p>
-                  {((modalHistoricoDetalhes.pendencias?.chaves?.listaChavesFora || modalHistoricoDetalhes.pendencias?.listaChaves || []).length > 0) && (
-                    <div className="pt-1 space-y-1">
-                      {(modalHistoricoDetalhes.pendencias?.chaves?.listaChavesFora || modalHistoricoDetalhes.pendencias?.listaChaves || []).map((k: any, idx: number) => (
-                        <div key={idx} className="bg-white p-2 rounded border border-amber-200 text-[11px]">
-                          <strong>{k.nomeChave || k.nome_chave} ({k.codigoChave || k.codigo_chave})</strong> — Com quem: {k.comQuemTa || k.nome_retirante} ({k.empresaOuApto || k.empresa_ou_apto})
-                        </div>
-                      ))}
+                {isModuloHabilitado('chaves', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && (
+                  <div className="p-3 rounded-xl border border-amber-100 bg-amber-50/30 space-y-1">
+                    <div className="font-bold text-amber-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <Key className="w-3.5 h-3.5 text-amber-600" /> Módulo Quadro de Chaves
                     </div>
-                  )}
-                </div>
+                    <p className="text-slate-600">
+                      Chaves fora do quadro: <strong>{modalHistoricoDetalhes.pendencias?.chaves?.totalFora ?? modalHistoricoDetalhes.pendencias?.chavesFora ?? 0}</strong>
+                    </p>
+                    {((modalHistoricoDetalhes.pendencias?.chaves?.listaChavesFora || modalHistoricoDetalhes.pendencias?.listaChaves || []).length > 0) && (
+                      <div className="pt-1 space-y-1">
+                        {(modalHistoricoDetalhes.pendencias?.chaves?.listaChavesFora || modalHistoricoDetalhes.pendencias?.listaChaves || []).map((k: any, idx: number) => (
+                          <div key={idx} className="bg-white p-2 rounded border border-amber-200 text-[11px]">
+                            <strong>{k.nomeChave || k.nome_chave} ({k.codigoChave || k.codigo_chave})</strong> — Com quem: {k.comQuemTa || k.nome_retirante} ({k.empresaOuApto || k.empresa_ou_apto})
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Custódia */}
+                {isModuloHabilitado('custodia', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && modalHistoricoDetalhes.pendencias?.custodia && (
+                  <div className="p-3 rounded-xl border border-sky-100 bg-sky-50/30 space-y-1">
+                    <div className="font-bold text-sky-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <Box className="w-3.5 h-3.5 text-sky-600" /> Módulo Custódia Portaria
+                    </div>
+                    <p className="text-slate-600">
+                      Itens retidos: <strong>{modalHistoricoDetalhes.pendencias?.custodia?.totalAguardando ?? modalHistoricoDetalhes.pendencias?.custodiasPendentes ?? 0} item(ns)</strong>
+                    </p>
+                  </div>
+                )}
+
+                {/* Materiais */}
+                {isModuloHabilitado('materiais', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && modalHistoricoDetalhes.pendencias?.materiais && (
+                  <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50/30 space-y-1">
+                    <div className="font-bold text-emerald-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <Radio className="w-3.5 h-3.5 text-emerald-600" /> Módulo Equipamentos & Materiais
+                    </div>
+                    <p className="text-slate-600">
+                      Equipamentos: <strong>{modalHistoricoDetalhes.pendencias?.materiais?.totalEquipamentos ?? modalHistoricoDetalhes.pendencias?.qtdMateriais ?? 0}</strong> • 
+                      Avariados: <strong>{modalHistoricoDetalhes.pendencias?.materiais?.avariados ?? (modalHistoricoDetalhes.pendencias?.materiaisOk === false ? 1 : 0)}</strong>
+                    </p>
+                  </div>
+                )}
 
                 {/* Ocorrências */}
-                <div className="p-3 rounded-xl border border-red-100 bg-red-50/30 space-y-1">
-                  <div className="font-bold text-red-950 flex items-center gap-1.5 uppercase text-[11px]">
-                    <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Módulo Ocorrências Pendentes
-                  </div>
-                  <p className="text-slate-600">
-                    Pendências abertas: <strong>{modalHistoricoDetalhes.pendencias?.ocorrencias?.totalPendentes ?? modalHistoricoDetalhes.pendencias?.ocorrenciasAbertas ?? 0}</strong>
-                  </p>
-                  {((modalHistoricoDetalhes.pendencias?.ocorrencias?.listaPendentes || modalHistoricoDetalhes.pendencias?.listaOcorrencias || []).length > 0) && (
-                    <div className="pt-1 space-y-1">
-                      {(modalHistoricoDetalhes.pendencias?.ocorrencias?.listaPendentes || modalHistoricoDetalhes.pendencias?.listaOcorrencias || []).map((o: any, idx: number) => (
-                        <div key={idx} className="bg-white p-2 rounded border border-red-200 text-[11px]">
-                          <strong>{o.titulo}</strong> ({o.prioridade}) — Há {o.diasEmAberto ?? 'X'} dia(s) em aberto!
-                        </div>
-                      ))}
+                {isModuloHabilitado('ocorrencias', modalHistoricoDetalhes.pendencias?.featureFlags || featureFlags) && (
+                  <div className="p-3 rounded-xl border border-red-100 bg-red-50/30 space-y-1">
+                    <div className="font-bold text-red-950 flex items-center gap-1.5 uppercase text-[11px]">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Módulo Ocorrências Pendentes
                     </div>
-                  )}
-                </div>
+                    <p className="text-slate-600">
+                      Pendências abertas: <strong>{modalHistoricoDetalhes.pendencias?.ocorrencias?.totalPendentes ?? modalHistoricoDetalhes.pendencias?.ocorrenciasAbertas ?? 0}</strong>
+                    </p>
+                    {((modalHistoricoDetalhes.pendencias?.ocorrencias?.listaPendentes || modalHistoricoDetalhes.pendencias?.listaOcorrencias || []).length > 0) && (
+                      <div className="pt-1 space-y-1">
+                        {(modalHistoricoDetalhes.pendencias?.ocorrencias?.listaPendentes || modalHistoricoDetalhes.pendencias?.listaOcorrencias || []).map((o: any, idx: number) => (
+                          <div key={idx} className="bg-white p-2 rounded border border-red-200 text-[11px]">
+                            <strong>{o.titulo}</strong> ({o.prioridade}) — Há {o.diasEmAberto ?? 'X'} dia(s) em aberto!
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
