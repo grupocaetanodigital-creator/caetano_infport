@@ -1012,7 +1012,12 @@ export default function App() {
                   <Ocorrencias usuarioLogado={operadorContextoGlobal} />
                 )}
                 {moduloAtual === 'passagem' && featureFlags.mod09_passagem_posto && (
-                  <PassagemPosto usuarioLogado={operadorContextoGlobal} onTrocarOperador={handleTrocarOperador} />
+                  <PassagemPosto 
+                    usuarioLogado={operadorContextoGlobal} 
+                    onTrocarOperador={handleTrocarOperador} 
+                    featureFlags={featureFlags} 
+                    condominioConfig={condominio} 
+                  />
                 )}
                 {moduloAtual === 'prestadores' && featureFlags.mod10_prestadores_servico && (
                   <PrestadoresObras usuarioLogado={operadorContextoGlobal} />
