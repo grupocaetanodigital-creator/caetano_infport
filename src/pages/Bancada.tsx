@@ -53,18 +53,17 @@ import {
 } from '../services/condominioService';
 import { supabase } from '../services/supabase';
 
-export interface BotaoTipoVolumeConfig {
+export interface BotaoLocalConfig {
   id: string;
-  tipo: string; // Ex: 'Pacote', 'Caixa', 'Carta'
-  local: string; // Ex: 'Bancada', 'Chão', 'Fora'
-  icone?: 'Package' | 'Box' | 'Mail' | 'Archive' | 'Layers';
+  nome: string; // Ex: 'Bancada', 'Chão', 'Fora'
+  icone?: 'Layers' | 'Box' | 'Archive' | 'MapPin' | 'Package' | 'Building';
   ativo: boolean;
 }
 
-export const BOTOES_PADRAO_BANCADA: BotaoTipoVolumeConfig[] = [
-  { id: '1', tipo: 'Pacote', local: 'Bancada', icone: 'Package', ativo: true },
-  { id: '2', tipo: 'Caixa', local: 'Chão', icone: 'Box', ativo: true },
-  { id: '3', tipo: 'Carta', local: 'Fora', icone: 'Mail', ativo: true }
+export const LOCAIS_PADRAO_BANCADA: BotaoLocalConfig[] = [
+  { id: '1', nome: 'Bancada', icone: 'Layers', ativo: true },
+  { id: '2', nome: 'Chão', icone: 'Box', ativo: true },
+  { id: '3', nome: 'Fora', icone: 'Archive', ativo: true }
 ];
 
 interface BancadaProps {
@@ -83,22 +82,22 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const [estruturasDisponiveis, setEstruturasDisponiveis] = useState<string[]>([]);
   const [estruturaSelecionada, setEstruturaSelecionada] = useState<string>('');
 
-  // Configuração dos Botões de Tipos e Locais (Pacote -> Bancada, Caixa -> Chão, Carta -> Fora...)
-  const [botoesConfig, setBotoesConfig] = useState<BotaoTipoVolumeConfig[]>(() => {
+  // Configuração dos Botões de Locais de Armazenamento (Bancada, Chão, Fora...)
+  const [locaisConfig, setLocaisConfig] = useState<BotaoLocalConfig[]>(() => {
     if (typeof window !== 'undefined' && condominioId) {
       try {
-        const salvo = localStorage.getItem(`bancada_botoes_${condominioId}`);
+        const salvo = localStorage.getItem(`bancada_locais_${condominioId}`);
         if (salvo) {
           const parsed = JSON.parse(salvo);
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
       } catch {}
     }
-    return BOTOES_PADRAO_BANCADA;
+    return LOCAIS_PADRAO_BANCADA;
   });
-  const [botaoSelecionadoId, setBotaoSelecionadoId] = useState<string>('1');
-  const [modalConfigBotoes, setModalConfigBotoes] = useState<boolean>(false);
-  const [botoesEmEdicao, setBotoesEmEdicao] = useState<BotaoTipoVolumeConfig[]>(BOTOES_PADRAO_BANCADA);
+  const [localSelecionadoId, setLocalSelecionadoId] = useState<string>('1');
+  const [modalConfigLocais, setModalConfigLocais] = useState<boolean>(false);
+  const [locaisEmEdicao, setLocaisEmEdicao] = useState<BotaoLocalConfig[]>(LOCAIS_PADRAO_BANCADA);
 
   // Formulário de lançamento rápido (Touch)
   const [unidadeDigitada, setUnidadeDigitada] = useState<string>('');
@@ -248,35 +247,35 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const rotuloUnidade = getNomeRotuloUnidade(configCondominio?.tipo_estrutura);
 
   // Botão ativo atual
-  const botaoAtivoAtual = useMemo(() => {
-    return botoesConfig.find(b => b.id === botaoSelecionadoId) || botoesConfig.find(b => b.ativo) || BOTOES_PADRAO_BANCADA[0];
-  }, [botoesConfig, botaoSelecionadoId]);
+  const localAtivoAtual = useMemo(() => {
+    return locaisConfig.find(l => l.id === localSelecionadoId) || locaisConfig.find(l => l.ativo) || LOCAIS_PADRAO_BANCADA[0];
+  }, [locaisConfig, localSelecionadoId]);
 
-  // Abertura e salvamento da configuração de botões
-  const abrirModalConfigBotoes = () => {
-    setBotoesEmEdicao(JSON.parse(JSON.stringify(botoesConfig)));
-    setModalConfigBotoes(true);
+  // Abertura e salvamento da configuração de locais
+  const abrirModalConfigLocais = () => {
+    setLocaisEmEdicao(JSON.parse(JSON.stringify(locaisConfig)));
+    setModalConfigLocais(true);
   };
 
-  const salvarConfiguracaoBotoes = () => {
-    const filtrados = botoesEmEdicao.filter(b => b.tipo.trim() && b.local.trim());
+  const salvarConfiguracaoLocais = () => {
+    const filtrados = locaisEmEdicao.filter(l => l.nome.trim());
     if (filtrados.length === 0) return;
 
-    setBotoesConfig(filtrados);
+    setLocaisConfig(filtrados);
     if (condominioId) {
       try {
-        localStorage.setItem(`bancada_botoes_${condominioId}`, JSON.stringify(filtrados));
+        localStorage.setItem(`bancada_locais_${condominioId}`, JSON.stringify(filtrados));
       } catch {}
     }
-    if (!filtrados.some(b => b.id === botaoSelecionadoId && b.ativo)) {
-      const primeiro = filtrados.find(b => b.ativo) || filtrados[0];
-      if (primeiro) setBotaoSelecionadoId(primeiro.id);
+    if (!filtrados.some(l => l.id === localSelecionadoId && l.ativo)) {
+      const primeiro = filtrados.find(l => l.ativo) || filtrados[0];
+      if (primeiro) setLocalSelecionadoId(primeiro.id);
     }
-    setModalConfigBotoes(false);
+    setModalConfigLocais(false);
   };
 
-  const restaurarBotoesPadrao = () => {
-    setBotoesEmEdicao(JSON.parse(JSON.stringify(BOTOES_PADRAO_BANCADA)));
+  const restaurarLocaisPadrao = () => {
+    setLocaisEmEdicao(JSON.parse(JSON.stringify(LOCAIS_PADRAO_BANCADA)));
   };
 
   // Handler de confirmação de lançamento
@@ -289,15 +288,13 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
       return;
     }
 
-    const tipoFinal = botaoAtivoAtual.tipo;
-    const localFinal = botaoAtivoAtual.local;
+    const localFinal = localAtivoAtual.nome || 'Bancada';
 
     try {
       const res = await adicionarOuIncrementarItemBancada(condominioId, {
         estrutura: estruturaSelecionada,
         unidade: unidadeLimpa,
         volumes: qtdVolumes,
-        tipo_volume: tipoFinal,
         local_armazenamento: localFinal,
         observacao: observacao.trim() || undefined,
         operador_nome: nomeOperador,
@@ -309,8 +306,8 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
       // Feedback visual rápido
       setFeedbackUltimoLancamento({
         mensagem: res.incrementou
-          ? `+${qtdVolumes} ${tipoFinal.toLowerCase()}(s) [${localFinal}] adicionado ao ${rotuloUnidade} ${unidadeLimpa} (${res.itemAdicionado.volumes} vol. total)`
-          : `${rotuloUnidade} ${unidadeLimpa} registrado: ${qtdVolumes} ${tipoFinal.toLowerCase()}(s) em ${localFinal}`,
+          ? `+${qtdVolumes} vol. adicionado ao ${rotuloUnidade} ${unidadeLimpa} [Local: ${localFinal}] (${res.itemAdicionado.volumes} vol. total)`
+          : `${rotuloUnidade} ${unidadeLimpa} registrado: ${qtdVolumes} vol. no local ${localFinal}`,
         tipo: res.incrementou ? 'incremento' : 'novo',
         unidade: unidadeLimpa,
         estrutura: estruturaSelecionada
@@ -797,45 +794,42 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
                 {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL EXCLUSIVO (SEMPRE ATIVO NA TELA) */}
                 <div className="bg-slate-100 p-2.5 sm:p-3 rounded-2xl border border-slate-300 shadow-inner space-y-2">
-                  {/* Cabeçalho do Seletor de Tipo e Local com Atalho de Configuração */}
+                  {/* Cabeçalho do Seletor de Local com Atalho de Configuração */}
                   <div className="flex items-center justify-between px-0.5">
                     <span className="text-[10px] font-black text-slate-600 uppercase flex items-center gap-1">
                       <MapPin className="w-3 h-3 text-amber-600" />
-                      Tipo & Local da Encomenda
+                      Local de Armazenamento
                     </span>
                     <button
                       type="button"
-                      onClick={abrirModalConfigBotoes}
+                      onClick={abrirModalConfigLocais}
                       className="text-[10px] font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1 cursor-pointer transition"
-                      title="Configurar tipos e locais das encomendas (Pacote, Caixa, Carta...)"
+                      title="Configurar locais onde as encomendas são armazenadas (Bancada, Chão, Fora...)"
                     >
                       <Settings className="w-3 h-3" />
                       <span>Configurar Locais</span>
                     </button>
                   </div>
 
-                  {/* Seletor Rápido de Tipo de Volume e Local Físico Configurável por Condomínio */}
+                  {/* Seletor Rápido de Locais Físicos Configuráveis (Bancada, Chão, Fora...) */}
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                    {botoesConfig.filter(b => b.ativo).map(btn => {
-                      const ativo = (botaoAtivoAtual?.id || botoesConfig[0]?.id) === btn.id;
-                      const Icone = btn.icone === 'Mail' ? Mail : btn.icone === 'Box' ? Box : btn.icone === 'Archive' ? Archive : btn.icone === 'Layers' ? Layers : Package;
+                    {locaisConfig.filter(l => l.ativo).map(loc => {
+                      const ativo = (localAtivoAtual?.id || locaisConfig[0]?.id) === loc.id;
+                      const Icone = loc.icone === 'Box' ? Box : loc.icone === 'Archive' ? Archive : loc.icone === 'MapPin' ? MapPin : loc.icone === 'Package' ? Package : Layers;
                       return (
                         <button
-                          key={btn.id}
+                          key={loc.id}
                           type="button"
-                          onClick={() => setBotaoSelecionadoId(btn.id)}
-                          className={`h-12 sm:h-13 rounded-xl px-1 py-1 text-xs font-black flex flex-col items-center justify-center transition active:scale-95 cursor-pointer border shadow-2xs select-none touch-manipulation ${
+                          onClick={() => setLocalSelecionadoId(loc.id)}
+                          className={`h-12 sm:h-13 rounded-xl px-2 text-xs font-black flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer border shadow-2xs select-none touch-manipulation ${
                             ativo
                               ? 'bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-400/50'
                               : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-300'
                           }`}
                         >
-                          <div className="flex items-center gap-1 truncate">
-                            <Icone className={`w-3.5 h-3.5 shrink-0 ${ativo ? 'text-white' : 'text-amber-600'}`} />
-                            <span className="truncate">{btn.tipo.toUpperCase()}</span>
-                          </div>
-                          <span className={`text-[10px] font-bold truncate mt-0.5 ${ativo ? 'text-amber-100' : 'text-slate-500'}`}>
-                            {btn.local}
+                          <Icone className={`w-4 h-4 shrink-0 ${ativo ? 'text-white' : 'text-amber-600'}`} />
+                          <span className="text-xs sm:text-sm font-black tracking-wide uppercase truncate">
+                            {loc.nome}
                           </span>
                         </button>
                       );
@@ -928,8 +922,8 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                   {/* Ícone de engrenagem bem no cantinho acima da barra de pesquisa */}
                   <button
                     type="button"
-                    onClick={abrirModalConfigBotoes}
-                    title="Configurar botões e locais de encomendas (Pacote -> Bancada, Caixa -> Chão, Carta -> Fora...)"
+                    onClick={abrirModalConfigLocais}
+                    title="Configurar locais de armazenamento das encomendas (Bancada, Chão, Fora...)"
                     className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-100 active:scale-95 rounded-lg border border-slate-300 transition cursor-pointer shadow-2xs"
                   >
                     <Settings className="w-4 h-4" />
@@ -989,11 +983,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
                               {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
                             </span>
-                            {item.tipo_volume && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-800 border border-slate-300">
-                                {item.tipo_volume}
-                              </span>
-                            )}
                             {item.local_armazenamento && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-0.5">
                                 <MapPin className="w-3 h-3 text-amber-700" />
@@ -1120,8 +1109,8 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               </div>
               <button
                 type="button"
-                onClick={abrirModalConfigBotoes}
-                title="Configurar botões e locais de encomendas"
+                onClick={abrirModalConfigLocais}
+                title="Configurar locais de armazenamento das encomendas"
                 className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-100 active:scale-95 rounded-lg border border-slate-300 transition cursor-pointer shadow-2xs"
               >
                 <Settings className="w-4 h-4" />
@@ -1185,11 +1174,6 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                             <span className="text-[10px] font-black bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
                               {item.volumes} vol.
                             </span>
-                            {item.tipo_volume && (
-                              <span className="text-[9px] font-extrabold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
-                                {item.tipo_volume}
-                              </span>
-                            )}
                             {item.local_armazenamento && (
                               <span className="text-[9px] font-extrabold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded border border-amber-200 flex items-center gap-0.5">
                                 <MapPin className="w-2.5 h-2.5 text-amber-700" />
@@ -1379,24 +1363,24 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: CONFIGURAR BOTÕES DE TIPOS E LOCAIS DAS ENCOMENDAS (CONFIGURÁVEL)  */}
+      {/* MODAL: CONFIGURAR LOCAIS DE ARMAZENAMENTO DAS ENCOMENDAS (CONFIGURÁVEL)   */}
       {/* ========================================================================= */}
-      {modalConfigBotoes && (
+      {modalConfigLocais && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">
               <div>
                 <h4 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                   <Settings className="w-4 h-4 text-amber-600" />
-                  Configurar Botões & Locais de Encomendas
+                  Configurar Locais de Armazenamento
                 </h4>
                 <p className="text-[11px] text-slate-500 font-medium">
-                  {nomeCondominio} • Identifique o local físico (ex: Bancada, Chão, Fora...)
+                  {nomeCondominio} • Identificação dos locais físicos na portaria
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setModalConfigBotoes(false)}
+                onClick={() => setModalConfigLocais(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1404,45 +1388,45 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
             </div>
 
             <p className="text-xs text-slate-600">
-              Personalize os botões de tipo e local da bancada. Cada condomínio configura os seus:
-              <strong className="text-slate-900"> Pacote ➔ Bancada</strong>,
-              <strong className="text-slate-900"> Caixa ➔ Chão</strong>,
-              <strong className="text-slate-900"> Carta ➔ Fora</strong>, ou adicione outros locais conforme a necessidade.
+              Configure os botões dos locais físicos da portaria. Padrão:
+              <strong className="text-slate-900"> Bancada</strong>,
+              <strong className="text-slate-900"> Chão</strong> e
+              <strong className="text-slate-900"> Fora</strong>. Cada condomínio personaliza os botões como quiser.
             </p>
 
-            {/* LISTA DE BOTÕES EM EDIÇÃO */}
+            {/* LISTA DE LOCAIS EM EDIÇÃO */}
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-              {botoesEmEdicao.map((btn, index) => (
+              {locaisEmEdicao.map((loc, index) => (
                 <div
-                  key={btn.id}
+                  key={loc.id}
                   className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
-                      Botão #{index + 1}
+                      Local #{index + 1}
                     </span>
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={btn.ativo}
+                          checked={loc.ativo}
                           onChange={e => {
-                            const updated = [...botoesEmEdicao];
+                            const updated = [...locaisEmEdicao];
                             updated[index].ativo = e.target.checked;
-                            setBotoesEmEdicao(updated);
+                            setLocaisEmEdicao(updated);
                           }}
                           className="rounded text-amber-600 focus:ring-amber-500"
                         />
                         Ativo
                       </label>
-                      {botoesEmEdicao.length > 1 && (
+                      {locaisEmEdicao.length > 1 && (
                         <button
                           type="button"
                           onClick={() => {
-                            setBotoesEmEdicao(botoesEmEdicao.filter((_, i) => i !== index));
+                            setLocaisEmEdicao(locaisEmEdicao.filter((_, i) => i !== index));
                           }}
                           className="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
-                          title="Remover este botão"
+                          title="Remover este local"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1450,36 +1434,19 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">
-                        Tipo de Volume *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Pacote, Caixa..."
-                        value={btn.tipo}
-                        onChange={e => {
-                          const updated = [...botoesEmEdicao];
-                          updated[index].tipo = e.target.value;
-                          setBotoesEmEdicao(updated);
-                        }}
-                        className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg outline-none focus:border-amber-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">
-                        Local Físico Identificado *
+                        Nome do Local Físico *
                       </label>
                       <input
                         type="text"
                         placeholder="Ex: Bancada, Chão, Fora..."
-                        value={btn.local}
+                        value={loc.nome}
                         onChange={e => {
-                          const updated = [...botoesEmEdicao];
-                          updated[index].local = e.target.value;
-                          setBotoesEmEdicao(updated);
+                          const updated = [...locaisEmEdicao];
+                          updated[index].nome = e.target.value;
+                          setLocaisEmEdicao(updated);
                         }}
                         className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg outline-none focus:border-amber-500 text-amber-950"
                       />
@@ -1487,22 +1454,23 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
 
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">
-                        Ícone
+                        Ícone Representativo
                       </label>
                       <select
-                        value={btn.icone || 'Package'}
+                        value={loc.icone || 'Layers'}
                         onChange={e => {
-                          const updated = [...botoesEmEdicao];
+                          const updated = [...locaisEmEdicao];
                           updated[index].icone = e.target.value as any;
-                          setBotoesEmEdicao(updated);
+                          setLocaisEmEdicao(updated);
                         }}
                         className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg outline-none focus:border-amber-500"
                       >
-                        <option value="Package">📦 Pacote</option>
-                        <option value="Box">📦 Caixa</option>
-                        <option value="Mail">✉️ Carta / Envelope</option>
-                        <option value="Archive">📁 Arquivo / Gaveta</option>
-                        <option value="Layers">📑 Balcão / Outro</option>
+                        <option value="Layers">📑 Bancada / Balcão</option>
+                        <option value="Box">📦 Chão / Caixa</option>
+                        <option value="Archive">📁 Fora / Arquivo</option>
+                        <option value="MapPin">📍 Ponto / Local</option>
+                        <option value="Package">📦 Pacote / Prateleira</option>
+                        <option value="Building">🏢 Recepção / Guichê</option>
                       </select>
                     </div>
                   </div>
@@ -1510,25 +1478,25 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               ))}
             </div>
 
-            {/* BOTÃO ADICIONAR NOVO BOTÃO */}
+            {/* BOTÃO ADICIONAR NOVO LOCAL */}
             <div className="flex items-center justify-between pt-1">
               <button
                 type="button"
                 onClick={() => {
                   const novoId = String(Date.now());
-                  setBotoesEmEdicao([
-                    ...botoesEmEdicao,
-                    { id: novoId, tipo: 'Outro', local: 'Bancada', icone: 'Package', ativo: true }
+                  setLocaisEmEdicao([
+                    ...locaisEmEdicao,
+                    { id: novoId, nome: 'Novo Local', icone: 'MapPin', ativo: true }
                   ]);
                 }}
                 className="text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" /> Adicionar Outro Botão
+                <Plus className="w-3.5 h-3.5" /> Adicionar Outro Local
               </button>
 
               <button
                 type="button"
-                onClick={restaurarBotoesPadrao}
+                onClick={restaurarLocaisPadrao}
                 className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
               >
                 Restaurar Padrão
@@ -1539,14 +1507,14 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
             <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
               <button
                 type="button"
-                onClick={() => setModalConfigBotoes(false)}
+                onClick={() => setModalConfigLocais(false)}
                 className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                onClick={salvarConfiguracaoBotoes}
+                onClick={salvarConfiguracaoLocais}
                 className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
