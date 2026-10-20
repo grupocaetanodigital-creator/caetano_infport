@@ -22,7 +22,12 @@ import {
   PackageCheck,
   Mail,
   Box,
-  Package
+  Package,
+  Settings,
+  X,
+  Sliders,
+  MapPin,
+  Archive
 } from 'lucide-react';
 import {
   ItemBancada,
@@ -48,6 +53,20 @@ import {
 } from '../services/condominioService';
 import { supabase } from '../services/supabase';
 
+export interface BotaoTipoVolumeConfig {
+  id: string;
+  tipo: string; // Ex: 'Pacote', 'Caixa', 'Carta'
+  local: string; // Ex: 'Bancada', 'Chão', 'Fora'
+  icone?: 'Package' | 'Box' | 'Mail' | 'Archive' | 'Layers';
+  ativo: boolean;
+}
+
+export const BOTOES_PADRAO_BANCADA: BotaoTipoVolumeConfig[] = [
+  { id: '1', tipo: 'Pacote', local: 'Bancada', icone: 'Package', ativo: true },
+  { id: '2', tipo: 'Caixa', local: 'Chão', icone: 'Box', ativo: true },
+  { id: '3', tipo: 'Carta', local: 'Fora', icone: 'Mail', ativo: true }
+];
+
 interface BancadaProps {
   usuarioLogado: any;
 }
@@ -64,11 +83,31 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   const [estruturasDisponiveis, setEstruturasDisponiveis] = useState<string[]>([]);
   const [estruturaSelecionada, setEstruturaSelecionada] = useState<string>('');
 
+  // Configuração dos Botões de Tipos e Locais (Pacote -> Bancada, Caixa -> Chão, Carta -> Fora...)
+  const [botoesConfig, setBotoesConfig] = useState<BotaoTipoVolumeConfig[]>(() => {
+    if (typeof window !== 'undefined' && condominioId) {
+      try {
+        const salvo = localStorage.getItem(`bancada_botoes_${condominioId}`);
+        if (salvo) {
+          const parsed = JSON.parse(salvo);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return BOTOES_PADRAO_BANCADA;
+  });
+  const [botaoSelecionadoId, setBotaoSelecionadoId] = useState<string>('1');
+  const [modalConfigBotoes, setModalConfigBotoes] = useState<boolean>(false);
+  const [botoesEmEdicao, setBotoesEmEdicao] = useState<BotaoTipoVolumeConfig[]>(BOTOES_PADRAO_BANCADA);
+
   // Formulário de lançamento rápido (Touch)
   const [unidadeDigitada, setUnidadeDigitada] = useState<string>('');
   const [qtdVolumes, setQtdVolumes] = useState<number>(1);
-  const [tipoVolumeSelecionado, setTipoVolumeSelecionado] = useState<'Carta' | 'Caixa' | 'Pacote'>('Pacote');
+  const [modalQtdAberto, setModalQtdAberto] = useState<boolean>(false);
   const [observacao, setObservacao] = useState<string>('');
+
+  // Busca na lista da torre ativa
+  const [buscaListaTorre, setBuscaListaTorre] = useState<string>('');
 
   const [feedbackUltimoLancamento, setFeedbackUltimoLancamento] = useState<{
     mensagem: string;
@@ -187,6 +226,18 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
     );
   }, [itens, estruturaSelecionada]);
 
+  // Itens da estrutura filtrados pela busca rápida da lista
+  const itensEstruturaAtivaFiltrados = useMemo(() => {
+    if (!buscaListaTorre.trim()) return itensEstruturaAtiva;
+    const termo = buscaListaTorre.trim().toLowerCase();
+    return itensEstruturaAtiva.filter(it =>
+      it.unidade.toLowerCase().includes(termo) ||
+      (it.tipo_volume && it.tipo_volume.toLowerCase().includes(termo)) ||
+      (it.local_armazenamento && it.local_armazenamento.toLowerCase().includes(termo)) ||
+      (it.observacao && it.observacao.toLowerCase().includes(termo))
+    );
+  }, [itensEstruturaAtiva, buscaListaTorre]);
+
   // Total de volumes da estrutura selecionada
   const totalVolumesEstruturaAtiva = useMemo(() => {
     return itensEstruturaAtiva.reduce((acc, it) => acc + (it.volumes || 1), 0);
@@ -195,6 +246,38 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
   // Rótulos dinâmicos
   const rotuloBloco = getNomeRotuloBloco(configCondominio?.tipo_estrutura);
   const rotuloUnidade = getNomeRotuloUnidade(configCondominio?.tipo_estrutura);
+
+  // Botão ativo atual
+  const botaoAtivoAtual = useMemo(() => {
+    return botoesConfig.find(b => b.id === botaoSelecionadoId) || botoesConfig.find(b => b.ativo) || BOTOES_PADRAO_BANCADA[0];
+  }, [botoesConfig, botaoSelecionadoId]);
+
+  // Abertura e salvamento da configuração de botões
+  const abrirModalConfigBotoes = () => {
+    setBotoesEmEdicao(JSON.parse(JSON.stringify(botoesConfig)));
+    setModalConfigBotoes(true);
+  };
+
+  const salvarConfiguracaoBotoes = () => {
+    const filtrados = botoesEmEdicao.filter(b => b.tipo.trim() && b.local.trim());
+    if (filtrados.length === 0) return;
+
+    setBotoesConfig(filtrados);
+    if (condominioId) {
+      try {
+        localStorage.setItem(`bancada_botoes_${condominioId}`, JSON.stringify(filtrados));
+      } catch {}
+    }
+    if (!filtrados.some(b => b.id === botaoSelecionadoId && b.ativo)) {
+      const primeiro = filtrados.find(b => b.ativo) || filtrados[0];
+      if (primeiro) setBotaoSelecionadoId(primeiro.id);
+    }
+    setModalConfigBotoes(false);
+  };
+
+  const restaurarBotoesPadrao = () => {
+    setBotoesEmEdicao(JSON.parse(JSON.stringify(BOTOES_PADRAO_BANCADA)));
+  };
 
   // Handler de confirmação de lançamento
   const handleAdicionarUnidade = async (e?: React.FormEvent) => {
@@ -206,12 +289,16 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
       return;
     }
 
+    const tipoFinal = botaoAtivoAtual.tipo;
+    const localFinal = botaoAtivoAtual.local;
+
     try {
       const res = await adicionarOuIncrementarItemBancada(condominioId, {
         estrutura: estruturaSelecionada,
         unidade: unidadeLimpa,
         volumes: qtdVolumes,
-        tipo_volume: tipoVolumeSelecionado,
+        tipo_volume: tipoFinal,
+        local_armazenamento: localFinal,
         observacao: observacao.trim() || undefined,
         operador_nome: nomeOperador,
         operador_id: usuarioLogado?.id
@@ -222,8 +309,8 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
       // Feedback visual rápido
       setFeedbackUltimoLancamento({
         mensagem: res.incrementou
-          ? `+${qtdVolumes} ${tipoVolumeSelecionado.toLowerCase()}(s) adicionado ao ${rotuloUnidade} ${unidadeLimpa} (${res.itemAdicionado.volumes} vol. total)`
-          : `${rotuloUnidade} ${unidadeLimpa} registrado com ${qtdVolumes} ${tipoVolumeSelecionado.toLowerCase()}(s)`,
+          ? `+${qtdVolumes} ${tipoFinal.toLowerCase()}(s) [${localFinal}] adicionado ao ${rotuloUnidade} ${unidadeLimpa} (${res.itemAdicionado.volumes} vol. total)`
+          : `${rotuloUnidade} ${unidadeLimpa} registrado: ${qtdVolumes} ${tipoFinal.toLowerCase()}(s) em ${localFinal}`,
         tipo: res.incrementou ? 'incremento' : 'novo',
         unidade: unidadeLimpa,
         estrutura: estruturaSelecionada
@@ -649,45 +736,107 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                   </div>
                 </div>
 
-                {/* QUANTIDADE DE VOLUMES (LOGO ABAIXO DO CAMPO DE DIGITAÇÃO) */}
-                <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                  <span className="text-[11px] font-black text-slate-600 uppercase px-1.5">Qtd Volumes:</span>
+                {/* QUANTIDADE DE VOLUMES (MANTER QTD + TELINHA DE QTD CONFIGURÁVEL COM + E -) */}
+                <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-black text-slate-600 uppercase px-1">Qtd:</span>
                   {[1, 2, 3, 4].map(q => (
                     <button
                       key={q}
                       type="button"
                       onClick={() => setQtdVolumes(q)}
-                      className={`flex-1 py-1.5 text-xs font-black rounded-lg transition cursor-pointer ${
+                      className={`px-2 py-1.5 text-xs font-black rounded-lg transition cursor-pointer ${
                         qtdVolumes === q
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                       }`}
                     >
-                      {q} vol
+                      {q}
                     </button>
                   ))}
+
+                  {/* TELINHA DE QTD CONFIGURÁVEL COM + E - (10 A 50 OU ATÉ MAIS VOLUMES) */}
+                  <div className="flex items-center bg-white border border-amber-300 rounded-lg p-0.5 shadow-2xs ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setQtdVolumes(prev => Math.max(1, prev - 1))}
+                      className="w-6 h-6 flex items-center justify-center rounded text-slate-700 hover:text-amber-900 hover:bg-amber-50 active:scale-95 transition font-black cursor-pointer select-none"
+                      title="Diminuir 1 volume (-)"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setModalQtdAberto(true)}
+                      className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 rounded text-center cursor-pointer transition flex items-center gap-1"
+                      title="Telinha de QTD: clique para ajustar volumes (10 a 50+)"
+                    >
+                      <span className="text-xs font-black text-amber-950 font-mono">{qtdVolumes}</span>
+                      <span className="text-[9px] font-bold text-amber-800 uppercase">vol</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setQtdVolumes(prev => prev + 1)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-slate-700 hover:text-amber-900 hover:bg-amber-50 active:scale-95 transition font-black cursor-pointer select-none"
+                      title="Adicionar +1 volume (+)"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setModalQtdAberto(true)}
+                      className="text-[10px] font-black bg-amber-500 hover:bg-amber-600 text-white px-1.5 py-1 rounded ml-1 transition shadow-2xs cursor-pointer flex items-center gap-0.5"
+                      title="Abrir telinha com botões rápidos (+5, +10, 50...)"
+                    >
+                      <span>+Qtd</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* TECLADO NUMÉRICO & ALFANUMÉRICO VIRTUAL EXCLUSIVO (SEMPRE ATIVO NA TELA) */}
                 <div className="bg-slate-100 p-2.5 sm:p-3 rounded-2xl border border-slate-300 shadow-inner space-y-2">
-                  {/* Seletor Rápido de Tipo de Volume: Carta, Caixa e Pacote */}
+                  {/* Cabeçalho do Seletor de Tipo e Local com Atalho de Configuração */}
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-[10px] font-black text-slate-600 uppercase flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-amber-600" />
+                      Tipo & Local da Encomenda
+                    </span>
+                    <button
+                      type="button"
+                      onClick={abrirModalConfigBotoes}
+                      className="text-[10px] font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1 cursor-pointer transition"
+                      title="Configurar tipos e locais das encomendas (Pacote, Caixa, Carta...)"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>Configurar Locais</span>
+                    </button>
+                  </div>
+
+                  {/* Seletor Rápido de Tipo de Volume e Local Físico Configurável por Condomínio */}
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                    {(['Carta', 'Caixa', 'Pacote'] as const).map(tipo => {
-                      const ativo = tipoVolumeSelecionado === tipo;
-                      const Icone = tipo === 'Carta' ? Mail : tipo === 'Caixa' ? Box : Package;
+                    {botoesConfig.filter(b => b.ativo).map(btn => {
+                      const ativo = (botaoAtivoAtual?.id || botoesConfig[0]?.id) === btn.id;
+                      const Icone = btn.icone === 'Mail' ? Mail : btn.icone === 'Box' ? Box : btn.icone === 'Archive' ? Archive : btn.icone === 'Layers' ? Layers : Package;
                       return (
                         <button
-                          key={tipo}
+                          key={btn.id}
                           type="button"
-                          onClick={() => setTipoVolumeSelecionado(tipo)}
-                          className={`h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer border shadow-2xs select-none touch-manipulation ${
+                          onClick={() => setBotaoSelecionadoId(btn.id)}
+                          className={`h-12 sm:h-13 rounded-xl px-1 py-1 text-xs font-black flex flex-col items-center justify-center transition active:scale-95 cursor-pointer border shadow-2xs select-none touch-manipulation ${
                             ativo
                               ? 'bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-400/50'
                               : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-300'
                           }`}
                         >
-                          <Icone className={`w-4 h-4 ${ativo ? 'text-white' : 'text-amber-600'}`} />
-                          <span>{tipo.toUpperCase()}</span>
+                          <div className="flex items-center gap-1 truncate">
+                            <Icone className={`w-3.5 h-3.5 shrink-0 ${ativo ? 'text-white' : 'text-amber-600'}`} />
+                            <span className="truncate">{btn.tipo.toUpperCase()}</span>
+                          </div>
+                          <span className={`text-[10px] font-bold truncate mt-0.5 ${ativo ? 'text-amber-100' : 'text-slate-500'}`}>
+                            {btn.local}
+                          </span>
                         </button>
                       );
                     })}
@@ -759,38 +908,70 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full min-h-[460px]">
               
               {/* TOPO DA LISTA */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 mb-2.5">
                 <div>
                   <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                     <Building className="w-4 h-4 text-amber-600" />
                     Volumes na {estruturaSelecionada}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {itensEstruturaAtiva.length} {rotuloUnidade.toLowerCase()}(s) • {totalVolumesEstruturaAtiva} volume(s) físicos
+                    {itensEstruturaAtivaFiltrados.length} {rotuloUnidade.toLowerCase()}(s) • {totalVolumesEstruturaAtiva} volume(s) físicos
                   </p>
                 </div>
 
-                {itensEstruturaAtiva.length > 0 && (
-                  <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-lg">
-                    {totalVolumesEstruturaAtiva} vol.
-                  </span>
+                <div className="flex items-center gap-2">
+                  {itensEstruturaAtiva.length > 0 && (
+                    <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-lg">
+                      {totalVolumesEstruturaAtiva} vol.
+                    </span>
+                  )}
+                  {/* Ícone de engrenagem bem no cantinho acima da barra de pesquisa */}
+                  <button
+                    type="button"
+                    onClick={abrirModalConfigBotoes}
+                    title="Configurar botões e locais de encomendas (Pacote -> Bancada, Caixa -> Chão, Carta -> Fora...)"
+                    className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-100 active:scale-95 rounded-lg border border-slate-300 transition cursor-pointer shadow-2xs"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* BARRA DE PESQUISA RÁPIDA DA LISTA DE VOLUMES */}
+              <div className="relative mb-3">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={`Buscar ${rotuloUnidade.toLowerCase()} nesta ${rotuloBloco.toLowerCase()}...`}
+                  value={buscaListaTorre}
+                  onChange={e => setBuscaListaTorre(e.target.value)}
+                  className="w-full text-xs font-semibold pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-amber-500 outline-none transition"
+                />
+                {buscaListaTorre && (
+                  <button
+                    type="button"
+                    onClick={() => setBuscaListaTorre('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
 
               {/* CONTEÚDO DA LISTA */}
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[520px]">
-                {itensEstruturaAtiva.length === 0 ? (
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px]">
+                {itensEstruturaAtivaFiltrados.length === 0 ? (
                   <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl my-auto">
                     <PackageCheck className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                     <p className="text-xs font-bold text-slate-500">
-                      Nenhum volume lançado para a {estruturaSelecionada} ainda.
+                      {buscaListaTorre ? `Nenhuma unidade encontrada com o filtro "${buscaListaTorre}".` : `Nenhum volume lançado para a ${estruturaSelecionada} ainda.`}
                     </p>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Digite o número da unidade no painel ao lado para começar o lançamento rápido.
+                      {buscaListaTorre ? 'Tente buscar por outro número de unidade.' : 'Digite o número da unidade no painel ao lado para começar o lançamento rápido.'}
                     </p>
                   </div>
                 ) : (
-                  itensEstruturaAtiva.map(item => (
+                  itensEstruturaAtivaFiltrados.map(item => (
                     <div
                       key={item.id}
                       className="bg-slate-50 hover:bg-amber-50/60 p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3 transition"
@@ -801,7 +982,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                           {item.unidade}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-black text-slate-900">
                               {rotuloUnidade} {item.unidade}
                             </span>
@@ -811,6 +992,12 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                             {item.tipo_volume && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-800 border border-slate-300">
                                 {item.tipo_volume}
+                              </span>
+                            )}
+                            {item.local_armazenamento && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-0.5">
+                                <MapPin className="w-3 h-3 text-amber-700" />
+                                {item.local_armazenamento}
                               </span>
                             )}
                           </div>
@@ -924,11 +1111,21 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               />
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-              <span>Resumo Consolidado:</span>
-              <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-black">
-                {estatisticas.totalVolumes} volumes em {estatisticas.totalUnidades} unidades
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                <span>Resumo:</span>
+                <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-black">
+                  {estatisticas.totalVolumes} vol. em {estatisticas.totalUnidades} un.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={abrirModalConfigBotoes}
+                title="Configurar botões e locais de encomendas"
+                className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-100 active:scale-95 rounded-lg border border-slate-300 transition cursor-pointer shadow-2xs"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -981,13 +1178,24 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                         className="py-2 first:pt-0 last:pb-0 flex items-center justify-between gap-2"
                       >
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs font-black text-slate-900">
                               {rotuloUnidade} {item.unidade}
                             </span>
                             <span className="text-[10px] font-black bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
                               {item.volumes} vol.
                             </span>
+                            {item.tipo_volume && (
+                              <span className="text-[9px] font-extrabold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
+                                {item.tipo_volume}
+                              </span>
+                            )}
+                            {item.local_armazenamento && (
+                              <span className="text-[9px] font-extrabold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded border border-amber-200 flex items-center gap-0.5">
+                                <MapPin className="w-2.5 h-2.5 text-amber-700" />
+                                {item.local_armazenamento}
+                              </span>
+                            )}
                           </div>
                           {item.observacao && (
                             <p className="text-[10px] text-slate-500 italic mt-0.5">
@@ -1001,7 +1209,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                           <button
                             type="button"
                             onClick={() => handleDarBaixa(item)}
-                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md text-[11px] font-bold transition flex items-center gap-0.5"
+                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md text-[11px] font-bold transition flex items-center gap-0.5 cursor-pointer"
                             title="Dar baixa / Entregar"
                           >
                             <Check className="w-3 h-3 text-emerald-600" /> Baixa
@@ -1019,7 +1227,7 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
                         setEstruturaSelecionada(grupo.estrutura);
                         setAbaVisualizacao('lancamento');
                       }}
-                      className="text-xs font-black text-amber-700 hover:text-amber-800 transition"
+                      className="text-xs font-black text-amber-700 hover:text-amber-800 transition cursor-pointer"
                     >
                       Lançar mais para {grupo.estrutura} →
                     </button>
@@ -1028,6 +1236,324 @@ export default function Bancada({ usuarioLogado }: BancadaProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: TELINHA DE QUANTIDADE CONFIGURÁVEL (+ e - / 10 A 50+ VOLUMES)     */}
+      {/* ========================================================================= */}
+      {modalQtdAberto && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <h4 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-amber-600" />
+                Telinha de Quantidade de Volumes
+              </h4>
+              <button
+                type="button"
+                onClick={() => setModalQtdAberto(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 font-medium">
+              Ajuste rapidamente a quantidade para unidades com múltiplos pacotes (de 10 a 50 ou até mais).
+            </p>
+
+            {/* DISPLAY DIGITAL CENTRAL */}
+            <div className="bg-slate-900 text-white rounded-2xl p-4 text-center shadow-inner space-y-1">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block">
+                Volumes Selecionados
+              </span>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQtdVolumes(prev => Math.max(1, prev - 1))}
+                  className="w-10 h-10 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white rounded-xl flex items-center justify-center font-black text-xl transition cursor-pointer"
+                  title="Diminuir volume"
+                >
+                  <Minus className="w-5 h-5 stroke-[3]" />
+                </button>
+                <span className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-amber-400 min-w-[80px]">
+                  {qtdVolumes}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQtdVolumes(prev => prev + 1)}
+                  className="w-10 h-10 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white rounded-xl flex items-center justify-center font-black text-xl transition cursor-pointer"
+                  title="Aumentar volume"
+                >
+                  <Plus className="w-5 h-5 stroke-[3]" />
+                </button>
+              </div>
+              <span className="text-xs text-slate-400">
+                {qtdVolumes === 1 ? '1 volume' : `${qtdVolumes} volumes para esta unidade`}
+              </span>
+            </div>
+
+            {/* BOTÕES DE INCREMENTO RÁPIDO (+5, +10, +20, +50) */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
+                Adicionar mais volumes (+):
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[5, 10, 20, 50].map(delta => (
+                  <button
+                    key={delta}
+                    type="button"
+                    onClick={() => setQtdVolumes(prev => prev + delta)}
+                    className="py-2 bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-900 border border-amber-300 rounded-xl text-xs font-black transition cursor-pointer"
+                  >
+                    +{delta}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ATALHOS DE QUANTIDADES FIXAS (1, 5, 10, 15, 20, 30, 40, 50) */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
+                Definir quantidade exata:
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[5, 10, 15, 20, 25, 30, 40, 50].map(q => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => setQtdVolumes(q)}
+                    className={`py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                      qtdVolumes === q
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {q} vol
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* CAMPO DE DIGITAÇÃO MANUAL LIVRE */}
+            <div className="pt-1">
+              <label className="text-[10px] font-black text-slate-600 uppercase block mb-1">
+                Ou digite a quantidade manual:
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="999"
+                value={qtdVolumes}
+                onChange={e => {
+                  const val = parseInt(e.target.value) || 1;
+                  setQtdVolumes(Math.max(1, val));
+                }}
+                className="w-full text-center text-lg font-black font-mono p-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setQtdVolumes(1);
+                  setModalQtdAberto(false);
+                }}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Resetar (1)
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalQtdAberto(false)}
+                className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Check className="w-4 h-4" />
+                Confirmar ({qtdVolumes})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIGURAR BOTÕES DE TIPOS E LOCAIS DAS ENCOMENDAS (CONFIGURÁVEL)  */}
+      {/* ========================================================================= */}
+      {modalConfigBotoes && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <Settings className="w-4 h-4 text-amber-600" />
+                  Configurar Botões & Locais de Encomendas
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {nomeCondominio} • Identifique o local físico (ex: Bancada, Chão, Fora...)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalConfigBotoes(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Personalize os botões de tipo e local da bancada. Cada condomínio configura os seus:
+              <strong className="text-slate-900"> Pacote ➔ Bancada</strong>,
+              <strong className="text-slate-900"> Caixa ➔ Chão</strong>,
+              <strong className="text-slate-900"> Carta ➔ Fora</strong>, ou adicione outros locais conforme a necessidade.
+            </p>
+
+            {/* LISTA DE BOTÕES EM EDIÇÃO */}
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+              {botoesEmEdicao.map((btn, index) => (
+                <div
+                  key={btn.id}
+                  className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                      Botão #{index + 1}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={btn.ativo}
+                          onChange={e => {
+                            const updated = [...botoesEmEdicao];
+                            updated[index].ativo = e.target.checked;
+                            setBotoesEmEdicao(updated);
+                          }}
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        Ativo
+                      </label>
+                      {botoesEmEdicao.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBotoesEmEdicao(botoesEmEdicao.filter((_, i) => i !== index));
+                          }}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
+                          title="Remover este botão"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">
+                        Tipo de Volume *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Pacote, Caixa..."
+                        value={btn.tipo}
+                        onChange={e => {
+                          const updated = [...botoesEmEdicao];
+                          updated[index].tipo = e.target.value;
+                          setBotoesEmEdicao(updated);
+                        }}
+                        className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">
+                        Local Físico Identificado *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Bancada, Chão, Fora..."
+                        value={btn.local}
+                        onChange={e => {
+                          const updated = [...botoesEmEdicao];
+                          updated[index].local = e.target.value;
+                          setBotoesEmEdicao(updated);
+                        }}
+                        className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg outline-none focus:border-amber-500 text-amber-950"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">
+                        Ícone
+                      </label>
+                      <select
+                        value={btn.icone || 'Package'}
+                        onChange={e => {
+                          const updated = [...botoesEmEdicao];
+                          updated[index].icone = e.target.value as any;
+                          setBotoesEmEdicao(updated);
+                        }}
+                        className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg outline-none focus:border-amber-500"
+                      >
+                        <option value="Package">📦 Pacote</option>
+                        <option value="Box">📦 Caixa</option>
+                        <option value="Mail">✉️ Carta / Envelope</option>
+                        <option value="Archive">📁 Arquivo / Gaveta</option>
+                        <option value="Layers">📑 Balcão / Outro</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* BOTÃO ADICIONAR NOVO BOTÃO */}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const novoId = String(Date.now());
+                  setBotoesEmEdicao([
+                    ...botoesEmEdicao,
+                    { id: novoId, tipo: 'Outro', local: 'Bancada', icone: 'Package', ativo: true }
+                  ]);
+                }}
+                className="text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar Outro Botão
+              </button>
+
+              <button
+                type="button"
+                onClick={restaurarBotoesPadrao}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              >
+                Restaurar Padrão
+              </button>
+            </div>
+
+            {/* AÇÕES FINAIS */}
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setModalConfigBotoes(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={salvarConfiguracaoBotoes}
+                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                Salvar Configuração
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

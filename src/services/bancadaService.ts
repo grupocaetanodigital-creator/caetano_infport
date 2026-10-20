@@ -10,6 +10,7 @@ export interface ItemBancada {
   volumes: number; // Quantidade de volumes para esta unidade (padrão: 1)
   observacao?: string; // Ex: "Caixa grande", "Envelope Mercado Livre"
   tipo_volume?: string;
+  local_armazenamento?: string; // Ex: "Bancada", "Chão", "Fora"
   operador_nome?: string;
   operador_id?: string;
   created_at: string;
@@ -98,6 +99,7 @@ export async function adicionarOuIncrementarItemBancada(
     volumes?: number;
     observacao?: string;
     tipo_volume?: string;
+    local_armazenamento?: string;
     operador_nome?: string;
     operador_id?: string;
   }
@@ -123,6 +125,12 @@ export async function adicionarOuIncrementarItemBancada(
     const novosVolumes = existente.volumes + volumesAdicionar;
     existente.volumes = novosVolumes;
     existente.updated_at = new Date().toISOString();
+    if (dados.local_armazenamento) {
+      existente.local_armazenamento = dados.local_armazenamento;
+    }
+    if (dados.tipo_volume) {
+      existente.tipo_volume = dados.tipo_volume;
+    }
     if (dados.observacao) {
       existente.observacao = existente.observacao
         ? `${existente.observacao} | ${dados.observacao}`
@@ -141,6 +149,7 @@ export async function adicionarOuIncrementarItemBancada(
       volumes: volumesAdicionar,
       observacao: dados.observacao?.trim() || undefined,
       tipo_volume: dados.tipo_volume?.trim() || 'Volume',
+      local_armazenamento: dados.local_armazenamento?.trim() || undefined,
       operador_nome: dados.operador_nome || 'Portaria',
       operador_id: dados.operador_id,
       created_at: new Date().toISOString()
