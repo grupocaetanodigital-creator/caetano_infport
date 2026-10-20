@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Package, 
   Footprints, 
@@ -16,23 +16,32 @@ import {
   Filter,
   Layers
 } from 'lucide-react';
-import { ConsolidacaoPosto } from '../pages/PassagemPosto';
+import { ConsolidacaoPosto, isModuloHabilitado } from '../pages/PassagemPosto';
 
 interface TabelasResumoPostoProps {
   consolidacao: ConsolidacaoPosto;
   modoConferencia?: boolean;
   onConferirItem?: (modulo: string) => void;
   statusConferencia?: Record<string, boolean>;
+  featureFlags?: any;
 }
 
 export default function TabelasResumoPosto({
   consolidacao,
   modoConferencia = false,
   onConferirItem,
-  statusConferencia = {}
+  statusConferencia = {},
+  featureFlags
 }: TabelasResumoPostoProps) {
+  const flags = featureFlags || (consolidacao as any)?.featureFlags || null;
   const [tabelaAtiva, setTabelaAtiva] = useState<'geral' | 'encomendas' | 'bancada' | 'rondas' | 'chaves' | 'ocorrencias' | 'custodia' | 'prestadores' | 'materiais'>('geral');
   const [filtroTexto, setFiltroTexto] = useState('');
+
+  useEffect(() => {
+    if (tabelaAtiva !== 'geral' && !isModuloHabilitado(tabelaAtiva, flags)) {
+      setTabelaAtiva('geral');
+    }
+  }, [tabelaAtiva, flags]);
 
   const enc = consolidacao.encomendas;
   const ban = consolidacao.bancada;
@@ -57,93 +66,109 @@ export default function TabelasResumoPosto({
           <span>📊 Geral</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('encomendas')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'encomendas' ? 'bg-purple-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-purple-50'
-          }`}
-        >
-          <Package className="w-3 h-3" />
-          <span>Encomendas ({enc.totalRetidasNoPosto})</span>
-        </button>
+        {isModuloHabilitado('encomendas', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('encomendas')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'encomendas' ? 'bg-purple-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-purple-50'
+            }`}
+          >
+            <Package className="w-3 h-3" />
+            <span>Encomendas ({enc.totalRetidasNoPosto})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('bancada')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'bancada' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-amber-50'
-          }`}
-        >
-          <Layers className="w-3 h-3" />
-          <span>Bancada ({ban?.totalVolumes || 0})</span>
-        </button>
+        {isModuloHabilitado('bancada', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('bancada')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'bancada' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-amber-50'
+            }`}
+          >
+            <Layers className="w-3 h-3" />
+            <span>Bancada ({ban?.totalVolumes || 0})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('rondas')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'rondas' ? 'bg-indigo-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-indigo-50'
-          }`}
-        >
-          <Footprints className="w-3 h-3" />
-          <span>Rondas ({ron.totalExecutadasPlantao})</span>
-        </button>
+        {isModuloHabilitado('rondas', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('rondas')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'rondas' ? 'bg-indigo-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-indigo-50'
+            }`}
+          >
+            <Footprints className="w-3 h-3" />
+            <span>Rondas ({ron.totalExecutadasPlantao})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('chaves')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'chaves' ? 'bg-amber-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-amber-50'
-          }`}
-        >
-          <Key className="w-3 h-3" />
-          <span>Chaves ({cha.totalFora})</span>
-        </button>
+        {isModuloHabilitado('chaves', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('chaves')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'chaves' ? 'bg-amber-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-amber-50'
+            }`}
+          >
+            <Key className="w-3 h-3" />
+            <span>Chaves ({cha.totalFora})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('ocorrencias')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'ocorrencias' ? 'bg-red-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-red-50'
-          }`}
-        >
-          <AlertTriangle className="w-3 h-3" />
-          <span>Ocorrências ({oco.totalPendentes})</span>
-        </button>
+        {isModuloHabilitado('ocorrencias', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('ocorrencias')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'ocorrencias' ? 'bg-red-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-red-50'
+            }`}
+          >
+            <AlertTriangle className="w-3 h-3" />
+            <span>Ocorrências ({oco.totalPendentes})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('custodia')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'custodia' ? 'bg-sky-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-sky-50'
-          }`}
-        >
-          <Box className="w-3 h-3" />
-          <span>Custódia ({cus.totalAguardando})</span>
-        </button>
+        {isModuloHabilitado('custodia', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('custodia')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'custodia' ? 'bg-sky-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-sky-50'
+            }`}
+          >
+            <Box className="w-3 h-3" />
+            <span>Custódia ({cus.totalAguardando})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('prestadores')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'prestadores' ? 'bg-blue-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-blue-50'
-          }`}
-        >
-          <HardHat className="w-3 h-3" />
-          <span>Prestadores ({pre.totalPresentes})</span>
-        </button>
+        {isModuloHabilitado('prestadores', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('prestadores')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'prestadores' ? 'bg-blue-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-blue-50'
+            }`}
+          >
+            <HardHat className="w-3 h-3" />
+            <span>Prestadores ({pre.totalPresentes})</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setTabelaAtiva('materiais')}
-          className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
-            tabelaAtiva === 'materiais' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-emerald-50'
-          }`}
-        >
-          <Radio className="w-3 h-3" />
-          <span>Materiais ({mat.totalEquipamentos})</span>
-        </button>
+        {isModuloHabilitado('materiais', flags) && (
+          <button
+            type="button"
+            onClick={() => setTabelaAtiva('materiais')}
+            className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center gap-1 cursor-pointer ${
+              tabelaAtiva === 'materiais' ? 'bg-emerald-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-emerald-50'
+            }`}
+          >
+            <Radio className="w-3 h-3" />
+            <span>Materiais ({mat.totalEquipamentos})</span>
+          </button>
+        )}
       </div>
 
       {/* 1. TABELA MESTRE EXECUTIVA (RESUMO GERAL DO PLANTÃO) */}
@@ -172,6 +197,7 @@ export default function TabelasResumoPosto({
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {/* Encomendas */}
+                {isModuloHabilitado('encomendas', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-purple-950 flex items-center gap-2">
                     <Package className="w-4 h-4 text-purple-600" />
@@ -206,8 +232,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Bancada (Balcão Físico) */}
+                {isModuloHabilitado('bancada', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-amber-950 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-amber-600" />
@@ -242,8 +270,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Rondas */}
+                {isModuloHabilitado('rondas', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-indigo-950 flex items-center gap-2">
                     <Footprints className="w-4 h-4 text-indigo-600" />
@@ -278,8 +308,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Chaves */}
+                {isModuloHabilitado('chaves', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-amber-950 flex items-center gap-2">
                     <Key className="w-4 h-4 text-amber-600" />
@@ -317,8 +349,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Ocorrências */}
+                {isModuloHabilitado('ocorrencias', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-red-950 flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-red-600" />
@@ -353,8 +387,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Custódia */}
+                {isModuloHabilitado('custodia', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-sky-950 flex items-center gap-2">
                     <Box className="w-4 h-4 text-sky-600" />
@@ -385,8 +421,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Prestadores */}
+                {isModuloHabilitado('prestadores', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-blue-950 flex items-center gap-2">
                     <HardHat className="w-4 h-4 text-blue-600" />
@@ -423,8 +461,10 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
 
                 {/* Materiais */}
+                {isModuloHabilitado('materiais', flags) && (
                 <tr className="hover:bg-slate-50/80 transition">
                   <td className="p-3 font-bold text-emerald-950 flex items-center gap-2">
                     <Radio className="w-4 h-4 text-emerald-600" />
@@ -459,6 +499,7 @@ export default function TabelasResumoPosto({
                     </button>
                   </td>
                 </tr>
+                )}
               </tbody>
             </table>
           </div>
