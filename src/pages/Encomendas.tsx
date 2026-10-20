@@ -160,8 +160,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   const [itensDossie, setItensDossie] = useState<any[]>([]);
   const [loadingDossie, setLoadingDossie] = useState(false);
   const [buscaDossie, setBuscaDossie] = useState('');
+  const [tipoFiltroBuscaDossie, setTipoFiltroBuscaDossie] = useState<'unidade' | 'todos' | 'nome' | 'rastreio' | 'bloco' | 'retirante'>('unidade');
   const [filtroStatusDossie, setFiltroStatusDossie] = useState<'todos' | 'entregue' | 'retido'>('todos');
-  const [filtroPeriodoDossie, setFiltroPeriodoDossie] = useState<'hoje' | '7dias' | '30dias' | 'todos'>('todos');
+  const [filtroPeriodoDossie, setFiltroPeriodoDossie] = useState<'todos' | 'hoje' | 'personalizado'>('todos');
+  const [dataInicioPersonalizadaDossie, setDataInicioPersonalizadaDossie] = useState('');
+  const [dataFimPersonalizadaDossie, setDataFimPersonalizadaDossie] = useState('');
+  const [itensFotosExpandidasDossie, setItensFotosExpandidasDossie] = useState<Record<string, boolean>>({});
   const [itemModalDossie, setItemModalDossie] = useState<any | null>(null);
   const [copiadoDossie, setCopiadoDossie] = useState(false);
 
@@ -3864,82 +3868,181 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
           </div>
         ) : (
         <div className="space-y-4">
-          {/* Filtros e Busca Rápida com Botão de Atualizar Dossiê (apenas o ícone) */}
-          <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={buscaDossie}
-                  onChange={(e) => setBuscaDossie(e.target.value)}
-                  placeholder="Buscar por unidade, bloco, nome do morador, código de barras/rastreio ou quem retirou..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-600 focus:bg-white transition"
-                />
+          {/* Filtros e Busca Rápida com Seleção de Tipo (Unidade como padrão) igual Saída/Baixa */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5 shrink-0">
+                  <FileText className="w-4 h-4 text-purple-700" /> Dossiê Auditável
+                </span>
+
+                {/* Lista seletora com o que deve ser buscado (Unidade padrão) igual busca de baixa */}
+                <select
+                  value={tipoFiltroBuscaDossie}
+                  onChange={(e) => setTipoFiltroBuscaDossie(e.target.value as any)}
+                  className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-800 text-xs font-bold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-700 transition cursor-pointer shrink-0"
+                  title="Filtrar tipo de pesquisa no dossiê"
+                >
+                  <option value="unidade">🏠 UNIDADE</option>
+                  <option value="todos">🔍 TODOS</option>
+                  <option value="nome">👤 MORADOR</option>
+                  <option value="rastreio">📦 RASTREIO</option>
+                  <option value="bloco">🏢 BLOCO / TORRE</option>
+                  <option value="retirante">✍️ RETIRANTE</option>
+                </select>
               </div>
 
-              {/* Botão Atualizar Dossiê - Apenas o ícone */}
-              <button
-                type="button"
-                onClick={carregarDossie}
-                disabled={loadingDossie}
-                className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
-                title="Atualizar Dossiê"
-              >
-                <RefreshCw className={`w-4 h-4 ${loadingDossie ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                {/* Input com botão de pesquisa embutido (Buscar) */}
+                <div className="relative flex-1 sm:w-64 min-w-[160px] flex items-center">
+                  <input
+                    type="text"
+                    value={buscaDossie}
+                    onChange={(e) => setBuscaDossie(e.target.value)}
+                    placeholder={
+                      tipoFiltroBuscaDossie === 'unidade'
+                        ? (eEstruturaCasas ? "Casa (ex: 01, 14)..." : "Unidade (ex: 101, B2)...")
+                        : tipoFiltroBuscaDossie === 'nome'
+                        ? "Nome do morador..."
+                        : tipoFiltroBuscaDossie === 'rastreio'
+                        ? "Código de rastreio ou RE..."
+                        : tipoFiltroBuscaDossie === 'bloco'
+                        ? "Bloco ou Torre..."
+                        : tipoFiltroBuscaDossie === 'retirante'
+                        ? "Quem retirou..."
+                        : "Unidade, morador, rastreio..."
+                    }
+                    className="pl-3 pr-9 py-1.5 w-full bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-700 transition font-medium"
+                  />
+
+                  {/* Botão de Pesquisa DENTRO da barra: só o ícone */}
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 bottom-1 px-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-md flex items-center justify-center transition cursor-pointer shadow-xs"
+                    title="Buscar"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Botão de Limpar com o ícone da borracha em vermelho igual baixa */}
+                <button
+                  type="button"
+                  onClick={() => setBuscaDossie('')}
+                  className={`p-2 rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer border ${
+                    buscaDossie
+                      ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-300 shadow-2xs'
+                      : 'bg-white hover:bg-red-50 text-red-500 border-red-200'
+                  }`}
+                  title="Limpar pesquisa (Borracha)"
+                >
+                  <Eraser className="w-4 h-4 text-red-600" />
+                </button>
+
+                {/* Botão Atualizar Dossiê - Apenas o ícone */}
+                <button
+                  type="button"
+                  onClick={carregarDossie}
+                  disabled={loadingDossie}
+                  className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
+                  title="Atualizar Dossiê"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingDossie ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 flex items-center gap-1">
+            {/* Linha de Filtros compacta: Status ocupando menos espaço e Período (Todos, Hoje, Personalizado) */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+              {/* Status com layout compacto para ocupar menos espaço */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1">
                   <Filter className="w-3 h-3" /> Status:
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setFiltroStatusDossie('todos')}
-                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                    filtroStatusDossie === 'todos' ? 'bg-purple-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Todos ({itensDossie.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroStatusDossie('entregue')}
-                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                    filtroStatusDossie === 'entregue' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  🟢 Entregues ({itensDossie.filter(i => i.status === 'entregue').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroStatusDossie('retido')}
-                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                    filtroStatusDossie === 'retido' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  🟡 Retidos ({itensDossie.filter(i => i.status !== 'entregue').length})
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-400 uppercase mr-1 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> Período:
-                </span>
-                {(['todos', 'hoje', '7dias', '30dias'] as const).map((per) => (
+                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200 text-[11px]">
                   <button
-                    key={per}
                     type="button"
-                    onClick={() => setFiltroPeriodoDossie(per)}
-                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer ${
-                      filtroPeriodoDossie === per ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    onClick={() => setFiltroStatusDossie('todos')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                      filtroStatusDossie === 'todos' ? 'bg-purple-900 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {per === 'todos' ? 'Todos' : per === 'hoje' ? 'Hoje' : per === '7dias' ? '7 dias' : '30 dias'}
+                    Todos ({itensDossie.length})
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setFiltroStatusDossie('entregue')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                      filtroStatusDossie === 'entregue' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Entregues ({itensDossie.filter(i => i.status === 'entregue').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroStatusDossie('retido')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                      filtroStatusDossie === 'retido' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Retidos ({itensDossie.filter(i => i.status !== 'entregue').length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Período: apenas Todos, Hoje e Personalizado */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> Período:
+                </span>
+                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroPeriodoDossie('todos')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                      filtroPeriodoDossie === 'todos' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroPeriodoDossie('hoje')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                      filtroPeriodoDossie === 'hoje' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroPeriodoDossie('personalizado')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                      filtroPeriodoDossie === 'personalizado' ? 'bg-purple-700 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Personalizado
+                  </button>
+                </div>
+
+                {filtroPeriodoDossie === 'personalizado' && (
+                  <div className="flex items-center gap-1 text-[11px] bg-purple-50 p-1 rounded-lg border border-purple-200">
+                    <span className="text-purple-900 font-bold">De:</span>
+                    <input
+                      type="date"
+                      value={dataInicioPersonalizadaDossie}
+                      onChange={(e) => setDataInicioPersonalizadaDossie(e.target.value)}
+                      className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-[11px] text-slate-800 font-medium focus:ring-1 focus:ring-purple-600"
+                    />
+                    <span className="text-purple-900 font-bold">Até:</span>
+                    <input
+                      type="date"
+                      value={dataFimPersonalizadaDossie}
+                      onChange={(e) => setDataFimPersonalizadaDossie(e.target.value)}
+                      className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-[11px] text-slate-800 font-medium focus:ring-1 focus:ring-purple-600"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -3951,28 +4054,25 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
             </div>
           ) : (
             (() => {
-              const agoraTs = Date.now();
-              const umDiaMs = 24 * 60 * 60 * 1000;
               const itensFiltrados = itensDossie.filter((item) => {
                 // Filtro status
                 if (filtroStatusDossie === 'entregue' && item.status !== 'entregue') return false;
                 if (filtroStatusDossie === 'retido' && item.status === 'entregue') return false;
 
                 // Filtro período
-                const itemDataTs = new Date(item.data_retirada || item.created_at).getTime();
                 if (filtroPeriodoDossie === 'hoje') {
                   const hojeStr = new Date().toISOString().slice(0, 10);
                   const dtStr = (item.data_retirada || item.created_at || '').slice(0, 10);
                   if (dtStr !== hojeStr) return false;
-                } else if (filtroPeriodoDossie === '7dias') {
-                  if (agoraTs - itemDataTs > 7 * umDiaMs) return false;
-                } else if (filtroPeriodoDossie === '30dias') {
-                  if (agoraTs - itemDataTs > 30 * umDiaMs) return false;
+                } else if (filtroPeriodoDossie === 'personalizado') {
+                  const dtStr = (item.data_retirada || item.created_at || '').slice(0, 10);
+                  if (dataInicioPersonalizadaDossie && dtStr < dataInicioPersonalizadaDossie) return false;
+                  if (dataFimPersonalizadaDossie && dtStr > dataFimPersonalizadaDossie) return false;
                 }
 
-                // Filtro texto
+                // Filtro texto conforme tipo selecionado (Unidade por padrão)
                 if (buscaDossie.trim()) {
-                  const termo = buscaDossie.toLowerCase();
+                  const termo = buscaDossie.trim().toLowerCase();
                   const und = (item.unidade || '').toString().toLowerCase();
                   const blc = (item.bloco || '').toString().toLowerCase();
                   const cod = (item.codigo_barras || item.codigo_rastreio || item.rastreio || '').toLowerCase();
@@ -3981,7 +4081,21 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   const ret = (item.retirado_por || '').toLowerCase();
                   const op = (item.operador_baixa_id || '').toLowerCase();
                   const loc = (item.local_armazenamento || '').toLowerCase();
-                  return und.includes(termo) || blc.includes(termo) || cod.includes(termo) || reCod.includes(termo) || mor.includes(termo) || ret.includes(termo) || op.includes(termo) || loc.includes(termo);
+
+                  if (tipoFiltroBuscaDossie === 'unidade') {
+                    if (!und.includes(termo)) return false;
+                  } else if (tipoFiltroBuscaDossie === 'nome') {
+                    if (!mor.includes(termo)) return false;
+                  } else if (tipoFiltroBuscaDossie === 'rastreio') {
+                    if (!cod.includes(termo) && !reCod.includes(termo)) return false;
+                  } else if (tipoFiltroBuscaDossie === 'bloco') {
+                    if (!blc.includes(termo)) return false;
+                  } else if (tipoFiltroBuscaDossie === 'retirante') {
+                    if (!ret.includes(termo)) return false;
+                  } else {
+                    const match = und.includes(termo) || blc.includes(termo) || cod.includes(termo) || reCod.includes(termo) || mor.includes(termo) || ret.includes(termo) || op.includes(termo) || loc.includes(termo);
+                    if (!match) return false;
+                  }
                 }
 
                 return true;
@@ -4000,6 +4114,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   {itensFiltrados.map((item) => {
                     const estaEntregue = item.status === 'entregue';
                     const rastreioExibicao = item.codigo_barras || item.codigo_rastreio || item.rastreio || (item.lotes_re?.codigo_re ? `Lote ${item.lotes_re.codigo_re}` : null);
+                    const fotosAbertas = Boolean(itensFotosExpandidasDossie[item.id]);
 
                     return (
                       <div 
@@ -4048,81 +4163,126 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                           </span>
                         </div>
 
-                        {/* Comparativo Lado a Lado: Foto 1 Recebimento vs Foto 2 Entrega */}
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          {/* FOTO 1: RECEBIMENTO */}
-                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5 flex flex-col justify-between">
-                            <span className="text-[10px] font-black uppercase text-purple-800 block flex items-center gap-1">
-                              <Camera className="w-3 h-3 text-purple-600" /> 1. Recebimento (RE)
-                            </span>
-
-                            <div 
-                              onClick={() => item.foto_etiqueta_url && setModalFotoAmpliada(item.foto_etiqueta_url)}
-                              className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
-                            >
-                              {item.foto_etiqueta_url ? (
-                                <>
-                                  <img src={item.foto_etiqueta_url} alt="Etiqueta" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
-                                  <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
-                                    <Eye className="w-2.5 h-2.5" /> Ver Foto
-                                  </span>
-                                </>
-                              ) : (
-                                <div className="text-center text-slate-400 text-[10px]">
-                                  <Package className="w-6 h-6 mx-auto mb-0.5 opacity-40" />
-                                  Sem foto etiqueta
-                                </div>
-                              )}
+                        {/* Seção de Fotos Auditáveis: só exibe as fotos quando selecionado */}
+                        {fotosAbertas ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs pb-1">
+                              <span className="font-bold text-slate-700 flex items-center gap-1 text-[11px]">
+                                <Camera className="w-3.5 h-3.5 text-purple-600" /> Fotos Auditáveis (Recebimento & Entrega)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setItensFotosExpandidasDossie(prev => ({ ...prev, [item.id]: false }))}
+                                className="text-[10px] font-bold text-purple-700 hover:text-purple-900 flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <ChevronUp className="w-3 h-3" /> Ocultar fotos
+                              </button>
                             </div>
 
-                            <div className="text-[10px] text-slate-500 leading-tight">
-                              <div>Entrada: <strong>{new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
-                              <div className="truncate">Local: <strong className="text-slate-800">{item.local_armazenamento || 'Escaninho'}</strong></div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              {/* FOTO 1: RECEBIMENTO */}
+                              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5 flex flex-col justify-between">
+                                <span className="text-[10px] font-black uppercase text-purple-800 block flex items-center gap-1">
+                                  <Camera className="w-3 h-3 text-purple-600" /> 1. Recebimento (RE)
+                                </span>
+
+                                <div 
+                                  onClick={() => item.foto_etiqueta_url && setModalFotoAmpliada(item.foto_etiqueta_url)}
+                                  className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
+                                >
+                                  {item.foto_etiqueta_url ? (
+                                    <>
+                                      <img src={item.foto_etiqueta_url} alt="Etiqueta" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                      <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
+                                        <Eye className="w-2.5 h-2.5" /> Ver Foto
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <div className="text-center text-slate-400 text-[10px]">
+                                      <Package className="w-6 h-6 mx-auto mb-0.5 opacity-40" />
+                                      Sem foto etiqueta
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="text-[10px] text-slate-500 leading-tight">
+                                  <div>Entrada: <strong>{new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                                  <div className="truncate">Local: <strong className="text-slate-800">{item.local_armazenamento || 'Escaninho'}</strong></div>
+                                </div>
+                              </div>
+
+                              {/* FOTO 2: ENTREGA AO MORADOR */}
+                              <div className={`p-2.5 rounded-xl border space-y-1.5 flex flex-col justify-between ${
+                                estaEntregue ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-dashed border-slate-300'
+                              }`}>
+                                <span className="text-[10px] font-black uppercase text-emerald-800 block flex items-center gap-1">
+                                  <UserCheck className="w-3 h-3 text-emerald-600" /> 2. Entrega (Saída)
+                                </span>
+
+                                <div 
+                                  onClick={() => item.foto_retirada_url && setModalFotoAmpliada(item.foto_retirada_url)}
+                                  className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
+                                >
+                                  {item.foto_retirada_url ? (
+                                    <>
+                                      <img src={item.foto_retirada_url} alt="Comprovante Retirada" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                                      <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
+                                        <Eye className="w-2.5 h-2.5" /> Ver Foto
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <div className="text-center text-slate-400 text-[10px] p-2">
+                                      <Clock className="w-6 h-6 mx-auto mb-0.5 text-amber-500/70" />
+                                      Aguardando retirada pelo morador
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="text-[10px] text-slate-600 leading-tight">
+                                  {estaEntregue ? (
+                                    <>
+                                      <div className="truncate">Retirante: <strong className="text-emerald-950">{item.retirado_por}</strong></div>
+                                      <div>Data: <strong>{new Date(item.data_retirada).toLocaleDateString('pt-BR')} às {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                                      <div className="text-[9px] text-slate-400">Op: {item.operador_baixa_id || 'Portaria'}</div>
+                                    </>
+                                  ) : (
+                                    <div className="text-amber-800 font-medium italic">
+                                      Pacote retido na portaria.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
-
-                          {/* FOTO 2: ENTREGA AO MORADOR */}
-                          <div className={`p-2.5 rounded-xl border space-y-1.5 flex flex-col justify-between ${
-                            estaEntregue ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-dashed border-slate-300'
-                          }`}>
-                            <span className="text-[10px] font-black uppercase text-emerald-800 block flex items-center gap-1">
-                              <UserCheck className="w-3 h-3 text-emerald-600" /> 2. Entrega (Saída)
-                            </span>
-
-                            <div 
-                              onClick={() => item.foto_retirada_url && setModalFotoAmpliada(item.foto_retirada_url)}
-                              className="h-28 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center cursor-pointer border border-slate-300 relative group"
-                            >
-                              {item.foto_retirada_url ? (
-                                <>
-                                  <img src={item.foto_retirada_url} alt="Comprovante Retirada" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />
-                                  <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.2 rounded flex items-center gap-1">
-                                    <Eye className="w-2.5 h-2.5" /> Ver Foto
-                                  </span>
-                                </>
-                              ) : (
-                                <div className="text-center text-slate-400 text-[10px] p-2">
-                                  <Clock className="w-6 h-6 mx-auto mb-0.5 text-amber-500/70" />
-                                  Aguardando retirada pelo morador
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="text-[10px] text-slate-600 leading-tight">
+                        ) : (
+                          /* Resumo compacto quando as fotos não estão selecionadas */
+                          <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="space-y-0.5 text-[11px] text-slate-600">
+                              <div>
+                                <span className="font-bold text-purple-900">Entrada:</span> {new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Local: <strong>{item.local_armazenamento || 'Escaninho'}</strong>
+                              </div>
                               {estaEntregue ? (
-                                <>
-                                  <div className="truncate">Retirante: <strong className="text-emerald-950">{item.retirado_por}</strong></div>
-                                  <div>Data: <strong>{new Date(item.data_retirada).toLocaleDateString('pt-BR')} às {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
-                                  <div className="text-[9px] text-slate-400">Op: {item.operador_baixa_id || 'Portaria'}</div>
-                                </>
+                                <div>
+                                  <span className="font-bold text-emerald-900">Saída:</span> {new Date(item.data_retirada).toLocaleDateString('pt-BR')} às {new Date(item.data_retirada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Retirado por: <strong>{item.retirado_por}</strong>
+                                </div>
                               ) : (
-                                <div className="text-amber-800 font-medium italic">
-                                  Pacote retido na portaria.
+                                <div className="text-amber-700 italic">
+                                  Aguardando retirada na guarita
                                 </div>
                               )}
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => setItensFotosExpandidasDossie(prev => ({ ...prev, [item.id]: true }))}
+                              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
+                              title="Visualizar fotos do pacote"
+                            >
+                              <Camera className="w-3.5 h-3.5 text-purple-600" />
+                              <span>Ver Fotos</span>
+                              <ChevronDown className="w-3 h-3 text-slate-400" />
+                            </button>
                           </div>
-                        </div>
+                        )}
 
                         {/* Botões de Ação do Dossiê */}
                         <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100">
@@ -4130,8 +4290,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                             type="button"
                             onClick={() => setItemModalDossie(item)}
                             className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                            title="Visualizar Dossiê Completo"
                           >
-                            <FileText className="w-3.5 h-3.5" /> Ver Dossiê Completo
+                            <FileText className="w-3.5 h-3.5" /> Dossiê
                           </button>
 
                           {estaEntregue && (
