@@ -237,19 +237,30 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   // Redirecionamento inteligente vindo da Bancada (quando o operador clica em "Baixar Encomenda")
   useEffect(() => {
+    const processarRedirecionamento = (etapaAlvo?: string | null, uniAlvo?: string | null, blkAlvo?: string | null) => {
+      if (etapaAlvo === '3') {
+        setEtapa('3');
+        setTipoFiltroBuscaBaixa('unidade');
+        if (uniAlvo && uniAlvo.trim()) {
+          setBuscaBaixaGeral(uniAlvo.trim());
+        }
+        // Para condomínios de casas ou quando não houver bloco específico, usa sempre 'TODOS'
+        const blkLimpo = (blkAlvo || '').trim();
+        if (!blkLimpo || blkLimpo === 'TODOS' || blkLimpo.toLowerCase() === 'casa' || blkLimpo.toLowerCase() === 'casas') {
+          setAbaBlocoSelecionada('TODOS');
+        } else {
+          setAbaBlocoSelecionada(blkLimpo);
+        }
+      }
+    };
+
     try {
       const etapaIni = sessionStorage.getItem('encomendas_etapa_inicial');
       const uni = sessionStorage.getItem('encomenda_filtro_unidade');
       const blk = sessionStorage.getItem('encomenda_filtro_bloco');
 
       if (etapaIni === '3') {
-        setEtapa('3');
-        if (uni) {
-          setBuscaBaixaGeral(uni);
-        }
-        if (blk && blk !== 'TODOS') {
-          setAbaBlocoSelecionada(blk);
-        }
+        processarRedirecionamento(etapaIni, uni, blk);
         sessionStorage.removeItem('encomendas_etapa_inicial');
         sessionStorage.removeItem('encomenda_filtro_unidade');
         sessionStorage.removeItem('encomenda_filtro_bloco');
@@ -258,18 +269,26 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     const handleNavegar = (e: any) => {
       if (e.detail?.etapa === '3') {
-        setEtapa('3');
-        if (e.detail.unidade) {
-          setBuscaBaixaGeral(e.detail.unidade);
-        }
-        if (e.detail.bloco && e.detail.bloco !== 'TODOS') {
-          setAbaBlocoSelecionada(e.detail.bloco);
-        }
+        processarRedirecionamento(e.detail.etapa, e.detail.unidade, e.detail.bloco);
       }
     };
     window.addEventListener('navegar_modulo', handleNavegar);
     return () => window.removeEventListener('navegar_modulo', handleNavegar);
   }, []);
+
+  // Quando há busca de unidade ativa na etapa 3 e os itens estão carregados, auto-seleciona os pacotes correspondentes
+  useEffect(() => {
+    if (etapa === '3' && buscaBaixaGeral.trim() && todosItensRetidos.length > 0) {
+      const termoB = buscaBaixaGeral.trim();
+      const pacotes = todosItensRetidos
+        .filter((item: any) => saoUnidadesEquivalentes(item.unidade, termoB))
+        .map((item: any) => item.id);
+      if (pacotes.length > 0 && itensSelecionadosIds.length === 0) {
+        setItensSelecionadosIds(pacotes);
+        setItensCandidatosEntrega(pacotes);
+      }
+    }
+  }, [etapa, buscaBaixaGeral, todosItensRetidos]);
 
   useEffect(() => {
     if (condoAlvoId) {
@@ -1429,16 +1448,39 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const getRotuloBlocoParaFiltro = (bloco?: string | null) => {
     const b = String(bloco || '').trim();
-    if (eEstruturaCasas || b.toLowerCase() === 'casa') return 'Casas';
+    if (eEstruturaCasas || b.toLowerCase() === 'casa' || b.toLowerCase() === 'casas') return 'Casas';
     if (!b) return 'Geral / Sem Bloco';
     if (b.toLowerCase().startsWith('torre') || b.toLowerCase().startsWith('bloco')) return b;
     return eEstruturaTorres ? `Torre ${b}` : `Bloco ${b}`;
   };
 
+  const saoBlocosEquivalentes = (blocoA?: string | null, blocoB?: string | null): boolean => {
+    if (!blocoA || !blocoB) return false;
+    const a = blocoA.trim().toLowerCase();
+    const b = blocoB.trim().toLowerCase();
+    if (a === b) return true;
+    if (a === 'todos' || b === 'todos') return true;
+    if ((a === 'casa' || a === 'casas') && (b === 'casa' || b === 'casas')) return true;
+
+    // Normaliza 'Torre 1' vs '1', 'Bloco A' vs 'A'
+    const aNorm = a.replace(/^(torre|bloco)\s*/i, '').trim();
+    const bNorm = b.replace(/^(torre|bloco)\s*/i, '').trim();
+    if (aNorm && bNorm && aNorm === bNorm) return true;
+
+    return false;
+  };
+
   const itensRetidosFiltrados = todosItensRetidos.filter(item => {
-    if (abaBlocoSelecionada !== 'TODOS') {
+    // 1. Filtro por Bloco / Torre selecionado nas abas (ignora restrição de bloco se for condomínio de casas)
+    if (abaBlocoSelecionada !== 'TODOS' && !eEstruturaCasas) {
       const blocoItem = getRotuloBlocoParaFiltro(item.bloco);
-      if (blocoItem !== abaBlocoSelecionada) return false;
+      if (
+        blocoItem !== abaBlocoSelecionada &&
+        !saoBlocosEquivalentes(blocoItem, abaBlocoSelecionada) &&
+        !saoBlocosEquivalentes(item.bloco, abaBlocoSelecionada)
+      ) {
+        return false;
+      }
     }
 
     if (!buscaBaixaGeral.trim()) return true;
@@ -1459,6 +1501,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     if (tipoFiltroBuscaBaixa === 'unidade') {
       return (
         saoUnidadesEquivalentes(unid, termo) ||
+        saoUnidadesEquivalentes(item.unidade, buscaBaixaGeral) ||
         unid === termo ||
         unid.includes(termo) ||
         bloc.includes(termo) ||
@@ -1590,6 +1633,8 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const handleLimparBuscaBaixa = () => {
     setBuscaBaixaGeral('');
+    setAbaBlocoSelecionada('TODOS');
+    setTipoFiltroBuscaBaixa('unidade');
   };
 
   const handleExecutarBusca = (termoFornecido?: string) => {

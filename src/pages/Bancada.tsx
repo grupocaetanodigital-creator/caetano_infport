@@ -1754,16 +1754,15 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                 type="button"
                 onClick={() => {
                   const unidadeAlvo = itemParaBaixa.unidade;
-                  const estruturaAlvo = itemParaBaixa.estrutura || '';
                   sessionStorage.setItem('encomendas_etapa_inicial', '3'); // Etapa 3 = Baixa
                   sessionStorage.setItem('encomenda_filtro_unidade', unidadeAlvo);
-                  if (estruturaAlvo) sessionStorage.setItem('encomenda_filtro_bloco', estruturaAlvo);
+                  sessionStorage.setItem('encomenda_filtro_bloco', 'TODOS');
 
                   window.dispatchEvent(new CustomEvent('navegar_modulo', {
-                    detail: { modulo: 'encomendas', etapa: '3', unidade: unidadeAlvo, bloco: estruturaAlvo }
+                    detail: { modulo: 'encomendas', etapa: '3', unidade: unidadeAlvo, bloco: 'TODOS' }
                   }));
 
-                  onNavegar?.('encomendas', { etapa: '3', unidade: unidadeAlvo, bloco: estruturaAlvo });
+                  onNavegar?.('encomendas', { etapa: '3', unidade: unidadeAlvo, bloco: 'TODOS' });
                   setModalBaixaMenuAberto(false);
                 }}
                 className="w-full p-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white flex items-center gap-3.5 shadow-md shadow-emerald-600/20 transition cursor-pointer text-left group"
