@@ -66,6 +66,7 @@ interface PassagemPostoProps {
   onVoltar?: () => void;
   onTrocarOperador?: (novoOperador: any) => void;
   featureFlags?: any;
+  onNavegar?: (modulo: string, params?: any) => void;
 }
 
 export function isModuloHabilitado(modulo: string, flags?: any): boolean {
@@ -343,12 +344,14 @@ export default function PassagemPosto({
   condominioConfig: propCondominioConfig, 
   onVoltar, 
   onTrocarOperador, 
-  featureFlags: propFlags 
+  featureFlags: propFlags,
+  onNavegar 
 }: PassagemPostoProps) {
   const [featureFlags, setFeatureFlags] = useState<any>(propFlags || null);
   const [passagens, setPassagens] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingAuditoria, setLoadingAuditoria] = useState(false);
+  const [verificandoChecklistBancada, setVerificandoChecklistBancada] = useState(false);
   const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
   const [condominioConfig, setCondominioConfig] = useState<CondominioConfig | null>(propCondominioConfig || null);
   const [copiadoTexto, setCopiadoTexto] = useState(false);
@@ -539,41 +542,106 @@ export default function PassagemPosto({
   };
 
   const abrirNovaPassagem = async () => {
-    setModalNova(true);
-    setEtapa(1);
-    setMensagem({ tipo: '', texto: '' });
-    setModuloAtivo('todos');
-    setOperadorSelecionadoEntrante(null);
-    setLoginEntrante('');
-    setSenhaEntrante('');
-    setMostrarSenhaEntrante(false);
-    // Reinicia auditoria dos 8 módulos operacionais sem itens pré-marcados
-    setAuditModulos({
-      encomendas: { status: null, obs: '' },
-      bancada: { status: null, obs: '' },
-      rondas: { status: null, obs: '' },
-      chaves: { status: null, obs: '' },
-      prestadores: { status: null, obs: '' },
-      custodia: { status: null, obs: '' },
-      materiais: { status: null, obs: '' },
-      ocorrencias: { status: null, obs: '' }
-    });
-    setTemDivergencia(false);
-    setDivergencia('');
-    setObservacoes('');
-
-    // Sincroniza a Bancada com todas as encomendas pendentes automaticamente ao apertar + Troca de Turno
     const condId = usuarioLogado?.condominio_id;
-    if (condId) {
-      try {
-        await sincronizarComEncomendasRetidas(condId, usuarioLogado?.nome || usuarioLogado?.login || 'Portaria', true);
-      } catch (errSync) {
-        console.warn('Erro ao auto-sincronizar bancada:', errSync);
-      }
+    if (!condId) {
+      setMensagem({ tipo: 'erro', texto: 'Condomínio não identificado no login.' });
+      return;
     }
 
-    carregarOperadores();
-    await consolidarModulosPosto();
+    setVerificandoChecklistBancada(true);
+    setMensagem({ tipo: 'aviso', texto: 'Atualizando a bancada com encomendas pendentes e verificando o checklist...' });
+
+    try {
+      // 1. O app vai atualizar a bancada com todas as encomendas que tiverem pendentes
+      const syncResult = await sincronizarComEncomendasRetidas(
+        condId, 
+        usuarioLogado?.nome || usuarioLogado?.login || 'Portaria', 
+        true
+      );
+
+      // Carrega os itens atualizados da bancada
+      const itensBancada = (syncResult?.itens && syncResult.itens.length > 0)
+        ? syncResult.itens
+        : await carregarItensBancada(condId);
+
+      // 2. Lê os itens conferidos no checklist físico de balcão
+      let checklistMap: Record<string, boolean> = {};
+      try {
+        const salvo = localStorage.getItem(`bancada_checklist_${condId}`);
+        if (salvo) checklistMap = JSON.parse(salvo);
+      } catch {}
+
+      // Verifica itens pendentes no checklist
+      const itensPendentesChecklist = (itensBancada || []).filter(it => !checklistMap[it.id]);
+
+      if (itensPendentesChecklist.length > 0) {
+        // CASO TIVER ENCOMENDAS PENDENTES DE CHECKLIST:
+        // O OPERADOR SERÁ DIRECIONADO DIRETAMENTE PARA O CHECKLIST!
+        const totalVolumesPendentes = itensPendentesChecklist.reduce((acc, it) => acc + (it.volumes || 1), 0);
+
+        sessionStorage.setItem('bancada_aba_ativa', 'checklist');
+        sessionStorage.setItem('bancada_aviso_checklist', JSON.stringify({
+          motivo: 'troca_de_turno',
+          pendentesQtd: itensPendentesChecklist.length,
+          totalVolumes: totalVolumesPendentes,
+          timestamp: Date.now()
+        }));
+
+        setMensagem({
+          tipo: 'aviso',
+          texto: `Existem ${itensPendentesChecklist.length} encomenda(s) (${totalVolumesPendentes} volumes) pendentes no Checklist. Direcionando diretamente para o Checklist de Balcão...`
+        });
+
+        // Direciona imediatamente para o Checklist de Balcão na Bancada
+        setTimeout(() => {
+          if (onNavegar) {
+            onNavegar('bancada', { aba: 'checklist' });
+          } else {
+            window.dispatchEvent(new CustomEvent('navegar_modulo', {
+              detail: { modulo: 'bancada', aba: 'checklist' }
+            }));
+          }
+        }, 350);
+
+        return;
+      }
+
+      // SE TODAS TIVEREM NO CHECKLIST FEITO (ou sem encomendas ativas):
+      // A TROCA DE TURNO SEGUE NORMALMENTE!
+      setMensagem({ tipo: '', texto: '' });
+      setModalNova(true);
+      setEtapa(1);
+      setModuloAtivo('todos');
+      setOperadorSelecionadoEntrante(null);
+      setLoginEntrante('');
+      setSenhaEntrante('');
+      setMostrarSenhaEntrante(false);
+      setAuditModulos({
+        encomendas: { status: null, obs: '' },
+        bancada: { status: null, obs: '' },
+        rondas: { status: null, obs: '' },
+        chaves: { status: null, obs: '' },
+        prestadores: { status: null, obs: '' },
+        custodia: { status: null, obs: '' },
+        materiais: { status: null, obs: '' },
+        ocorrencias: { status: null, obs: '' }
+      });
+      setTemDivergencia(false);
+      setDivergencia('');
+      setObservacoes('');
+
+      carregarOperadores();
+      await consolidarModulosPosto();
+    } catch (err: any) {
+      console.error('Erro na validação do checklist para troca de turno:', err);
+      // Fallback em caso de erro para não travar a operação da guarita
+      setModalNova(true);
+      setEtapa(1);
+      carregarOperadores();
+      await consolidarModulosPosto();
+    } finally {
+      setVerificandoChecklistBancada(false);
+    }
   };
 
   const consolidarModulosPosto = async (cfgParam?: CondominioConfig) => {
@@ -1425,9 +1493,20 @@ export default function PassagemPosto({
 
           <button
             onClick={abrirNovaPassagem}
-            className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1 transition uppercase shadow-2xs cursor-pointer"
+            disabled={verificandoChecklistBancada}
+            className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-600 disabled:opacity-75 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition uppercase shadow-2xs cursor-pointer"
+            title="Atualizar a bancada com encomendas pendentes e verificar checklist para troca de turno"
           >
-            <Plus className="w-3.5 h-3.5" /> <span>Troca de Turno</span>
+            {verificandoChecklistBancada ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Verificando Bancada...</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-3.5 h-3.5" /> <span>Troca de Turno</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -1485,10 +1564,20 @@ export default function PassagemPosto({
       </div>
 
       {mensagem.texto && (
-        <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-medium ${
-          mensagem.tipo === 'sucesso' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+        <div className={`p-3 rounded-xl flex items-center gap-2.5 text-xs font-bold transition shadow-xs ${
+          mensagem.tipo === 'sucesso' 
+            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+            : mensagem.tipo === 'aviso'
+            ? 'bg-amber-50 text-amber-900 border-2 border-amber-400 animate-pulse'
+            : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          {mensagem.tipo === 'sucesso' ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+          ) : mensagem.tipo === 'aviso' ? (
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+          ) : (
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+          )}
           <span>{mensagem.texto}</span>
         </div>
       )}
