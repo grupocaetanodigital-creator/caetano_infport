@@ -268,14 +268,36 @@ export function formatarComZeroEsquerda(num: string | number, digitos: number = 
  * Auto-corrige unidades de 1 a 9 adicionando o zero à esquerda (ex: "1" -> "01", "9" -> "09")
  * Caso o operador esqueça de colocar, o sistema corrige na hora.
  */
+/**
+ * Auto-corrige unidades de 1 a 9 adicionando o zero à esquerda (ex: "1" -> "01", "9" -> "09")
+ * e remove o zero espúrio caso o número seja maior que 9 (ex: "057" -> "57", "0117" -> "117", "Casa 057" -> "Casa 57").
+ */
 export function autoCorrigirZeroEsquerda(val: string | null | undefined): string {
   if (!val) return '';
-  const limpo = String(val).trim();
+  let limpo = String(val).trim();
+
+  // Se for numeral com prefixo e zero espúrio em número >= 10 (ex: 'Casa 057' -> 'Casa 57', 'Ap 0101' -> 'Ap 101')
+  const matchPrefixoSpurious = limpo.match(/^((?:casa|apto|ap|unidade|und|lote|bloco|quadra)\.?\s*)0+([1-9]\d+.*)$/i);
+  if (matchPrefixoSpurious) {
+    return `${matchPrefixoSpurious[1]}${matchPrefixoSpurious[2]}`;
+  }
+
+  // Remove zero(s) à esquerda espúrios de números maiores que 9 (ex: '057' -> '57', '0117' -> '117', '010' -> '10')
+  if (/^0+[1-9]\d+.*$/.test(limpo)) {
+    return limpo.replace(/^0+/, '');
+  }
+
+  // Se for múltiplos zeros seguidos de 1 a 9 (ex: '005' -> '05')
+  if (/^0+([1-9])$/.test(limpo)) {
+    return `0${limpo.replace(/^0+/, '')}`;
+  }
+
   // Se for apenas um único dígito de 1 a 9: '1' -> '01', ..., '9' -> '09'
   if (/^[1-9]$/.test(limpo)) {
     return `0${limpo}`;
   }
-  // Se for numeral com prefixo (ex: "Casa 5" -> "Casa 05", "Ap 3" -> "Ap 03")
+
+  // Se for numeral com prefixo de 1 a 9 (ex: "Casa 5" -> "Casa 05", "Ap 3" -> "Ap 03")
   const matchPrefixo = limpo.match(/^((?:casa|apto|ap|unidade|und|lote|bloco|quadra)\.?\s*)([1-9])$/i);
   if (matchPrefixo) {
     return `${matchPrefixo[1]}0${matchPrefixo[2]}`;

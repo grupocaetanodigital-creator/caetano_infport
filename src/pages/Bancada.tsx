@@ -49,7 +49,8 @@ import {
   obterListaBlocosOuTorres,
   getNomeRotuloBloco,
   getNomeRotuloUnidade,
-  isEstruturaCasas
+  isEstruturaCasas,
+  autoCorrigirZeroEsquerda
 } from '../services/condominioService';
 import { supabase } from '../services/supabase';
 
@@ -292,7 +293,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
   const handleAdicionarUnidade = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    const unidadeLimpa = unidadeDigitada.trim();
+    const unidadeLimpa = autoCorrigirZeroEsquerda(unidadeDigitada.trim());
     if (!unidadeLimpa || !estruturaSelecionada || !condominioId) {
       inputUnidadeRef.current?.focus();
       return;
@@ -338,7 +339,14 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
 
   // Teclado virtual Touch Numpad Exclusivo
   const tocarNumeroVirtual = (num: string) => {
-    setUnidadeDigitada(prev => prev + num);
+    setUnidadeDigitada(prev => {
+      const nova = prev + num;
+      // Se começou com zero e virou número maior que 9 (ex: se tinha '05' e digitou '7' -> '57')
+      if (/^0+[1-9]\d+.*$/.test(nova.trim())) {
+        return nova.trim().replace(/^0+/, '');
+      }
+      return nova;
+    });
   };
 
   const apagarUltimoDigito = () => {

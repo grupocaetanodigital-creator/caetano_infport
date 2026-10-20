@@ -1217,27 +1217,27 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
   };
 
   /**
-   * Auto-corrige unidades de 1 a 9 inserindo o '0' à esquerda na hora
-   * caso o operador esqueça de colocar, garantindo padronização imediata.
+   * Trata a digitação da unidade na triagem sem forçar zero enquanto o operador digita.
+   * Se o valor contiver zero espúrio em número maior que 9 (ex: se tinha '05' e digitou '7' -> vira '57'),
+   * remove imediatamente o zero espúrio para evitar '057'.
+   * O zero à esquerda só é padronizado (01 a 09) ao sair do campo (onBlur) ou ao salvar.
    */
   const handleDigitarUnidadeTriagem = (valor: string) => {
     const blocoEfetivo = eEstruturaCasas ? 'Casa' : blocoTriagem;
-    setUnidadeTriagem(valor);
 
     if (timerCorrecaoUnidadeRef.current) {
       clearTimeout(timerCorrecaoUnidadeRef.current);
     }
 
-    // Se digitou número isolado de 1 a 9, agenda auto-correção imediata após breve pausa de 450ms
-    if (/^[1-9]$/.test(valor.trim())) {
-      timerCorrecaoUnidadeRef.current = setTimeout(() => {
-        const corrigida = autoCorrigirZeroEsquerda(valor);
-        setUnidadeTriagem(corrigida);
-        buscarMoradoresEChecarAgrupamento(corrigida, blocoEfetivo);
-      }, 450);
+    // Se o operador digitou número maior que 9 com zero à esquerda (ex: '057' ou '0117'),
+    // remove imediatamente o zero espúrio!
+    let valorHigienizado = valor;
+    if (/^0+[1-9]\d+.*$/.test(valor.trim())) {
+      valorHigienizado = valor.trim().replace(/^0+/, '');
     }
 
-    buscarMoradoresEChecarAgrupamento(valor, blocoEfetivo);
+    setUnidadeTriagem(valorHigienizado);
+    buscarMoradoresEChecarAgrupamento(valorHigienizado, blocoEfetivo);
   };
 
   const handleBlurUnidadeTriagem = () => {
@@ -2524,11 +2524,6 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center justify-between">
                       <span>{rotuloUnidade} *</span>
-                      {/^[1-9]$/.test(unidadeTriagem.trim()) && (
-                        <span className="text-[10px] text-emerald-600 font-bold animate-pulse">
-                          Auto-ajustando para 0{unidadeTriagem.trim()}...
-                        </span>
-                      )}
                     </label>
                     <input
                       type="text"
@@ -4748,7 +4743,10 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                     type="text"
                     required
                     value={editPacoteUnidade}
-                    onChange={(e) => setEditPacoteUnidade(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditPacoteUnidade(/^0+[1-9]\d+.*$/.test(v.trim()) ? v.trim().replace(/^0+/, '') : v);
+                    }}
                     onBlur={() => setEditPacoteUnidade(autoCorrigirZeroEsquerda(editPacoteUnidade))}
                     placeholder="Unidade"
                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"

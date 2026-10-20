@@ -2858,7 +2858,10 @@ export default function Cadastros({ usuarioLogado }: CadastrosProps) {
                               type="text"
                               required
                               value={unidadeMorador}
-                              onChange={(e) => setUnidadeMorador(e.target.value)}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setUnidadeMorador(/^0+[1-9]\d+.*$/.test(v.trim()) ? v.trim().replace(/^0+/, '') : v);
+                              }}
                               onBlur={() => setUnidadeMorador(autoCorrigirZeroEsquerda(unidadeMorador))}
                               placeholder={eCasasModal ? "Ex: 01 ou 117" : "Ex: 01 ou 101"}
                               className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:border-purple-500 focus:outline-none"
