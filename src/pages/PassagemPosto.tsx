@@ -1005,12 +1005,13 @@ export default function PassagemPosto({ usuarioLogado, onTrocarOperador }: Passa
         ultimaRondaStatus: consolidacao.rondas.temDivergencias ? 'Divergências Mapeadas' : '100% Auditada'
       };
 
-      const novaPassagem = {
+      const novaPassagem: any = {
         condominio_id: usuarioLogado.condominio_id,
-        condominio_nome: nomeCondominioFinal,
         codigo: codigoPas,
         operador_sainte_nome: usuarioLogado?.nome || usuarioLogado?.login,
         operador_entrante_nome: opEntrante.nome || opEntrante.login,
+        operador_sainte_id: usuarioLogado?.id || null,
+        operador_entrante_id: opEntrante?.id || null,
         checklist: checklist,
         pendencias: snapshotConsolidado,
         observacoes: observacoes.trim() || 'Sem observações gravadas para o próximo turno.',

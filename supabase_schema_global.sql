@@ -538,7 +538,8 @@ ALTER TABLE passagens_posto
   ADD COLUMN IF NOT EXISTS divergencia TEXT,
   ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Concluída',
   ADD COLUMN IF NOT EXISTS operador_sainte_nome TEXT,
-  ADD COLUMN IF NOT EXISTS operador_entrante_nome TEXT;
+  ADD COLUMN IF NOT EXISTS operador_entrante_nome TEXT,
+  ADD COLUMN IF NOT EXISTS condominio_nome TEXT;
 
 -- ==============================================================================
 -- 14. TABELA: ocorrencias (Livro Digital de Ocorrências)

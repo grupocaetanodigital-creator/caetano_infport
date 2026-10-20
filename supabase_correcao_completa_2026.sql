@@ -608,6 +608,7 @@ CREATE TABLE IF NOT EXISTS public.passagens_posto (
 
 ALTER TABLE public.passagens_posto
   ADD COLUMN IF NOT EXISTS condominio_id UUID,
+  ADD COLUMN IF NOT EXISTS condominio_nome TEXT,
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ------------------------------------------------------------------------------
