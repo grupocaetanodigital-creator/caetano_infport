@@ -358,6 +358,16 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
   const rotuloBloco = getNomeRotuloBloco(configCondominio?.tipo_estrutura);
   const rotuloUnidade = getNomeRotuloUnidade(configCondominio?.tipo_estrutura);
 
+  // Formatação limpa de identificação: 'Casa 07' se for condomínio de casas, ou '1506A' direto se for apartamento
+  const formatarIdentificacaoUnidade = (unidade: string) => {
+    const ehCasas = isEstruturaCasas(configCondominio?.tipo_estrutura) || rotuloBloco.toLowerCase().includes('casa') || rotuloUnidade.toLowerCase().includes('casa');
+    if (ehCasas) {
+      if (unidade.toLowerCase().startsWith('casa')) return unidade;
+      return `Casa ${unidade}`;
+    }
+    return unidade.toUpperCase();
+  };
+
   // Botão ativo atual
   const localAtivoAtual = useMemo(() => {
     return locaisConfig.find(l => l.id === localSelecionadoId) || locaisConfig.find(l => l.ativo) || LOCAIS_PADRAO_BANCADA[0];
@@ -1102,15 +1112,6 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                       {totalVolumesEstruturaAtiva} vol.
                     </span>
                   )}
-                  {/* Ícone de engrenagem para configurar locais */}
-                  <button
-                    type="button"
-                    onClick={abrirModalConfigLocais}
-                    title="Configurar locais de armazenamento das encomendas (Bancada, Chão, Fora...)"
-                    className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-100 active:scale-95 rounded-lg border border-slate-300 transition cursor-pointer shadow-2xs"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
 
@@ -1135,7 +1136,7 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                 )}
               </div>
 
-              {/* CONTEÚDO DA LISTA COM CARDS LIMPOS E INTUITIVOS */}
+              {/* CONTEÚDO DA LISTA COM CARDS LIMPOS, ERGONÔMICOS E INTUITIVOS */}
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px]">
                 {itensEstruturaAtivaFiltrados.length === 0 ? (
                   <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl my-auto">
@@ -1153,124 +1154,121 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                     return (
                       <div
                         key={item.id}
-                        className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 shadow-2xs ${
+                        className={`p-3 sm:p-3.5 rounded-2xl border transition flex items-center justify-between gap-3 shadow-2xs ${
                           isConferido
-                            ? 'bg-emerald-50/50 border-emerald-300/80'
-                            : 'bg-slate-50 hover:bg-amber-50/50 border-slate-200'
+                            ? 'bg-emerald-50/50 border-emerald-300/80 ring-1 ring-emerald-300/30'
+                            : 'bg-white hover:bg-slate-50/80 border-slate-200'
                         }`}
                       >
-                        {/* IDENTIFICAÇÃO DA UNIDADE */}
-                        <div className="flex items-center gap-2.5 sm:gap-3">
-                          <div
-                            className={`w-11 h-11 rounded-xl font-black text-base flex items-center justify-center shadow-xs flex-shrink-0 select-none ${
-                              isConferido
-                                ? 'bg-emerald-700 text-white'
-                                : 'bg-amber-600 text-white'
-                            }`}
-                          >
-                            {item.unidade}
-                          </div>
+                        {/* IDENTIFICAÇÃO DA UNIDADE (EX: CASA 07 OU 1506A), VOLUMES, LOCAL E HORA/OPERADOR EM LINHA ÚNICA */}
+                        <div className="min-w-0 flex-1">
+                          {/* LINHA 1: IDENTIFICAÇÃO PRINCIPAL DA UNIDADE + BADGES (VOLUMES E LOCAL) */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                              {formatarIdentificacaoUnidade(item.unidade)}
+                            </span>
 
-                          <div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-sm font-black text-slate-900">
-                                {rotuloUnidade} {item.unidade}
+                            {/* NÚMERO DE VOLUMES E VOL (EX: 1 VOL, 2 VOL) */}
+                            <span className="px-2 py-0.5 rounded-md text-xs font-black bg-amber-100 text-amber-950 border border-amber-300 shrink-0">
+                              {item.volumes} vol
+                            </span>
+
+                            {/* LOCAL FÍSICO DE ARMAZENAMENTO (BANCADA, CHÃO, FORA) */}
+                            {item.local_armazenamento && (
+                              <span className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold border flex items-center gap-1 shrink-0 ${
+                                item.local_armazenamento.toLowerCase().includes('chão') || item.local_armazenamento.toLowerCase().includes('chao')
+                                  ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                  : item.local_armazenamento.toLowerCase().includes('fora')
+                                  ? 'bg-slate-200 text-slate-800 border-slate-300'
+                                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                              }`}>
+                                <MapPin className="w-3 h-3 text-amber-700 shrink-0" />
+                                <span>{item.local_armazenamento}</span>
                               </span>
-
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
-                                {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
-                              </span>
-
-                              {item.local_armazenamento && (
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border flex items-center gap-0.5 ${
-                                  item.local_armazenamento.toLowerCase().includes('chão') || item.local_armazenamento.toLowerCase().includes('chao')
-                                    ? 'bg-purple-100 text-purple-900 border-purple-300'
-                                    : item.local_armazenamento.toLowerCase().includes('fora')
-                                    ? 'bg-slate-200 text-slate-800 border-slate-300'
-                                    : 'bg-amber-100 text-amber-900 border-amber-300'
-                                }`}>
-                                  <MapPin className="w-3 h-3 text-amber-700" />
-                                  {item.local_armazenamento}
-                                </span>
-                              )}
-
-                              {isConferido && (
-                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-0.5">
-                                  <Check className="w-3 h-3" />
-                                  Conferido
-                                </span>
-                              )}
-                            </div>
-
-                            {item.observacao && (
-                              <p className="text-[11px] text-slate-600 font-medium italic mt-0.5">
-                                {item.observacao}
-                              </p>
                             )}
 
-                            <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                              <Clock className="w-3 h-3" />
-                              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • por {item.operador_nome || 'Portaria'}
-                            </span>
+                            {isConferido && (
+                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-0.5 shrink-0">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span>Conferido</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* OBSERVAÇÃO SE HOUVER */}
+                          {item.observacao && (
+                            <p className="text-xs text-slate-600 font-medium italic mt-0.5 truncate">
+                              {item.observacao}
+                            </p>
+                          )}
+
+                          {/* HORA E OPERADOR EM LINHA ÚNICA */}
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium whitespace-nowrap mt-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="truncate">Operador: <strong className="text-slate-700 font-semibold">{item.operador_nome || 'Portaria'}</strong></span>
                           </div>
                         </div>
 
-                        {/* AÇÕES RÁPIDAS (INCREMENTAR, DECREMENTAR, BAIXA E EXCLUIR) */}
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {/* BOTÕES + E - */}
-                          <div className="flex items-center bg-white rounded-lg border border-slate-300 shadow-2xs">
+                        {/* COLUNA DE AÇÕES: QTD NO TOPO E BOTÃO DE BAIXA LOGO ABAIXO DE ONDE CONFIGURA QTD */}
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          {/* LINHA SUPERIOR: AJUSTAR QTD COM - E + E BOTÃO EXCLUIR */}
+                          <div className="flex items-center gap-1">
+                            <div className="flex items-center bg-white rounded-lg border border-slate-300 shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAlterarVolumeItem(item, -1);
+                                }}
+                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-l-lg transition cursor-pointer"
+                                title="Diminuir 1 volume"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="px-2 text-xs font-black text-slate-900 min-w-[20px] text-center">
+                                {item.volumes}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAlterarVolumeItem(item, 1);
+                                }}
+                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-r-lg transition cursor-pointer"
+                                title="Adicionar +1 volume"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {/* BOTÃO EXCLUIR */}
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleAlterarVolumeItem(item, -1);
+                                handleRemoverItem(item);
                               }}
-                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-l-lg transition cursor-pointer"
-                              title="Diminuir 1 volume"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer active:scale-95"
+                              title="Excluir lançamento"
                             >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <span className="px-2 text-xs font-black text-slate-900">
-                              {item.volumes}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAlterarVolumeItem(item, 1);
-                              }}
-                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-r-lg transition cursor-pointer"
-                              title="Adicionar +1 volume"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
 
-                          {/* BOTÃO DAR BAIXA / ENTREGAR */}
+                          {/* LINHA INFERIOR: BOTÃO DE BAIXA LOGO ABAIXO DE ONDE CONFIGURA QTD */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               abrirMenuBaixa(item);
                             }}
-                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                            className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95"
                             title="Opções de baixa e entrega"
                           >
-                            <Check className="w-3.5 h-3.5" />
-                            Baixa
-                          </button>
-
-                          {/* BOTÃO EXCLUIR */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoverItem(item);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer active:scale-95"
-                            title="Excluir lançamento"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Baixa</span>
                           </button>
                         </div>
                       </div>
@@ -1333,14 +1331,6 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                   {estatisticas.totalVolumes} vol. em {estatisticas.totalUnidades} un.
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={abrirModalConfigLocais}
-                title="Configurar locais de armazenamento das encomendas"
-                className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-100 active:scale-95 rounded-lg border border-slate-300 transition cursor-pointer shadow-2xs"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
@@ -1807,14 +1797,14 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                               {item.estrutura}
                             </span>
                             <span className="text-base font-black text-slate-900">
-                              {rotuloUnidade} {item.unidade}
+                              {formatarIdentificacaoUnidade(item.unidade)}
                             </span>
                             <span className={`px-2 py-0.5 rounded-full text-xs font-black border ${
                               isConferido
                                 ? 'bg-emerald-200 text-emerald-950 border-emerald-300'
                                 : 'bg-amber-100 text-amber-900 border-amber-300'
                             }`}>
-                              {item.volumes} {item.volumes > 1 ? 'volumes' : 'volume'}
+                              {item.volumes} vol
                             </span>
                             {item.local_armazenamento && (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-0.5 ${
@@ -1831,23 +1821,24 @@ export default function Bancada({ usuarioLogado, onNavegar }: BancadaProps) {
                           </div>
 
                           {item.observacao && (
-                            <p className="text-xs text-slate-600 font-medium italic mt-0.5">
+                            <p className="text-xs text-slate-600 font-medium italic mt-0.5 truncate">
                               {item.observacao}
                             </p>
                           )}
 
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {item.operador_nome || 'Portaria'}
-                            </span>
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium whitespace-nowrap mt-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="truncate">Operador: <strong className="text-slate-700 font-semibold">{item.operador_nome || 'Portaria'}</strong></span>
+                            <span className="text-slate-300">•</span>
                             {isConferido ? (
-                              <span className="text-[10px] font-black text-emerald-700 flex items-center gap-0.5">
-                                ✓ Conferido no Balcão
+                              <span className="text-[11px] font-black text-emerald-700">
+                                ✓ Conferido
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5">
-                                ⏳ Pendente de Checagem
+                              <span className="text-[11px] font-bold text-amber-700">
+                                ⏳ Pendente
                               </span>
                             )}
                           </div>
