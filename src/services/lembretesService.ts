@@ -204,6 +204,48 @@ export function notificarAtualizacaoLembretes(condominioId?: string): void {
   }
 }
 
+const FINALIZADOS_REGISTRY_PREFIX = 'infport_lembretes_finalizados_reg_';
+
+/**
+ * Registro local persistente de lembretes finalizados para garantir imunidade
+ * a recarregamentos ou tabelas sem a coluna "finalizado" no Supabase.
+ */
+function obterFinalizadosRegistry(condominioId: string): Record<string, { finalizado_em: string; finalizado_por_nome: string; finalizado_por_id?: string | null }> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(`${FINALIZADOS_REGISTRY_PREFIX}${condominioId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function registrarFinalizado(condominioId: string, id: string, nome: string, idOp?: string | null, dataIso?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const reg = obterFinalizadosRegistry(condominioId);
+    reg[id] = {
+      finalizado_em: dataIso || new Date().toISOString(),
+      finalizado_por_nome: nome,
+      finalizado_por_id: idOp || null
+    };
+    localStorage.setItem(`${FINALIZADOS_REGISTRY_PREFIX}${condominioId}`, JSON.stringify(reg));
+  } catch (err) {
+    console.warn('Erro ao registrar lembrete finalizado:', err);
+  }
+}
+
+function removerFinalizado(condominioId: string, id: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const reg = obterFinalizadosRegistry(condominioId);
+    if (reg[id]) {
+      delete reg[id];
+      localStorage.setItem(`${FINALIZADOS_REGISTRY_PREFIX}${condominioId}`, JSON.stringify(reg));
+    }
+  } catch {}
+}
+
 /**
  * Cache local persistente para uso offline ou enquanto o banco ainda não recebeu a migration
  */
@@ -229,11 +271,35 @@ function salvarLembretesCache(condominioId: string, lembretes: LembretePortaria[
 
 /**
  * Normaliza um item garantindo a presença de todos os campos do ciclo de vida
+ * e identificando se foi finalizado por coluna, por metadados ou pelo registro local
  */
-function normalizarLembrete(raw: any): LembretePortaria {
+function normalizarLembrete(raw: any, condominioId?: string): LembretePortaria {
   const agora = Date.now();
-  const ehAdm = Boolean(raw.eh_adm || raw.remetente_tipo === 'adm');
-  let finalizado = Boolean(raw.finalizado);
+  const idCondo = condominioId || raw.condominio_id || '';
+  const regFinalizados = idCondo ? obterFinalizadosRegistry(idCondo) : {};
+  const dadosReg = raw.id ? regFinalizados[raw.id] : undefined;
+
+  const rawTipo = String(raw.tipo || '');
+  const rawNomeLido = String(raw.lido_por_nome || '');
+  const rawRemetenteNome = String(raw.remetente_nome || '');
+
+  // Detecta se foi marcado como finalizado por qualquer via (coluna, prefixo no tipo, lido_por_nome ou registry local)
+  const marcadoFinalizadoFallback =
+    rawTipo.startsWith('[FINALIZADO]') ||
+    rawNomeLido.startsWith('[FINALIZADO]') ||
+    Boolean(dadosReg);
+
+  let finalizado = Boolean(raw.finalizado || marcadoFinalizadoFallback);
+
+  // Detecta se é lembrete do ADM
+  const ehAdm = Boolean(
+    raw.eh_adm ||
+    raw.remetente_tipo === 'adm' ||
+    rawTipo.includes('[ADM]') ||
+    rawRemetenteNome.toLowerCase().includes('administração') ||
+    rawRemetenteNome.toLowerCase().includes('nível 0') ||
+    rawRemetenteNome.toLowerCase().includes('admin')
+  );
 
   // Auto-expiração se for lembrete do ADM com data limite ultrapassada
   if (ehAdm && raw.data_limite && !finalizado) {
@@ -243,22 +309,32 @@ function normalizarLembrete(raw: any): LembretePortaria {
     }
   }
 
+  // Limpa prefixos técnicos para exibição limpa e bonita na interface
+  const tipoLimpo = rawTipo
+    .replace(/^\[FINALIZADO\]\s*/i, '')
+    .replace(/^\[ADM\]\s*/i, '')
+    .trim() || (ehAdm ? 'Lembrete do ADM' : 'Aviso Geral');
+
+  const lidoPorNomeLimpo = rawNomeLido
+    .replace(/^\[FINALIZADO\]\s*/i, '')
+    .trim() || null;
+
   return {
     id: raw.id || `lemb-${Date.now()}`,
     condominio_id: raw.condominio_id,
     unidade_bloco: raw.unidade_bloco || 'Geral',
-    remetente_tipo: raw.remetente_tipo || 'morador',
-    remetente_nome: raw.remetente_nome || '',
+    remetente_tipo: raw.remetente_tipo || (ehAdm ? 'adm' : 'morador'),
+    remetente_nome: raw.remetente_nome || (ehAdm ? 'Administração (Nível 0)' : ''),
     mensagem: raw.mensagem || '',
-    tipo: raw.tipo || (ehAdm ? 'Lembrete do ADM' : 'Aviso Geral'),
-    lido: Boolean(raw.lido),
-    lido_em: raw.lido_em || null,
-    lido_por_nome: raw.lido_por_nome || null,
+    tipo: tipoLimpo,
+    lido: Boolean(raw.lido || finalizado),
+    lido_em: raw.lido_em || (finalizado ? (dadosReg?.finalizado_em || raw.updated_at || new Date().toISOString()) : null),
+    lido_por_nome: lidoPorNomeLimpo,
     lido_por_id: raw.lido_por_id || null,
     finalizado,
-    finalizado_em: raw.finalizado_em || (finalizado ? (raw.data_limite || new Date().toISOString()) : null),
-    finalizado_por_nome: raw.finalizado_por_nome || (finalizado && ehAdm && raw.data_limite ? 'Auto-baixa Data Limite (ADM)' : null),
-    finalizado_por_id: raw.finalizado_por_id || null,
+    finalizado_em: raw.finalizado_em || dadosReg?.finalizado_em || (finalizado ? (raw.updated_at || raw.data_limite || new Date().toISOString()) : null),
+    finalizado_por_nome: raw.finalizado_por_nome || dadosReg?.finalizado_por_nome || (finalizado ? (lidoPorNomeLimpo || (ehAdm && raw.data_limite ? 'Auto-baixa Data Limite (ADM)' : 'Portaria')) : null),
+    finalizado_por_id: raw.finalizado_por_id || dadosReg?.finalizado_por_id || null,
     eh_adm: ehAdm,
     data_limite: raw.data_limite || null,
     created_at: raw.created_at || new Date().toISOString(),
@@ -323,10 +399,11 @@ function gerarExemplosIniciais(condominioId: string): LembretePortaria[] {
 export async function buscarLembretes(condominioId: string): Promise<{
   lembretes: LembretePortaria[];
   tabelaExisteNoSupabase: boolean;
+  colunasNovasExistemNoSupabase: boolean;
   erro?: string;
 }> {
   if (!condominioId) {
-    return { lembretes: [], tabelaExisteNoSupabase: true };
+    return { lembretes: [], tabelaExisteNoSupabase: true, colunasNovasExistemNoSupabase: true };
   }
 
   try {
@@ -343,7 +420,7 @@ export async function buscarLembretes(condominioId: string): Promise<{
         error.message?.includes('schema cache') ||
         error.message?.includes('does not exist')
       ) {
-        let emCache = obterLembretesCache(condominioId).map(normalizarLembrete);
+        let emCache = obterLembretesCache(condominioId).map(it => normalizarLembrete(it, condominioId));
         if (emCache.length === 0) {
           emCache = gerarExemplosIniciais(condominioId);
           salvarLembretesCache(condominioId, emCache);
@@ -351,30 +428,60 @@ export async function buscarLembretes(condominioId: string): Promise<{
         return {
           lembretes: emCache,
           tabelaExisteNoSupabase: false,
+          colunasNovasExistemNoSupabase: false,
           erro: 'A tabela "lembretes_portaria" ainda precisa ser criada no Supabase SQL Editor.'
         };
       }
 
-      const emCache = obterLembretesCache(condominioId).map(normalizarLembrete);
+      const emCache = obterLembretesCache(condominioId).map(it => normalizarLembrete(it, condominioId));
       return {
         lembretes: emCache,
         tabelaExisteNoSupabase: true,
+        colunasNovasExistemNoSupabase: false,
         erro: error.message
       };
     }
 
-    const lista = Array.isArray(data) ? data.map(normalizarLembrete) : [];
-    salvarLembretesCache(condominioId, lista);
+    const colunasNovas = Boolean(data && data.length > 0 && 'finalizado' in data[0] && 'eh_adm' in data[0]);
+    const lista = Array.isArray(data) ? data.map(item => normalizarLembrete(item, condominioId)) : [];
+
+    // Mesclagem segura com cache local para NUNCA reverter um item finalizado
+    const cacheLocal = obterLembretesCache(condominioId);
+    const mapaAtual = new Map<string, LembretePortaria>();
+    lista.forEach(item => mapaAtual.set(item.id, item));
+
+    cacheLocal.forEach(c => {
+      if (mapaAtual.has(c.id)) {
+        const itemRemoto = mapaAtual.get(c.id)!;
+        if (c.finalizado && !itemRemoto.finalizado) {
+          mapaAtual.set(c.id, {
+            ...itemRemoto,
+            finalizado: true,
+            finalizado_em: c.finalizado_em || itemRemoto.finalizado_em,
+            finalizado_por_nome: c.finalizado_por_nome || itemRemoto.finalizado_por_nome,
+            finalizado_por_id: c.finalizado_por_id || itemRemoto.finalizado_por_id
+          });
+        }
+      }
+    });
+
+    const listaFinal = Array.from(mapaAtual.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    salvarLembretesCache(condominioId, listaFinal);
 
     return {
-      lembretes: lista,
-      tabelaExisteNoSupabase: true
+      lembretes: listaFinal,
+      tabelaExisteNoSupabase: true,
+      colunasNovasExistemNoSupabase: colunasNovas
     };
   } catch (err: any) {
-    const emCache = obterLembretesCache(condominioId).map(normalizarLembrete);
+    const emCache = obterLembretesCache(condominioId).map(item => normalizarLembrete(item, condominioId));
     return {
       lembretes: emCache,
       tabelaExisteNoSupabase: false,
+      colunasNovasExistemNoSupabase: false,
       erro: err?.message || 'Falha de conexão com o banco de dados.'
     };
   }
@@ -533,7 +640,10 @@ export async function finalizarLembrete(
     }
   }
 
-  // 1. Atualiza cache local
+  // 1. Registra no registro persistente local de finalizados
+  registrarFinalizado(condominioId, id, nome, operadorId, agora);
+
+  // 2. Atualiza cache local
   const atualizados = cache.map((item) => {
     if (item.id === id) {
       return {
@@ -551,7 +661,7 @@ export async function finalizarLembrete(
   salvarLembretesCache(condominioId, atualizados);
   notificarAtualizacaoLembretes(condominioId);
 
-  // 2. Persiste no Supabase
+  // 3. Persiste no Supabase com duplo fallback
   try {
     const payloadUpdate: any = {
       lido: true,
@@ -567,13 +677,21 @@ export async function finalizarLembrete(
       .update(payloadUpdate)
       .eq('id', id);
 
-    // Fallback caso as colunas novas finalizado/finalizado_em ainda não existam no banco
-    if (error && (error.message?.includes('finalizado') || (error as any).code === '42703')) {
-      delete payloadUpdate.finalizado;
-      delete payloadUpdate.finalizado_em;
-      delete payloadUpdate.finalizado_por_nome;
-      delete payloadUpdate.finalizado_por_id;
-      await supabase.from('lembretes_portaria').update(payloadUpdate).eq('id', id);
+    // Se o banco ainda não tiver as colunas novas de finalizado (erro PGRST204 ou 42703):
+    // Salva a finalização nos campos canônicos existentes tipo e lido_por_nome
+    if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || (error as any).code === '42703')) {
+      const tipoLimpo = (alvo?.tipo || 'Aviso Geral').replace(/^\[FINALIZADO\]\s*/i, '');
+      await supabase
+        .from('lembretes_portaria')
+        .update({
+          lido: true,
+          tipo: `[FINALIZADO] ${tipoLimpo}`,
+          lido_por_nome: `[FINALIZADO] ${nome}`,
+          lido_por_id: operadorId || null,
+          lido_em: agora,
+          updated_at: agora
+        })
+        .eq('id', id);
     }
 
     registrarAtividade({
@@ -719,6 +837,7 @@ export async function excluirLembrete(
   const cache = obterLembretesCache(condominioId);
   const filtrados = cache.filter((item) => item.id !== id);
   salvarLembretesCache(condominioId, filtrados);
+  removerFinalizado(condominioId, id);
   notificarAtualizacaoLembretes(condominioId);
 
   try {
