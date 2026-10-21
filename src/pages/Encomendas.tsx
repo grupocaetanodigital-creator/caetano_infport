@@ -283,9 +283,22 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       const pacotes = todosItensRetidos
         .filter((item: any) => saoUnidadesEquivalentes(item.unidade, termoB))
         .map((item: any) => item.id);
-      if (pacotes.length > 0 && itensSelecionadosIds.length === 0) {
-        setItensSelecionadosIds(pacotes);
-        setItensCandidatosEntrega(pacotes);
+      
+      if (pacotes.length > 0) {
+        const jaEstaExatamenteSelecionado = 
+          itensSelecionadosIds.length === pacotes.length &&
+          pacotes.every(id => itensSelecionadosIds.includes(id));
+
+        if (!jaEstaExatamenteSelecionado) {
+          // Se a seleção atual continha pacotes de outra unidade ou estava vazia, isola para a nova unidade pesquisada
+          const itensAtuais = todosItensRetidos.filter(i => itensSelecionadosIds.includes(i.id));
+          const temOutraUnidade = itensAtuais.some(i => !saoUnidadesEquivalentes(i.unidade, termoB));
+
+          if (temOutraUnidade || itensSelecionadosIds.length === 0) {
+            setItensSelecionadosIds(pacotes);
+            setItensCandidatosEntrega(pacotes);
+          }
+        }
       }
     }
   }, [etapa, buscaBaixaGeral, todosItensRetidos]);
@@ -680,16 +693,28 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
                 if (pacoteEncontrado) {
                   tocarBipSucesso();
-                  // Já deixa o pacote selecionado no lote de entrega imediatamente
-                  setItensSelecionadosIds(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
-                  setItensCandidatosEntrega(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
-                  setUltimoPacoteBipado(pacoteEncontrado);
-
+                  const primeiroItem = todosItensRetidos.find(i => itensSelecionadosIds.includes(i.id));
                   const labelUnid = formatarIdentificacaoUnidade(pacoteEncontrado.unidade, pacoteEncontrado.bloco, condoConfig?.tipo_estrutura);
-                  setMensagem({
-                    tipo: 'sucesso',
-                    texto: `✅ Pacote ${pacoteEncontrado.codigo_barras || valorLido} (${labelUnid}) adicionado ao lote!`
-                  });
+
+                  if (primeiroItem && !saoUnidadesEquivalentes(primeiroItem.unidade, pacoteEncontrado.unidade)) {
+                    // Unidade diferente: isola o checklist para a nova unidade
+                    setItensSelecionadosIds([pacoteEncontrado.id]);
+                    setItensCandidatosEntrega([pacoteEncontrado.id]);
+                    setUltimoPacoteBipado(pacoteEncontrado);
+                    const labelAntiga = formatarIdentificacaoUnidade(primeiroItem.unidade, primeiroItem.bloco, condoConfig?.tipo_estrutura);
+                    setMensagem({
+                      tipo: 'alerta',
+                      texto: `⚠️ Seleção alterada para ${labelUnid} (pacotes de ${labelAntiga} desmarcados para não misturar no checklist).`
+                    });
+                  } else {
+                    setItensSelecionadosIds(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+                    setItensCandidatosEntrega(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+                    setUltimoPacoteBipado(pacoteEncontrado);
+                    setMensagem({
+                      tipo: 'sucesso',
+                      texto: `✅ Pacote ${pacoteEncontrado.codigo_barras || valorLido} (${labelUnid}) adicionado ao lote!`
+                    });
+                  }
 
                   // Se NÃO estiver em modo lote, fecha a câmera; se estiver em modo lote, continua aberto para escanear mais pacotes!
                   if (!leitorModoLote) {
@@ -1545,8 +1570,9 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       itensIds: string[];
     }> = {};
 
-    // Considera apenas o que está sendo pesquisado quando houver busca ativa
-    const baseItens = buscaBaixaGeral.trim() ? itensRetidosFiltrados : todosItensRetidos.filter((item: any) => {
+    // Mantém as badges de todas as unidades com pendências visíveis no bloco selecionado
+    // para que o operador possa visualizar e alternar de unidade diretamente com 1 clique
+    const baseItens = todosItensRetidos.filter((item: any) => {
       if (abaBlocoSelecionada !== 'TODOS') {
         const blocoItem = getRotuloBlocoParaFiltro(item.bloco);
         if (blocoItem !== abaBlocoSelecionada) return false;
@@ -1585,7 +1611,7 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
       if (b.qtd !== a.qtd) return b.qtd - a.qtd;
       return a.unidade.localeCompare(b.unidade, undefined, { numeric: true, sensitivity: 'base' });
     });
-  }, [todosItensRetidos, abaBlocoSelecionada, buscaBaixaGeral, itensRetidosFiltrados, condoConfig]);
+  }, [todosItensRetidos, abaBlocoSelecionada, condoConfig]);
 
   // Lista de itens candidatos ao checklist (preserva itens mesmo se desmarcados temporariamente no checklist)
   const idsParaChecklist = itensCandidatosEntrega.length > 0 
@@ -1635,11 +1661,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
     setBuscaBaixaGeral('');
     setAbaBlocoSelecionada('TODOS');
     setTipoFiltroBuscaBaixa('unidade');
+    setItensSelecionadosIds([]);
+    setItensCandidatosEntrega([]);
   };
 
   const handleExecutarBusca = (termoFornecido?: string) => {
     const termo = (termoFornecido !== undefined ? termoFornecido : buscaBaixaGeral).trim();
-    if (!termo) return;
+    if (!termo) {
+      setItensSelecionadosIds([]);
+      setItensCandidatosEntrega([]);
+      return;
+    }
 
     // Se o termo corresponder a um código de barras de algum pacote retido, já seleciona no lote automaticamente
     const pacoteEncontrado = todosItensRetidos.find(i => 
@@ -1648,25 +1680,69 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
     if (pacoteEncontrado) {
       tocarBipSucesso();
-      setItensSelecionadosIds(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
-      setItensCandidatosEntrega(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+      const primeiroItem = todosItensRetidos.find(i => itensSelecionadosIds.includes(i.id));
       const labelUnid = formatarIdentificacaoUnidade(pacoteEncontrado.unidade, pacoteEncontrado.bloco, condoConfig?.tipo_estrutura);
+
+      if (primeiroItem && !saoUnidadesEquivalentes(primeiroItem.unidade, pacoteEncontrado.unidade)) {
+        setItensSelecionadosIds([pacoteEncontrado.id]);
+        setItensCandidatosEntrega([pacoteEncontrado.id]);
+        const labelAntiga = formatarIdentificacaoUnidade(primeiroItem.unidade, primeiroItem.bloco, condoConfig?.tipo_estrutura);
+        setMensagem({
+          tipo: 'alerta',
+          texto: `⚠️ Seleção alterada para ${labelUnid} (pacotes de ${labelAntiga} desmarcados para não misturar no checklist).`
+        });
+      } else {
+        setItensSelecionadosIds(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+        setItensCandidatosEntrega(prev => prev.includes(pacoteEncontrado.id) ? prev : [...prev, pacoteEncontrado.id]);
+        setMensagem({
+          tipo: 'sucesso',
+          texto: `✅ Pacote ${pacoteEncontrado.codigo_barras || termo} (${labelUnid}) selecionado no lote de entrega!`
+        });
+      }
+      return;
+    }
+
+    // Se corresponder à busca por unidade exata, seleciona exclusivamente os pacotes desta unidade
+    const pacotesUnid = todosItensRetidos.filter(i => saoUnidadesEquivalentes(i.unidade, termo));
+    if (pacotesUnid.length > 0) {
+      const ids = pacotesUnid.map(p => p.id);
+      setItensSelecionadosIds(ids);
+      setItensCandidatosEntrega(ids);
+      const labelUnid = formatarIdentificacaoUnidade(pacotesUnid[0].unidade, pacotesUnid[0].bloco, condoConfig?.tipo_estrutura);
       setMensagem({
         tipo: 'sucesso',
-        texto: `✅ Pacote ${pacoteEncontrado.codigo_barras || termo} (${labelUnid}) selecionado no lote de entrega!`
+        texto: `✅ ${ids.length} pacote(s) da unidade ${labelUnid} selecionados para conferência!`
       });
     }
   };
 
   const toggleItemSelecao = (id: string) => {
+    const itemClicado = todosItensRetidos.find(i => i.id === id);
+    if (!itemClicado) return;
+
     if (itensSelecionadosIds.includes(id)) {
       const novos = itensSelecionadosIds.filter(item => item !== id);
       setItensSelecionadosIds(novos);
       setItensCandidatosEntrega(novos);
     } else {
-      const novos = [...itensSelecionadosIds, id];
-      setItensSelecionadosIds(novos);
-      setItensCandidatosEntrega(novos);
+      // Verifica se já existem itens selecionados de OUTRA unidade
+      const primeiroItem = todosItensRetidos.find(i => itensSelecionadosIds.includes(i.id));
+      if (primeiroItem && !saoUnidadesEquivalentes(primeiroItem.unidade, itemClicado.unidade)) {
+        // Unidade diferente: isola o checklist exclusivamente para a nova unidade selecionada
+        setItensSelecionadosIds([id]);
+        setItensCandidatosEntrega([id]);
+        setBuscaBaixaGeral(itemClicado.unidade);
+        const labelNova = formatarIdentificacaoUnidade(itemClicado.unidade, itemClicado.bloco, condoConfig?.tipo_estrutura);
+        const labelAntiga = formatarIdentificacaoUnidade(primeiroItem.unidade, primeiroItem.bloco, condoConfig?.tipo_estrutura);
+        setMensagem({
+          tipo: 'info',
+          texto: `ℹ️ Alternado para ${labelNova}. Pacotes de ${labelAntiga} foram desmarcados para não misturar unidades no mesmo checklist.`
+        });
+      } else {
+        const novos = [...itensSelecionadosIds, id];
+        setItensSelecionadosIds(novos);
+        setItensCandidatosEntrega(novos);
+      }
     }
   };
 
@@ -1695,6 +1771,12 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
 
   const desmarcarTodosChecklist = () => {
     setItensSelecionadosIds([]);
+  };
+
+  const limparChecklistCompleto = () => {
+    setItensSelecionadosIds([]);
+    setItensCandidatosEntrega([]);
+    setBuscaBaixaGeral('');
   };
 
   const renderChecklistConferencia = (isModal: boolean = false) => {
@@ -1733,6 +1815,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-medium transition cursor-pointer shadow-2xs"
             >
               Desmarcar
+            </button>
+            <button
+              type="button"
+              onClick={limparChecklistCompleto}
+              className="px-2 py-0.5 rounded bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold transition cursor-pointer shadow-2xs"
+              title="Limpar seleção e remover itens do checklist"
+            >
+              Limpar
             </button>
           </div>
         </div>
@@ -2782,7 +2872,14 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                 <input
                   type="text"
                   value={buscaBaixaGeral}
-                  onChange={(e) => setBuscaBaixaGeral(e.target.value)}
+                  onChange={(e) => {
+                    const novoVal = e.target.value;
+                    setBuscaBaixaGeral(novoVal);
+                    if (!novoVal.trim()) {
+                      setItensSelecionadosIds([]);
+                      setItensCandidatosEntrega([]);
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleExecutarBusca();
@@ -2871,7 +2968,11 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
               {buscaBaixaGeral && (
                 <button
                   type="button"
-                  onClick={() => setBuscaBaixaGeral('')}
+                  onClick={() => {
+                    setBuscaBaixaGeral('');
+                    setItensSelecionadosIds([]);
+                    setItensCandidatosEntrega([]);
+                  }}
                   className="text-[10px] font-bold text-red-600 hover:text-red-700 flex items-center gap-1 transition cursor-pointer"
                 >
                   <X className="w-3 h-3" /> Limpar filtro ({buscaBaixaGeral})
@@ -2891,18 +2992,17 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                       key={item.chave}
                       type="button"
                       onClick={() => {
-                        // Se já estiver selecionado e filtrado, desmarca e limpa filtro
-                        if (todosSelecionados && isFiltroAtivo) {
+                        const estaAtivaComSelecao = (todosSelecionados || isFiltroAtivo) && itensSelecionadosIds.some(id => item.itensIds.includes(id));
+                        if (estaAtivaComSelecao) {
+                          // Se já for a unidade ativa com pacotes selecionados, desmarca tudo e limpa busca
                           setBuscaBaixaGeral('');
-                          setItensSelecionadosIds(prev => prev.filter(id => !item.itensIds.includes(id)));
-                          setItensCandidatosEntrega(prev => prev.filter(id => !item.itensIds.includes(id)));
+                          setItensSelecionadosIds([]);
+                          setItensCandidatosEntrega([]);
                         } else {
-                          // Filtra e seleciona os pacotes da unidade em 1 clique
+                          // Seleciona EXCLUSIVAMENTE os pacotes desta unidade (substitui qualquer outra unidade anterior)
                           setBuscaBaixaGeral(item.unidade);
-                          const outrosIds = itensSelecionadosIds.filter(id => !item.itensIds.includes(id));
-                          const novosIds = [...outrosIds, ...item.itensIds];
-                          setItensSelecionadosIds(novosIds);
-                          setItensCandidatosEntrega(novosIds);
+                          setItensSelecionadosIds(item.itensIds);
+                          setItensCandidatosEntrega(item.itensIds);
                         }
                       }}
                       className={`p-2 rounded-xl border transition flex flex-col justify-between text-left shrink-0 min-w-[135px] max-w-[170px] snap-start cursor-pointer ${
@@ -3133,11 +3233,23 @@ export default function Encomendas({ usuarioLogado }: EncomendasProps) {
                   <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
                   Finalizar Entrega (Baixa)
                 </h4>
-                {itensSelecionadosIds.length > 0 && (
-                  <span className="bg-emerald-600 text-white font-black px-2 py-0.5 rounded text-[10px]">
-                    {itensSelecionadosIds.length} marcado(s)
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {itensSelecionadosIds.length > 0 && (
+                    <span className="bg-emerald-600 text-white font-black px-2 py-0.5 rounded text-[10px]">
+                      {itensSelecionadosIds.length} marcado(s)
+                    </span>
+                  )}
+                  {itensCandidatosObjetos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={limparChecklistCompleto}
+                      className="text-[10px] text-red-600 hover:text-red-700 font-bold bg-white hover:bg-red-50 border border-red-200 px-1.5 py-0.5 rounded cursor-pointer transition flex items-center gap-0.5 shadow-2xs"
+                      title="Limpar seleção e checklist"
+                    >
+                      <X className="w-3 h-3" /> Limpar
+                    </button>
+                  )}
+                </div>
               </div>
 
               {itensCandidatosObjetos.length > 0 ? (
