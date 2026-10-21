@@ -295,6 +295,41 @@ ALTER TABLE IF EXISTS configuracoes
   ADD COLUMN IF NOT EXISTS mod09_passagem_posto BOOLEAN DEFAULT true,
   ADD COLUMN IF NOT EXISTS mod10_prestadores_servico BOOLEAN DEFAULT true;
 
+-- 0.001 Garantir tabela e colunas de lembretes_portaria (Finalização, Lembretes do ADM Nível 0 e Data Limite)
+CREATE TABLE IF NOT EXISTS lembretes_portaria (
+  id TEXT PRIMARY KEY,
+  condominio_id UUID REFERENCES condominios(id) ON DELETE CASCADE,
+  unidade_bloco TEXT NOT NULL,
+  remetente_tipo TEXT NOT NULL DEFAULT 'morador',
+  remetente_nome TEXT,
+  mensagem TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'Aviso Geral',
+  lido BOOLEAN NOT NULL DEFAULT FALSE,
+  lido_em TIMESTAMPTZ,
+  lido_por_nome TEXT,
+  lido_por_id TEXT,
+  finalizado BOOLEAN NOT NULL DEFAULT FALSE,
+  finalizado_em TIMESTAMPTZ,
+  finalizado_por_nome TEXT,
+  finalizado_por_id TEXT,
+  eh_adm BOOLEAN NOT NULL DEFAULT FALSE,
+  data_limite TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE IF EXISTS lembretes_portaria
+  ADD COLUMN IF NOT EXISTS finalizado BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS finalizado_em TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS finalizado_por_nome TEXT,
+  ADD COLUMN IF NOT EXISTS finalizado_por_id TEXT,
+  ADD COLUMN IF NOT EXISTS eh_adm BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS data_limite TIMESTAMPTZ;
+
+ALTER TABLE lembretes_portaria ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Acesso total lembretes_portaria" ON lembretes_portaria;
+CREATE POLICY "Acesso total lembretes_portaria" ON lembretes_portaria FOR ALL USING (true) WITH CHECK (true);
+
 -- 0.01 Garantir colunas na tabela operadores (RBAC e perfis personalizados)
 ALTER TABLE IF EXISTS operadores
   ADD COLUMN IF NOT EXISTS nivel_acesso INTEGER DEFAULT 3,
