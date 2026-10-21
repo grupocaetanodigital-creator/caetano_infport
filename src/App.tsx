@@ -29,6 +29,7 @@ import SupabaseDoctorModal from './components/SupabaseDoctorModal';
 import BotaoNotificacoesLembretes from './components/BotaoNotificacoesLembretes';
 import AlertaNoCondominioTopo from './components/AlertaNoCondominioTopo';
 import ModalLembretesPortaria from './components/ModalLembretesPortaria';
+import { checarEDispararAlarmeTrocaPlantao } from './services/lembretesService';
 import { salvarCacheLocal, obterCacheLocal } from './services/offlineStorageService';
 import { atualizarCacheAutonomia3Horas } from './services/offlineSyncEngine';
 import { registrarAtividade } from './services/auditoriaService';
@@ -474,6 +475,11 @@ export default function App() {
                           opData.funcao?.toLowerCase() === 'síndico' || 
                           opData.funcao?.toLowerCase() === 'sindico';
       mudarModulo(ehSindicoOp ? 'painel_sindico' : 'dashboard');
+
+      // Dispara verificação de alarme de troca/início de plantão se houver lembretes ativos
+      if (opData.condominio_id) {
+        checarEDispararAlarmeTrocaPlantao(opData.condominio_id);
+      }
     } catch (err: any) {
       setErro(`Falha de conexão: ${err.message || 'Erro desconhecido'}`);
     } finally {
@@ -558,6 +564,12 @@ export default function App() {
                         novoOperador.funcao?.toLowerCase() === 'síndico' || 
                         novoOperador.funcao?.toLowerCase() === 'sindico';
     mudarModulo(ehSindicoOp ? 'painel_sindico' : 'dashboard');
+
+    // 6. Toda vez que houver troca de plantão, se tiver algum lembrete, o app dispara o alarme contínuo
+    const idCondAlvo = novoOperador.condominio_id || condominioAtivoId;
+    if (idCondAlvo) {
+      checarEDispararAlarmeTrocaPlantao(idCondAlvo);
+    }
   };
 
   const objCondominioSelecionado = listaCondominios.find(c => c.id === condominioAtivoId);
@@ -1192,10 +1204,16 @@ export default function App() {
           aberto={modalLembretesAberto}
           onFechar={() => setModalLembretesAberto(false)}
           condominioId={condominioAtivoId || operador?.condominio_id || ''}
-          condominioNome={operadorContextoGlobal.condominio_nome}
+          condominioNome={operadorContextoGlobal?.condominio_nome}
           operadorAtual={{
             id: operador?.id,
-            nome: operador?.nome
+            nome: operador?.nome,
+            login: operador?.login,
+            perfil: operador?.perfil,
+            nivel: operador?.nivel,
+            nivel_acesso: operador?.nivel_acesso,
+            nivel_acesso_custom_id: (operador as any)?.nivel_acesso_custom_id,
+            eSuperAdminGlobal: eAdmin
           }}
         />
 

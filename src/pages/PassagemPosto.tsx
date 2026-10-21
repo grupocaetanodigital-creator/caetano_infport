@@ -59,6 +59,7 @@ import {
   ItemBancada, 
   EstruturaResumoBancada 
 } from '../services/bancadaService';
+import { checarEDispararAlarmeTrocaPlantao } from '../services/lembretesService';
 
 interface PassagemPostoProps {
   usuarioLogado?: any;
@@ -1229,6 +1230,12 @@ export default function PassagemPosto({
       }));
       if (opEntrante.condominio_id || usuarioLogado.condominio_id) {
         localStorage.setItem('infport_condominio_ativo_id', opEntrante.condominio_id || usuarioLogado.condominio_id);
+      }
+
+      // 1.1 Dispara verificação do alarme sonoro contínuo de troca de plantão caso haja lembretes
+      const targetCondoId = opEntrante.condominio_id || usuarioLogado.condominio_id;
+      if (targetCondoId) {
+        checarEDispararAlarmeTrocaPlantao(targetCondoId);
       }
 
       // 2. Registro de auditoria no Histórico Absoluto

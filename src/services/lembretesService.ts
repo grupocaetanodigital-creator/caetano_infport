@@ -4,21 +4,40 @@ import { registrarAtividade } from './auditoriaService';
 export interface LembretePortaria {
   id: string;
   condominio_id: string;
-  unidade_bloco: string; // Ex: "Apto 102 - Bloco B"
-  remetente_tipo: 'morador' | 'portaria' | 'supervisao' | 'sindico';
+  unidade_bloco: string; // Ex: "Apto 102 - Bloco B" ou "Geral / ADM"
+  remetente_tipo: 'morador' | 'portaria' | 'supervisao' | 'sindico' | 'adm';
   remetente_nome?: string;
   mensagem: string;
-  tipo: 'Palavra-chave' | 'Instrução' | 'Aviso Geral' | 'Correspondência Urgente' | 'Autorização' | string;
-  lido: boolean;
+  tipo: 'Palavra-chave' | 'Instrução' | 'Aviso Geral' | 'Correspondência Urgente' | 'Autorização' | 'Lembrete do ADM' | string;
+  lido: boolean; // Marcado como ciente
   lido_em?: string | null;
   lido_por_nome?: string | null;
   lido_por_id?: string | null;
+  finalizado: boolean; // Concluído / baixado
+  finalizado_em?: string | null;
+  finalizado_por_nome?: string | null;
+  finalizado_por_id?: string | null;
+  eh_adm?: boolean; // Lembrete oficial emitido pelo Nível 0 (Administrador)
+  data_limite?: string | null; // Data/hora limite de expiração configurada pelo ADM
   created_at: string;
   updated_at?: string;
 }
 
+export interface StatusContagemLembretes {
+  total: number;
+  totalAtivos: number; // Não finalizados
+  pendentesNaoLidos: number; // !lido && !finalizado (piscando laranja)
+  pendentesCientes: number; // lido && !finalizado (piscando azul)
+  ativosAdm: number; // eh_adm && !finalizado (piscando vermelho)
+  finalizados: number; // finalizado === true
+  corAlerta: 'vermelho' | 'laranja' | 'azul' | 'neutro';
+}
+
 const CACHE_PREFIX = 'infport_lembretes_cache_';
 const SOUND_ENABLED_KEY = 'infport_lembretes_sound_enabled';
+const ALARME_TROCA_KEY = 'infport_alarme_troca_plantao';
+
+let alarmeAudioIntervalo: any = null;
 
 /**
  * Retorna se o alerta sonoro para novos recados está habilitado
@@ -80,6 +99,99 @@ export function reproduzirSinalSonoroAviso(): void {
 }
 
 /**
+ * Dispara sinal sonoro contínuo e mais incisivo para a Troca de Plantão
+ */
+export function tocarBipAlertaTrocaPlantao(): void {
+  if (typeof window === 'undefined' || !isSomHabilitado()) return;
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const agora = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(587.33, agora); // D5
+    osc.frequency.setValueAtTime(880, agora + 0.14); // A5
+    gain.gain.setValueAtTime(0.18, agora);
+    gain.gain.exponentialRampToValueAtTime(0.001, agora + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(agora);
+    osc.stop(agora + 0.35);
+  } catch {}
+}
+
+/**
+ * Inicia o alarme sonoro contínuo de troca de plantão (repete até o operador clicar no ícone)
+ */
+export function iniciarAlarmeTrocaPlantao(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(ALARME_TROCA_KEY, 'true');
+  tocarBipAlertaTrocaPlantao();
+  if (alarmeAudioIntervalo) clearInterval(alarmeAudioIntervalo);
+  alarmeAudioIntervalo = setInterval(() => {
+    tocarBipAlertaTrocaPlantao();
+  }, 3500);
+
+  window.dispatchEvent(new CustomEvent('alarme_troca_plantao_mudou', { detail: { ativo: true } }));
+}
+
+/**
+ * Para imediatamente o alarme sonoro de troca de plantão
+ */
+export function pararAlarmeTrocaPlantao(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(ALARME_TROCA_KEY);
+  if (alarmeAudioIntervalo) {
+    clearInterval(alarmeAudioIntervalo);
+    alarmeAudioIntervalo = null;
+  }
+  window.dispatchEvent(new CustomEvent('alarme_troca_plantao_mudou', { detail: { ativo: false } }));
+}
+
+/**
+ * Retorna se o alarme contínuo de troca de plantão está ativo
+ */
+export function isAlarmeTrocaPlantaoAtivo(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(ALARME_TROCA_KEY) === 'true';
+}
+
+/**
+ * Retoma o áudio do alarme se ele estiver ativo no storage
+ */
+export function retomarAlarmeSeAtivo(): void {
+  if (typeof window === 'undefined') return;
+  if (isAlarmeTrocaPlantaoAtivo() && !alarmeAudioIntervalo) {
+    tocarBipAlertaTrocaPlantao();
+    alarmeAudioIntervalo = setInterval(() => {
+      tocarBipAlertaTrocaPlantao();
+    }, 3500);
+  }
+}
+
+/**
+ * Toda vez que houver troca de plantão, se tiver algum lembrete ativo,
+ * o app dispara um alerta contínuo que só para quando o operador aperta no ícone de lembretes.
+ */
+export async function checarEDispararAlarmeTrocaPlantao(condominioId: string): Promise<boolean> {
+  if (!condominioId) return false;
+  try {
+    const { lembretes } = await buscarLembretes(condominioId);
+    const status = obterStatusContagem(lembretes);
+    if (status.totalAtivos > 0) {
+      iniciarAlarmeTrocaPlantao();
+      return true;
+    }
+  } catch (err) {
+    console.warn('Erro ao checar lembretes na troca de plantão:', err);
+  }
+  return false;
+}
+
+/**
  * Dispara evento global para que o cabeçalho e componentes sincronizem imediatamente
  */
 export function notificarAtualizacaoLembretes(condominioId?: string): void {
@@ -116,6 +228,45 @@ function salvarLembretesCache(condominioId: string, lembretes: LembretePortaria[
 }
 
 /**
+ * Normaliza um item garantindo a presença de todos os campos do ciclo de vida
+ */
+function normalizarLembrete(raw: any): LembretePortaria {
+  const agora = Date.now();
+  const ehAdm = Boolean(raw.eh_adm || raw.remetente_tipo === 'adm');
+  let finalizado = Boolean(raw.finalizado);
+
+  // Auto-expiração se for lembrete do ADM com data limite ultrapassada
+  if (ehAdm && raw.data_limite && !finalizado) {
+    const limiteMs = new Date(raw.data_limite).getTime();
+    if (!isNaN(limiteMs) && limiteMs <= agora) {
+      finalizado = true;
+    }
+  }
+
+  return {
+    id: raw.id || `lemb-${Date.now()}`,
+    condominio_id: raw.condominio_id,
+    unidade_bloco: raw.unidade_bloco || 'Geral',
+    remetente_tipo: raw.remetente_tipo || 'morador',
+    remetente_nome: raw.remetente_nome || '',
+    mensagem: raw.mensagem || '',
+    tipo: raw.tipo || (ehAdm ? 'Lembrete do ADM' : 'Aviso Geral'),
+    lido: Boolean(raw.lido),
+    lido_em: raw.lido_em || null,
+    lido_por_nome: raw.lido_por_nome || null,
+    lido_por_id: raw.lido_por_id || null,
+    finalizado,
+    finalizado_em: raw.finalizado_em || (finalizado ? (raw.data_limite || new Date().toISOString()) : null),
+    finalizado_por_nome: raw.finalizado_por_nome || (finalizado && ehAdm && raw.data_limite ? 'Auto-baixa Data Limite (ADM)' : null),
+    finalizado_por_id: raw.finalizado_por_id || null,
+    eh_adm: ehAdm,
+    data_limite: raw.data_limite || null,
+    created_at: raw.created_at || new Date().toISOString(),
+    updated_at: raw.updated_at || new Date().toISOString()
+  };
+}
+
+/**
  * Fornece dados iniciais demonstrativos quando não há registros no cache nem no banco
  */
 function gerarExemplosIniciais(condominioId: string): LembretePortaria[] {
@@ -130,6 +281,8 @@ function gerarExemplosIniciais(condominioId: string): LembretePortaria[] {
       mensagem: 'Palavra-chave para entrega da Smart TV: "AZUL2026". Só liberar se o entregador souber a senha.',
       tipo: 'Palavra-chave',
       lido: false,
+      finalizado: false,
+      eh_adm: false,
       created_at: new Date(agora.getTime() - 25 * 60000).toISOString()
     },
     {
@@ -140,21 +293,26 @@ function gerarExemplosIniciais(condominioId: string): LembretePortaria[] {
       remetente_nome: 'Dra. Mariana Costa (Moradora)',
       mensagem: 'Instrução: Minha mãe virá buscar a chave reserva às 16h30. Ela está com RG com final 448-X.',
       tipo: 'Instrução',
-      lido: false,
+      lido: true,
+      lido_em: new Date(agora.getTime() - 10 * 60000).toISOString(),
+      lido_por_nome: 'Caetano (Operador)',
+      finalizado: false,
+      eh_adm: false,
       created_at: new Date(agora.getTime() - 50 * 60000).toISOString()
     },
     {
-      id: 'demo-lembrete-3',
+      id: 'demo-lembrete-adm',
       condominio_id: condominioId,
-      unidade_bloco: 'Geral / Guarita',
-      remetente_tipo: 'portaria',
-      remetente_nome: 'Supervisão Operacional',
-      mensagem: 'Aviso Geral: Manutenção preventiva do gerador de energia e portão de pedestres agendada para as 14h.',
-      tipo: 'Aviso Geral',
-      lido: true,
-      lido_em: new Date(agora.getTime() - 120 * 60000).toISOString(),
-      lido_por_nome: 'Caetano (Operador)',
-      created_at: new Date(agora.getTime() - 180 * 60000).toISOString()
+      unidade_bloco: 'Geral / Portaria',
+      remetente_tipo: 'adm',
+      remetente_nome: 'Administração Geral (Nível 0)',
+      mensagem: 'AVISO IMPORTANTE DO ADM: Conferir o livro de rondas e registrar todas as passagens com foto obrigatória.',
+      tipo: 'Lembrete do ADM',
+      lido: false,
+      finalizado: false,
+      eh_adm: true,
+      data_limite: new Date(agora.getTime() + 48 * 3600000).toISOString(),
+      created_at: new Date(agora.getTime() - 15 * 60000).toISOString()
     }
   ];
 }
@@ -179,14 +337,13 @@ export async function buscarLembretes(condominioId: string): Promise<{
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Se a tabela ainda não foi criada no banco (PGRST205 / 404 / 42P01)
       if (
         error.code === 'PGRST205' ||
         error.code === '42P01' ||
         error.message?.includes('schema cache') ||
         error.message?.includes('does not exist')
       ) {
-        let emCache = obterLembretesCache(condominioId);
+        let emCache = obterLembretesCache(condominioId).map(normalizarLembrete);
         if (emCache.length === 0) {
           emCache = gerarExemplosIniciais(condominioId);
           salvarLembretesCache(condominioId, emCache);
@@ -198,8 +355,7 @@ export async function buscarLembretes(condominioId: string): Promise<{
         };
       }
 
-      // Outro erro de rede / timeout: fallback para cache local
-      const emCache = obterLembretesCache(condominioId);
+      const emCache = obterLembretesCache(condominioId).map(normalizarLembrete);
       return {
         lembretes: emCache,
         tabelaExisteNoSupabase: true,
@@ -207,7 +363,7 @@ export async function buscarLembretes(condominioId: string): Promise<{
       };
     }
 
-    const lista = (data as LembretePortaria[]) || [];
+    const lista = Array.isArray(data) ? data.map(normalizarLembrete) : [];
     salvarLembretesCache(condominioId, lista);
 
     return {
@@ -215,7 +371,7 @@ export async function buscarLembretes(condominioId: string): Promise<{
       tabelaExisteNoSupabase: true
     };
   } catch (err: any) {
-    const emCache = obterLembretesCache(condominioId);
+    const emCache = obterLembretesCache(condominioId).map(normalizarLembrete);
     return {
       lembretes: emCache,
       tabelaExisteNoSupabase: false,
@@ -225,14 +381,61 @@ export async function buscarLembretes(condominioId: string): Promise<{
 }
 
 /**
- * Conta a quantidade de lembretes pendentes (não lidos)
+ * Calcula os contadores detalhados e a cor ativa do alerta
+ * - VERMELHO: Se houver lembrete do ADM ativo (não finalizado)
+ * - LARANJA: Se houver lembrete aguardando ciência (!lido && !finalizado)
+ * - AZUL: Se todos foram marcados como cientes, mas ainda há lembrete em andamento (!finalizado)
+ * - NEUTRO: Quando todos forem finalizados (para de piscar)
  */
-export function contarNaoLidos(lembretes: LembretePortaria[]): number {
-  return lembretes.filter((l) => !l.lido).length;
+export function obterStatusContagem(lembretes: LembretePortaria[]): StatusContagemLembretes {
+  const agora = Date.now();
+
+  const normalizados = lembretes.map(l => {
+    if (l.eh_adm && l.data_limite && !l.finalizado) {
+      const dataExp = new Date(l.data_limite).getTime();
+      if (!isNaN(dataExp) && dataExp <= agora) {
+        return { ...l, finalizado: true, finalizado_em: l.data_limite, finalizado_por_nome: 'Auto-baixa Data Limite (ADM)' };
+      }
+    }
+    return l;
+  });
+
+  const ativos = normalizados.filter(l => !l.finalizado);
+  const ativosAdm = ativos.filter(l => l.eh_adm);
+  const naoLidos = ativos.filter(l => !l.lido);
+  const cientesNaoFinalizados = ativos.filter(l => l.lido);
+
+  let corAlerta: 'vermelho' | 'laranja' | 'azul' | 'neutro' = 'neutro';
+
+  if (ativosAdm.length > 0) {
+    corAlerta = 'vermelho';
+  } else if (naoLidos.length > 0) {
+    corAlerta = 'laranja';
+  } else if (cientesNaoFinalizados.length > 0) {
+    corAlerta = 'azul';
+  }
+
+  return {
+    total: normalizados.length,
+    totalAtivos: ativos.length,
+    pendentesNaoLidos: naoLidos.length,
+    pendentesCientes: cientesNaoFinalizados.length,
+    ativosAdm: ativosAdm.length,
+    finalizados: normalizados.filter(l => l.finalizado).length,
+    corAlerta
+  };
 }
 
 /**
- * Marca um lembrete como lido / ciente
+ * Função de retrocompatibilidade
+ */
+export function contarNaoLidos(lembretes: LembretePortaria[]): number {
+  return lembretes.filter((l) => !l.finalizado && !l.lido).length;
+}
+
+/**
+ * Marca um lembrete como ciente
+ * Ele para de piscar laranja e passa a piscar em azul até ser finalizado!
  */
 export async function marcarComoLido(
   id: string,
@@ -243,7 +446,7 @@ export async function marcarComoLido(
   const agora = new Date().toISOString();
   const nome = operadorNome || 'Operador da Portaria';
 
-  // 1. Atualiza imediatamente o cache local para resposta instantânea na UI
+  // 1. Atualiza imediatamente o cache local para resposta instantânea
   const cache = obterLembretesCache(condominioId);
   const atualizados = cache.map((item) => {
     if (item.id === id) {
@@ -260,7 +463,7 @@ export async function marcarComoLido(
   salvarLembretesCache(condominioId, atualizados);
   notificarAtualizacaoLembretes(condominioId);
 
-  // 2. Tenta persistir no Supabase
+  // 2. Persiste no Supabase
   try {
     const { error } = await supabase
       .from('lembretes_portaria')
@@ -277,25 +480,120 @@ export async function marcarComoLido(
       console.warn('Erro ao atualizar status de leitura no Supabase:', error);
     }
 
-    // Auditoria silenciosa
     registrarAtividade({
       operador_id: operadorId || '',
       operador_nome: nome,
       acao: 'LEMBRETE_CIENTE',
-      descricao: `Lembrete ID ${id} marcado como ciente pelo operador ${nome}.`,
+      descricao: `Lembrete ID ${id} marcado como ciente pelo operador ${nome} (Piscando em azul até finalizar).`,
       detalhes: { lembreteId: id, acao: 'marcar_lido' },
       modulo: 'lembretes_portaria',
       condominio_id: condominioId
     }).catch(() => {});
 
     return { sucesso: true };
-  } catch (err: any) {
-    return { sucesso: true }; // Cache local já garantiu a fluidez
+  } catch {
+    return { sucesso: true };
   }
 }
 
 /**
- * Marca TODOS os lembretes do condomínio como cientes / lidos de uma vez
+ * Finaliza / Baixa um lembrete
+ * Quando finalizado, para de piscar no alerta e vai para o histórico
+ * SE FOR LEMBRETE DO ADM (NÍVEL 0):
+ * Apenas o Administrador pode finalizar, ou se a data limite tiver expirado!
+ */
+export async function finalizarLembrete(
+  id: string,
+  condominioId: string,
+  operadorNome?: string,
+  operadorId?: string,
+  ehAdmin?: boolean
+): Promise<{ sucesso: boolean; erro?: string }> {
+  const agora = new Date().toISOString();
+  const nome = operadorNome || 'Operador';
+
+  const cache = obterLembretesCache(condominioId);
+  const alvo = cache.find(it => it.id === id);
+
+  if (alvo && alvo.eh_adm && !ehAdmin) {
+    // Checa se já expirou a data limite
+    if (alvo.data_limite) {
+      const expMs = new Date(alvo.data_limite).getTime();
+      if (isNaN(expMs) || expMs > Date.now()) {
+        return {
+          sucesso: false,
+          erro: 'Este lembrete é exclusivo da Administração (Nível 0). Apenas o Administrador pode baixá-lo manualmente antes da data limite.'
+        };
+      }
+    } else {
+      return {
+        sucesso: false,
+        erro: 'Este lembrete é exclusivo da Administração (Nível 0). Apenas o Administrador pode baixá-lo.'
+      };
+    }
+  }
+
+  // 1. Atualiza cache local
+  const atualizados = cache.map((item) => {
+    if (item.id === id) {
+      return {
+        ...item,
+        lido: true,
+        finalizado: true,
+        finalizado_em: agora,
+        finalizado_por_nome: nome,
+        finalizado_por_id: operadorId || null,
+        updated_at: agora
+      };
+    }
+    return item;
+  });
+  salvarLembretesCache(condominioId, atualizados);
+  notificarAtualizacaoLembretes(condominioId);
+
+  // 2. Persiste no Supabase
+  try {
+    const payloadUpdate: any = {
+      lido: true,
+      finalizado: true,
+      finalizado_em: agora,
+      finalizado_por_nome: nome,
+      finalizado_por_id: operadorId || null,
+      updated_at: agora
+    };
+
+    let { error } = await supabase
+      .from('lembretes_portaria')
+      .update(payloadUpdate)
+      .eq('id', id);
+
+    // Fallback caso as colunas novas finalizado/finalizado_em ainda não existam no banco
+    if (error && (error.message?.includes('finalizado') || (error as any).code === '42703')) {
+      delete payloadUpdate.finalizado;
+      delete payloadUpdate.finalizado_em;
+      delete payloadUpdate.finalizado_por_nome;
+      delete payloadUpdate.finalizado_por_id;
+      await supabase.from('lembretes_portaria').update(payloadUpdate).eq('id', id);
+    }
+
+    registrarAtividade({
+      operador_id: operadorId || '',
+      operador_nome: nome,
+      acao: 'LEMBRETE_FINALIZADO',
+      descricao: `Lembrete ID ${id} finalizado / baixado com sucesso por ${nome}.`,
+      detalhes: { lembreteId: id, acao: 'finalizar' },
+      modulo: 'lembretes_portaria',
+      condominio_id: condominioId
+    }).catch(() => {});
+
+    return { sucesso: true };
+  } catch {
+    return { sucesso: true };
+  }
+}
+
+/**
+ * Marca TODOS os lembretes do condomínio como cientes de uma vez
  */
 export async function marcarTodosComoLidos(
   condominioId: string,
@@ -340,40 +638,46 @@ export async function marcarTodosComoLidos(
     registrarAtividade({
       operador_id: operadorId || '',
       operador_nome: nome,
-      acao: 'TODOS_LEMBRETES_LIDOS',
-      descricao: `${total} lembretes marcados como lidos de uma só vez pelo operador ${nome}.`,
+      acao: 'TODOS_LEMBRETES_CIENTES',
+      descricao: `${total} lembretes marcados como cientes de uma só vez pelo operador ${nome}.`,
       detalhes: { totalAtualizados: total },
       modulo: 'lembretes_portaria',
       condominio_id: condominioId
     }).catch(() => {});
-  } catch {
-    // Falha silenciosa
-  }
+  } catch {}
 
   return { sucesso: true, totalAtualizados: total };
 }
 
 /**
- * Cria um novo lembrete ou recado (seja da Portaria ou lançado para Morador)
+ * Cria um novo lembrete ou recado
+ * Suporta Lembretes do ADM (Nível 0) com data limite
  */
 export async function criarLembrete(dados: {
   condominio_id: string;
   unidade_bloco: string;
-  remetente_tipo: 'morador' | 'portaria' | 'supervisao' | 'sindico';
+  remetente_tipo: 'morador' | 'portaria' | 'supervisao' | 'sindico' | 'adm';
   remetente_nome?: string;
   mensagem: string;
   tipo: string;
   lido?: boolean;
+  eh_adm?: boolean;
+  data_limite?: string | null;
 }): Promise<{ sucesso: boolean; lembrete?: LembretePortaria; erro?: string }> {
+  const ehAdm = Boolean(dados.eh_adm || dados.remetente_tipo === 'adm');
+
   const novo: LembretePortaria = {
     id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `lemb-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     condominio_id: dados.condominio_id,
     unidade_bloco: dados.unidade_bloco.trim(),
     remetente_tipo: dados.remetente_tipo,
-    remetente_nome: dados.remetente_nome?.trim() || (dados.remetente_tipo === 'portaria' ? 'Portaria' : 'Morador'),
+    remetente_nome: dados.remetente_nome?.trim() || (ehAdm ? 'Administração (Nível 0)' : dados.remetente_tipo === 'portaria' ? 'Portaria' : 'Morador'),
     mensagem: dados.mensagem.trim(),
-    tipo: dados.tipo || 'Aviso Geral',
+    tipo: dados.tipo || (ehAdm ? 'Lembrete do ADM' : 'Aviso Geral'),
     lido: Boolean(dados.lido),
+    finalizado: false,
+    eh_adm: ehAdm,
+    data_limite: dados.data_limite ? new Date(dados.data_limite).toISOString() : null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -384,11 +688,19 @@ export async function criarLembrete(dados: {
   salvarLembretesCache(dados.condominio_id, novaLista);
   notificarAtualizacaoLembretes(dados.condominio_id);
 
-  // 2. Persiste no Supabase
+  // 2. Persiste no Supabase com fallback seguro
   try {
-    const { error } = await supabase.from('lembretes_portaria').insert([novo]);
-    if (error && error.code !== 'PGRST205' && error.code !== '42P01') {
-      console.warn('Erro ao inserir lembrete no Supabase:', error);
+    const payloadInsert: any = { ...novo };
+    let { error } = await supabase.from('lembretes_portaria').insert([payloadInsert]);
+
+    if (error && (error.message?.includes('eh_adm') || error.message?.includes('data_limite') || error.message?.includes('finalizado') || (error as any).code === '42703')) {
+      delete payloadInsert.eh_adm;
+      delete payloadInsert.data_limite;
+      delete payloadInsert.finalizado;
+      delete payloadInsert.finalizado_em;
+      delete payloadInsert.finalizado_por_nome;
+      delete payloadInsert.finalizado_por_id;
+      await supabase.from('lembretes_portaria').insert([payloadInsert]);
     }
   } catch (err: any) {
     console.warn('Falha ao conectar com Supabase no insert:', err);
@@ -411,9 +723,7 @@ export async function excluirLembrete(
 
   try {
     await supabase.from('lembretes_portaria').delete().eq('id', id);
-  } catch {
-    // Silencia erro
-  }
+  } catch {}
 
   return { sucesso: true };
 }
